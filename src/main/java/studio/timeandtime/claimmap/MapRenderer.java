@@ -70,7 +70,11 @@ public final class MapRenderer {
 			for (int dz = 0; dz < 16; dz += step) {
 				int x = chunkX * 16 + dx;
 				int z = chunkZ * 16 + dz;
-				int topY = level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+				// NOTE: do NOT call level.getHeight(WorldSurface,x,z) in a chunk event:
+				// it block-fetches chunks and deadlocks the server thread while chunks load.
+				// Read the height from the chunk's own heightmap instead (non-blocking;
+				// the method masks to chunk-local coordinates and is safe on a loaded chunk).
+				int topY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
 				BlockState state = chunk.getBlockState(new BlockPos(x, topY, z));
 				draw(x, z, classify(state));
 			}
