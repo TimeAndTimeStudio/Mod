@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claim Map</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#1b1b1b;color:#eee}
+  #bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#272727;align-items:center}
+  input{width:80px;padding:6px;border-radius:6px;border:1px solid #555;background:#111;color:#eee}
+  button{padding:6px 12px;border:0;border-radius:6px;background:#3a9d3a;color:#fff;font-weight:600}
+  button:disabled{background:#555}
+  #info{padding:6px 8px;font-size:14px}
+  canvas{display:block;width:100vw;height:calc(100vh - 110px);touch-action:none;cursor:grab}
+</style>
+</head>
+<body>
+<div id="bar">
+  X <input id="x" type="number" value="0">
+  Z <input id="z" type="number" value="0">
+  <button id="go">ไป</button>
+  <button id="claim" disabled>จองช่องนี้</button>
+  <button id="zin">+</button><button id="zout">−</button>
+</div>
+<div id="info">ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง</div>
+<canvas id="c"></canvas>
+<script>
+// ===== ตั้งค่า =====
+const API = '/api';            // พาธ API (ผ่าน reverse proxy)
+const TOKEN = 'MYTOKEN';       // เปลี่ยนให้ตรงกับในม็อด
+const CELL = 500;              // ขนาดช่อง (บล็อก)
+const DEMO = false;            // true = ใช้แผนที่ปลอมทดสอบโดยไม่ต้องมีเซิร์ฟเวอร์
+
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+let cx = 0, cz = 0;            // กึ่งกลางจอ (พิกัดบล็อก)
+let scale = 0.25;              // พิกเซลต่อบล็อก
+let owned = {}, sel = null, peek = null;   // sel = ช่องที่จะจอง, peek = ช่องคนอื่นที่แตะดูชื่อ
+const tiles = new Map();       // id -> {img,t,busy}
+
+function resize(){ cv.width = cv.clientWidth; cv.height = cv.clientHeight; draw(); }
+addEventListener('resize', resize);
+
+const headers = { Authorization: 'Bearer ' + TOKEN };
+
+function demoTile(tx, tz){     // แผนที่ปลอม: เฉพาะรอบจุดเกิดเท่านั้นที่ "สำรวจแล้ว" ที่เหลือโปร่งใส
+  const s = 100, c = document.createElement('canvas'); c.width = c.height = s;
+  const k = c.getContext('2d'), d = k.createImageData(s, s);
+  for (let i = 0; i < s; i++) for (let j = 0; j < s; j++) {
+    const bx = tx*CELL + i*5, bz = tz*CELL + j*5, o = (j*s+i)*4;
+    if (Math.hypot(bx, bz) > 1100) { d.data.set([0,0,0,0], o); continue; }
+    const wx = bx/260, wz = bz/260;
+    const v = Math.sin(wx)+Math.sin(wz*1.3)+Math.sin((wx+wz)*0.7);
+    d.data.set(v < -0.6 ? [52,110,200,255] : [90,170,70,255], o);
+  }
+  k.putImageData(d, 0, 0); return c;
+}
+
+// แคชภาพต่อช่อง: {img, t, busy}  ภาพโปร่งใส = ส่วนที่ยังไม่ถูกโหลด/สำรวจ
+// เซิร์ฟเวอร์คืน 204 ถ้าทั้งช่องยังไม่มี chunk เลย
+const STALE_MS = 30000;        // รีเฟรชภาพทุก 30 วิ เพราะโลกขยายตามที่ผู้เล่นเดิน
+function getTile(tx, tz){
+  const id = tx + ',' + tz, e = tiles.get(id);
+  if (DEMO){ if (!e) tiles.set(id, { img: demoTile(tx, tz), t: Date.now() }); return tiles.get(id).img; }
+  if (!e || (!e.busy && Date.now() - e.t > STALE_MS)){
+    const old = e ? e.img : null;
+    tiles.set(id, { img: old, t: Date.now(), busy: true });
+    fetch(`${API}/map/${id}.png`, { headers })
+      .then(r => r.status === 200 ? r.blob() : null)
+      .then(b => {
+        if (!b){ tiles.set(id, { img: null, t: Date.now() }); draw(); return; }
+        const img = new Image();
+        img.onload = () => { URL.revokeObjectURL(img.src); tiles.set(id, { img, t: Date.now() }); draw(); };
+        img.src = URL.createObjectURL(b);
+      })
+      .catch(() => tiles.set(id, { img: old, t: Date.now() }));
+  }
+  const cur = tiles.get(id); return cur ? cur.img : null;
+}
+setInterval(() => draw(), STALE_MS);   // ดึงภาพใหม่ของช่องที่เห็นอยู่
+
+let me = null;                 // ชื่อผู้เล่นที่ล็อกอินอยู่ (จาก GET /me → {name})
+async function loadMe(){
+  if (DEMO){ me = 'คุณ'; return; }
+  try { me = (await (await fetch(API + '/me', { headers })).json()).name; } catch(e){}
+}
+
+async function loadOwned(){
+  if (DEMO){ owned = { '0,0': 'Steve', '1,0': 'Alex', '-1,0': 'คุณ', ...owned }; return; }
+  try { owned = await (await fetch(API + '/cells', { headers })).json(); } catch(e){}
+}
+
+function draw(){
+  const W = cv.width, H = cv.height, px = CELL * scale;
+  g.fillStyle = '#111'; g.fillRect(0, 0, W, H);
+  const x0 = Math.floor((cx - W/2/scale) / CELL), x1 = Math.floor((cx + W/2/scale) / CELL);
+  const z0 = Math.floor((cz - H/2/scale) / CELL), z1 = Math.floor((cz + H/2/scale) / CELL);
+  g.imageSmoothingEnabled = false;
+  for (let tx = x0; tx <= x1; tx++) for (let tz = z0; tz <= z1; tz++){
+    const sx = W/2 + (tx*CELL - cx)*scale, sz = H/2 + (tz*CELL - cz)*scale;
+    const t = getTile(tx, tz);
+    g.fillStyle = '#262626'; g.fillRect(sx, sz, px, px);          // ส่วนที่ยังไม่โหลด = เทาเข้ม
+    if (t) g.drawImage(t, sx, sz, px, px);
+    else if (px > 90){ g.fillStyle = '#777'; g.font = '12px sans-serif'; g.fillText('ยังไม่ได้สำรวจ', sx + 4, sz + px/2); }
+    const id = tx + ',' + tz;
+    if (owned[id]){   // ของเรา = ส้ม, ของคนอื่น = แดง
+      g.fillStyle = owned[id] === me ? 'rgba(255,150,0,.45)' : 'rgba(220,40,40,.4)';
+      g.fillRect(sx, sz, px, px);
+    }
+    if (sel === id){ g.fillStyle = 'rgba(255,230,0,.4)'; g.fillRect(sx, sz, px, px); }
+    if (peek === id){ g.strokeStyle = '#fff'; g.lineWidth = 3; g.strokeRect(sx+1, sz+1, px-2, px-2); g.lineWidth = 1; }
+    g.strokeStyle = 'rgba(0,0,0,.6)'; g.strokeRect(sx, sz, px, px);
+    if (px > 70){ g.fillStyle = '#fff'; g.font = '12px sans-serif'; g.fillText(id + (owned[id] ? ' · ' + owned[id] : ''), sx + 4, sz + 14); }
+  }
+  g.strokeStyle = '#fff'; g.beginPath();   // จุดกึ่งกลาง
+  g.moveTo(W/2-8, H/2); g.lineTo(W/2+8, H/2); g.moveTo(W/2, H/2-8); g.lineTo(W/2, H/2+8); g.stroke();
+  document.getElementById('x').value = Math.round(cx);
+  document.getElementById('z').value = Math.round(cz);
+}
+
+// ลากเลื่อน + แตะเลือก
+let drag = null, moved = false;
+cv.onpointerdown = e => { drag = { x: e.clientX, y: e.clientY, cx, cz }; moved = false; cv.setPointerCapture(e.pointerId); };
+cv.onpointermove = e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+  cx = drag.cx - dx/scale; cz = drag.cz - dy/scale; draw();
+};
+cv.onpointerup = e => {
+  drag = null;
+  if (moved) return;
+  const r = cv.getBoundingClientRect();
+  const bx = cx + (e.clientX - r.left - cv.width/2)/scale, bz = cz + (e.clientY - r.top - cv.height/2)/scale;
+  const tx = Math.floor(bx/CELL), tz = Math.floor(bz/CELL), id = tx + ',' + tz;
+  const range = `X ${tx*CELL}…${tx*CELL+CELL-1}  Z ${tz*CELL}…${tz*CELL+CELL-1}`;
+  const info = document.getElementById('info');
+  const claimBtn = document.getElementById('claim');
+  if (owned[id] && owned[id] !== me){        // ช่องคนอื่น: ดูชื่อได้ แต่เลือก/จองไม่ได้
+    sel = null; peek = id; claimBtn.disabled = true;
+    info.textContent = `ช่อง ${id} | ${range} | เจ้าของ: ${owned[id]} (เลือกไม่ได้)`;
+  } else if (owned[id]) {                    // ช่องของเราเอง
+    sel = null; peek = id; claimBtn.disabled = true;
+    info.textContent = `ช่อง ${id} | ${range} | ช่องของคุณ`;
+  } else {                                   // ช่องว่าง: เลือกจองได้
+    sel = id; peek = null; claimBtn.disabled = false;
+    info.textContent = `ช่อง ${id} | ${range} | ว่าง`;
+  }
+  draw();
+};
+
+document.getElementById('go').onclick = () => {
+  cx = +document.getElementById('x').value || 0;
+  cz = +document.getElementById('z').value || 0; draw();
+};
+document.getElementById('zin').onclick = () => { scale = Math.min(scale*1.5, 2); draw(); };
+document.getElementById('zout').onclick = () => { scale = Math.max(scale/1.5, 0.03); draw(); };
+
+document.getElementById('claim').onclick = async () => {
+  if (!sel || owned[sel]) return;           // กันซ้ำอีกชั้น (เซิร์ฟเวอร์ต้องเช็กเองด้วย)
+  const id = sel;
+  if (DEMO){ owned[id] = me; sel = null; document.getElementById('claim').disabled = true;
+    document.getElementById('info').textContent = 'จองสำเร็จ: ' + id; draw(); return; }
+  const r = await fetch(`${API}/cells/${id}/claim`, { method: 'POST', headers });
+  document.getElementById('info').textContent = r.ok ? 'จองสำเร็จ: ' + id : 'จองไม่สำเร็จ: ' + (await r.text());
+  sel = null; document.getElementById('claim').disabled = true;
+  await loadOwned(); draw();
+};
+
+resize(); Promise.all([loadMe(), loadOwned()]).then(draw);
+</script>
+</body>
+</html>
