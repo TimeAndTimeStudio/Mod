@@ -1,0 +1,96 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+// Resolve the Minecraft target from a -Pminecraft_version CLI flag so the same
+// source tree can be built for both Minecraft 26.2 and 26.3.
+def mcVersion = (project.findProperty('minecraft_version') ?: '26.3').toString()
+def loaderVersion = (project.findProperty('loader_version') ?: '0.20.1').toString()
+
+def fabricApiFor = [
+	'26.2': (String) project.findProperty('fabric_api_26_2'),
+	'26.3': (String) project.findProperty('fabric_api_26_3'),
+]
+def fabApiVersion = project.hasProperty('fabric_api_version')
+	? (String) project.findProperty('fabric_api_version')
+	: (String) fabricApiFor.getOrDefault(mcVersion, '0.165.2+26.3')
+
+base {
+	// e.g. claimmap-mc26.3-1.0.0.jar
+	archivesName = "${project.archives_base_name}-mc${mcVersion}"
+}
+
+repositories {
+	// Loom adds the essential maven repositories to download Minecraft and
+	// libraries from automatically.
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"claimmap" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${mcVersion}"
+	implementation "net.fabricmc:fabric-loader:${loaderVersion}"
+
+	// Fabric API.
+	implementation "net.fabricmc.fabric-api:fabric-api:${fabApiVersion}"
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+java {
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName" }
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}
