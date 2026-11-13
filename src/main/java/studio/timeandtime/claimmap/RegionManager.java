@@ -107,7 +107,9 @@ public final class RegionManager {
 	}
 
 	public boolean isCommonArea(int cx, int cz) {
+		// 0 = ปิดการกันพื้นที่สปอน (จองได้ทุกช่อง), >0 = กันวงรัศมีรอบจุดกำเนิด
 		int r = config.spawnProtectedCells;
+		if (r <= 0) return false;
 		return Math.abs(cx) <= r && Math.abs(cz) <= r;
 	}
 

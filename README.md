@@ -26,7 +26,7 @@ GitHub Actions (`.github/workflows/build.yml`) จะ build ทั้ง 26.2 �
 1. วาง jar ลงโฟลเดอร์ `mods/` ของเซิร์ฟเวอร์ Fabric (ต้องลง Fabric API 0.161+ ด้วย)
 2. รันเซิร์ฟเวอร์ → เปิด config ได้ที่ `config/claimmap/claimmap.properties`
    - `token` จะถูกสุ่มให้ครั้งแรก (ตั้งเป็น `Authorization: Bearer <token>` ในการเรียก API)
-   - ปรับได้: `port` (8085), `cellSize` (500), `maxCellsPerPlayer`, `spawnProtectedCells`, `renderScale`, `saveDelayMs`, `linkCodeMinutes`, `sessionHours`
+   - ปรับได้: `port` (8085), `cellSize` (500), `maxCellsPerPlayer`, `spawnProtectedCells` (0 = ปิด = จองได้ทุกช่อง), `renderScale`, `saveDelayMs`, `linkCodeMinutes`, `sessionHours`
 3. ม็อด **host หน้าเว็บเอง** ที่พอร์ตเดียวกับ API — เปิด `http://127.0.0.1:8085/` ได้เลย (ม็อดบังคับ bind `127.0.0.1` เพื่อความปลอดภัย ดังนั้นถ้าต้องการเข้าจากนอกเครื่องให้ใช้ Nginx/tunnel ต่อไปที่พอร์ตนี้)
 4. ข้อมูลทั้งหมดเก็บเป็น **JSON เท่านั้น**: `account.json` account/รหัสผ่าน, `regions.json` ช่องที่จอง, `sessions.json` session token
             
