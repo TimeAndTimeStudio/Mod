@@ -32,6 +32,7 @@ public class ClaimMap implements ModInitializer {
 	private MapRenderer maps;
 	private Protection protection;
 	private LinkManager links;
+	private AccountManager accounts;
 	private WebServer web;
 
 	@Override
@@ -44,10 +45,13 @@ public class ClaimMap implements ModInitializer {
 		regions.load();
 		maps = new MapRenderer(config);
 		links = new LinkManager(config);
+		links.load();
+		accounts = new AccountManager(config);
+		accounts.load();
 		protection = new Protection(regions);
-		web = new WebServer(config, regions, maps, links);
+		web = new WebServer(config, regions, maps, links, accounts);
 
-		new ClaimCommands(regions, links, config).register();
+		new ClaimCommands(regions, links, accounts, config).register();
 		protection.register();
 
 		// Draw a map of exactly the chunks that are actually loaded / explored.

@@ -1,6 +1,7 @@
 package studio.timeandtime.claimmap;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -12,27 +13,30 @@ import net.minecraft.server.permissions.Permissions;
 /**
  * In-game commands:
  * <ul>
- *   <li>{@code /link}              - print a 6 digit code used to bind the web session</li>
- *   <li>{@code /claim}             - claim the cell the player is standing in</li>
- *   <li>{@code /claimmap here}     - show info about the current cell</li>
- *   <li>{@code /claimmap reload}   - reload config + regions (operator)</li>
+ *   <li>{@code /pass <password>}      - set the password used to log in on the web page</li>
+ *   <li>{@code /claim}                - claim the cell the player is standing in</li>
+ *   <li>{@code /claimmap here}        - show info about the current cell</li>
+ *   <li>{@code /claimmap reload}      - reload config + regions (operator)</li>
  * </ul>
  */
 public final class ClaimCommands {
 	private final RegionManager regions;
 	private final LinkManager links;
+	private final AccountManager accounts;
 	private final ClaimMapConfig config;
 
-	public ClaimCommands(RegionManager regions, LinkManager links, ClaimMapConfig config) {
+	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config) {
 		this.regions = regions;
 		this.links = links;
+		this.accounts = accounts;
 		this.config = config;
 	}
 
 	public void register() {
 		CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
-			dispatcher.register(Commands.literal("link")
-					.executes(ctx -> runLink(ctx.getSource())));
+			dispatcher.register(Commands.literal("pass").requires(src -> src.getPlayer() != null)
+					.then(Commands.argument("password", StringArgumentType.string())
+							.executes(ctx -> runPass(ctx.getSource(), StringArgumentType.getString(ctx, "password")))));
 
 			dispatcher.register(Commands.literal("claim").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaim(ctx.getSource())));
@@ -45,13 +49,17 @@ public final class ClaimCommands {
 		});
 	}
 
-	private int runLink(CommandSourceStack src) {
+	private int runPass(CommandSourceStack src, String password) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		String code = links.issueCode(player.getUUID().toString(), player.getGameProfile().name());
-		player.sendSystemMessage(Component.literal("Your link code: " + code));
-		player.sendSystemMessage(Component.literal("Enter it on the claim map web page within "
-				+ config.linkCodeMinutes + " minutes."));
+		String uuid = player.getUUID().toString();
+		String name = player.getGameProfile().name();
+		if (!accounts.setPassword(uuid, name, password)) {
+			player.sendSystemMessage(Component.literal("Invalid password: use 4-64 characters and not include spaces."));
+			return 1;
+		}
+		player.sendSystemMessage(Component.literal("Password set for " + name
+				+ ". Log in on the claim map web page with this name + password."));
 		return 1;
 	}
 

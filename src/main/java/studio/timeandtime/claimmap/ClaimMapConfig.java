@@ -112,6 +112,10 @@ public final class ClaimMapConfig {
 		return FabricLoader.getInstance().getConfigDir().resolve("claimmap/sessions.json");
 	}
 
+	public Path accountsFile() {
+		return FabricLoader.getInstance().getConfigDir().resolve("claimmap/accounts.json");
+	}
+
 	private int getInt(String key, int def, int min, int max) {
 		int v = def;
 		try {

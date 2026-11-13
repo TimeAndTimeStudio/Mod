@@ -8,6 +8,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -15,27 +16,33 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
- * Embedded HTTP server on 127.0.0.1:8085 (behind Nginx reverse proxy + TLS).
- * Every request requires "Authorization: Bearer <token>" (plan.md: API).
+ * Embedded HTTP server on 127.0.0.1:8085 (behind Nginx reverse proxy + TLS,
+ * plan.md). Serves both the single-file web page ({@code /}) and the JSON API
+ * under {@code /api}. Every request requires "Authorization: Bearer <token>".
+ * The web page is bundled in the jar at {@code /claimmap-web/index.html} and
+ * the master token is injected at serve time ({@code MYTOKEN} placeholder).
  */
 public final class WebServer {
 	private final ClaimMapConfig config;
 	private final RegionManager regions;
 	private final MapRenderer maps;
 	private final LinkManager links;
+	private final AccountManager accounts;
 	private HttpServer server;
+	private byte[] webPage;
 
-	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links) {
+	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links, AccountManager accounts) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
 		this.links = links;
+		this.accounts = accounts;
 	}
 
 	public void start() {
 		try {
 			server = HttpServer.create(new InetSocketAddress(config.bindAddress, config.port), 0);
-			server.createContext("/api", this::handle);
+			server.createContext("/", this::handle);   // เหลือ "/" ครอบทุก path: หน้าเว็บ + /api
 			server.setExecutor(Executors.newCachedThreadPool());
 			server.start();
 			ClaimMap.LOGGER.info("[claimmap] HTTP API listening on {}:{}", config.bindAddress, config.port);
@@ -55,8 +62,12 @@ public final class WebServer {
 		String method = ex.getRequestMethod();
 		try {
 			switch (method + " " + path) {
+				case "GET /" -> sendWeb(ex);
+				case "GET /index.html" -> sendWeb(ex);
+				case "GET /claim-map.html" -> sendWeb(ex);
 				case "GET /api/me" -> handleMe(ex);
 				case "GET /api/cells" -> handleCells(ex);
+				case "POST /api/login" -> handleLogin(ex);
 				case "POST /api/link" -> handleLink(ex);
 				case "POST /api/command" -> handleCommand(ex);
 				default -> {
@@ -110,6 +121,48 @@ public final class WebServer {
 			return;
 		}
 		sendJson(ex, 200, json(s.name()));
+	}
+
+	/** POST /api/login {"name":"...","password":"..."} -> {"token","name"} (password set with /pass in game). */
+	private void handleLogin(HttpExchange ex) throws IOException {
+		String token = requireBearer(ex);
+		if (token == null) return;
+		if (!authorized(token)) {
+			send(ex, 401, "Invalid token");
+			return;
+		}
+		JsonObject body = readJson(ex);
+		String name = body == null ? null : body.get("name") == null ? null : body.get("name").getAsString();
+		String pass = body == null ? null : body.get("password") == null ? null : body.get("password").getAsString();
+		AccountManager.Account a = accounts.verify(name, pass);
+		if (a == null) {
+			send(ex, 403, "Wrong name or password (set it in game with /pass)");
+			return;
+		}
+		LinkManager.Session s = links.createSession(a.uuid, a.name);
+		sendJson(ex, 200, "{\"token\": " + quote(s.token()) + ", \"name\": " + quote(s.name()) + "}");
+	}
+
+	/** Serves the single-file claim map web page bundled in the mod jar. */
+	private void sendWeb(HttpExchange ex) throws IOException {
+		if (webPage == null) {
+			byte[] raw;
+			try (InputStream in = WebServer.class.getResourceAsStream("/claimmap-web/index.html")) {
+				if (in == null) {
+					send(ex, 404, "Web page not bundled in this mod jar");
+					return;
+				}
+				raw = in.readAllBytes();
+			}
+			String html = new String(raw, StandardCharsets.UTF_8).replace("MYTOKEN", config.token);
+			webPage = html.getBytes(StandardCharsets.UTF_8);
+		}
+		ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+		ex.getResponseHeaders().set("Cache-Control", "no-store");
+		ex.sendResponseHeaders(200, webPage.length);
+		try (OutputStream os = ex.getResponseBody()) {
+			os.write(webPage);
+		}
 	}
 
 	private void handleCells(HttpExchange ex) throws IOException {

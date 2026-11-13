@@ -8,8 +8,11 @@
   body{margin:0;font-family:system-ui,sans-serif;background:#1b1b1b;color:#eee}
   #bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#272727;align-items:center}
   input{width:80px;padding:6px;border-radius:6px;border:1px solid #555;background:#111;color:#eee}
+  #pass{width:110px}
+  #uname{width:110px}
   button{padding:6px 12px;border:0;border-radius:6px;background:#3a9d3a;color:#fff;font-weight:600}
   button:disabled{background:#555}
+  #whoami{font-size:12px;opacity:.8;margin-left:4px}
   #info{padding:6px 8px;font-size:14px}
   canvas{display:block;width:100vw;height:calc(100vh - 110px);touch-action:none;cursor:grab}
 </style>
@@ -21,13 +24,17 @@
   <button id="go">ไป</button>
   <button id="claim" disabled>จองช่องนี้</button>
   <button id="zin">+</button><button id="zout">−</button>
+  <input id="uname" placeholder="ชื่อผู้เล่น">
+  <input id="pass" type="password" placeholder="รหัสผ่าน (ตั้งที่ /pass)"></span>
+  <button id="login">เข้าสู่ระบบ</button>
+  <span id="whoami"></span>
 </div>
-<div id="info">ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง</div>
+<div id="info">ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง · ตั้งรหัสผ่านในเกมด้วย /pass แล้วล็อกอินด้านบน</div>
 <canvas id="c"></canvas>
 <script>
 // ===== ตั้งค่า =====
-const API = '/api';            // พาธ API (ผ่าน reverse proxy)
-const TOKEN = 'MYTOKEN';       // เปลี่ยนให้ตรงกับในม็อด
+const API = '/api';            // พาธ API (หน้าเว็บอยู่บนเซิร์ฟเวอร์เดียวกับ API)
+const TOKEN = 'MYTOKEN';       // master token (เว็บฝังจากม็อดอัตโนมัติ)
 const CELL = 500;              // ขนาดช่อง (บล็อก)
 const DEMO = false;            // true = ใช้แผนที่ปลอมทดสอบโดยไม่ต้องมีเซิร์ฟเวอร์
 
@@ -40,7 +47,51 @@ const tiles = new Map();       // id -> {img,t,busy}
 function resize(){ cv.width = cv.clientWidth; cv.height = cv.clientHeight; draw(); }
 addEventListener('resize', resize);
 
-const headers = { Authorization: 'Bearer ' + TOKEN };
+// ----- ล็อกอินด้วยชื่อ + รหัสผ่าน (ตั้งในเกมด้วย /pass) -----
+let sessionToken = localStorage.getItem('claimmap_session') || null;
+let sessName = null;
+function authHeaders(json){
+  const h = { Authorization: 'Bearer ' + (sessionToken || TOKEN) };
+  if (json) h['Content-Type'] = 'application/json';
+  return h;
+}
+let whoami = document.getElementById('whoami');
+function whoamiUpdate(msg){ whoami.textContent = msg; }
+
+if (sessionToken){    // มี session เก่า → เช็กว่ายังใช้ได้ไหม
+  fetch(API + '/me', { headers: authHeaders() })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (d && d.name && d.name !== 'admin'){
+        sessName = d.name; me = d.name; whoamiUpdate('ล็อกอิน: ' + d.name);
+      } else {
+        sessionToken = null; localStorage.removeItem('claimmap_session'); whoamiUpdate('เซสชันหมดอายุ');
+      }
+      loadOwned().then(draw);
+    })
+    .catch(() => whoamiUpdate('ยังไม่ได้ล็อกอิน'));
+} else {
+  whoamiUpdate('ยังไม่ได้ล็อกอิน');
+}
+
+document.getElementById('login').onclick = async () => {
+  const name = document.getElementById('uname').value.trim();
+  const pass = document.getElementById('pass').value;
+  if (!name || !pass){ whoamiUpdate('กรอกชื่อ + รหัสผ่านก่อน'); return; }
+  const b = document.getElementById('login'); b.disabled = true;
+  try {
+    const r = await fetch(`${API}/login`, { method:'POST', headers: authHeaders(true), body: JSON.stringify({ name, password: pass }) });
+    const t = await r.text();
+    if (!r.ok){ whoamiUpdate('ล็อกอินไม่สำเร็จ: ' + t); return; }
+    let d; try { d = JSON.parse(t); } catch(e){ whoamiUpdate('ตอบผิด: ' + t); return; }
+    sessionToken = d.token; sessName = d.name; me = d.name;
+    localStorage.setItem('claimmap_session', sessionToken);
+    document.getElementById('uname').value = ''; document.getElementById('pass').value = '';
+    whoamiUpdate('ล็อกอิน: ' + d.name);
+    document.getElementById('info').textContent = 'ล็อกอินเป็น ' + d.name + ' แล้ว — เลือกช่องเพื่อจองได้เลย';
+    await loadOwned(); draw();
+  } finally { b.disabled = false; }
+};
 
 function demoTile(tx, tz){     // แผนที่ปลอม: เฉพาะรอบจุดเกิดเท่านั้นที่ "สำรวจแล้ว" ที่เหลือโปร่งใส
   const s = 100, c = document.createElement('canvas'); c.width = c.height = s;
@@ -64,7 +115,7 @@ function getTile(tx, tz){
   if (!e || (!e.busy && Date.now() - e.t > STALE_MS)){
     const old = e ? e.img : null;
     tiles.set(id, { img: old, t: Date.now(), busy: true });
-    fetch(`${API}/map/${id}.png`, { headers })
+    fetch(`${API}/map/${id}.png`, { headers: authHeaders() })
       .then(r => r.status === 200 ? r.blob() : null)
       .then(b => {
         if (!b){ tiles.set(id, { img: null, t: Date.now() }); draw(); return; }
@@ -81,12 +132,12 @@ setInterval(() => draw(), STALE_MS);   // ดึงภาพใหม่ขอ�
 let me = null;                 // ชื่อผู้เล่นที่ล็อกอินอยู่ (จาก GET /me → {name})
 async function loadMe(){
   if (DEMO){ me = 'คุณ'; return; }
-  try { me = (await (await fetch(API + '/me', { headers })).json()).name; } catch(e){}
+  try { me = (await (await fetch(API + '/me', { headers: authHeaders() })).json()).name; } catch(e){}
 }
 
 async function loadOwned(){
   if (DEMO){ owned = { '0,0': 'Steve', '1,0': 'Alex', '-1,0': 'คุณ', ...owned }; return; }
-  try { owned = await (await fetch(API + '/cells', { headers })).json(); } catch(e){}
+  try { owned = await (await fetch(API + '/cells', { headers: authHeaders() })).json(); } catch(e){}
 }
 
 function draw(){
@@ -157,10 +208,12 @@ document.getElementById('zout').onclick = () => { scale = Math.max(scale/1.5, 0.
 
 document.getElementById('claim').onclick = async () => {
   if (!sel || owned[sel]) return;           // กันซ้ำอีกชั้น (เซิร์ฟเวอร์ต้องเช็กเองด้วย)
+  if (!sessionToken){
+    document.getElementById('info').textContent = 'จองไม่ได้: ต้องล็อกอินก่อน (ในเกม /pass ตั้งรหัส แล้วกรอกชื่อ+รหัส ด้านบน)';
+    return;
+  }
   const id = sel;
-  if (DEMO){ owned[id] = me; sel = null; document.getElementById('claim').disabled = true;
-    document.getElementById('info').textContent = 'จองสำเร็จ: ' + id; draw(); return; }
-  const r = await fetch(`${API}/cells/${id}/claim`, { method: 'POST', headers });
+  const r = await fetch(`${API}/cells/${id}/claim`, { method: 'POST', headers: authHeaders(true) });
   document.getElementById('info').textContent = r.ok ? 'จองสำเร็จ: ' + id : 'จองไม่สำเร็จ: ' + (await r.text());
   sel = null; document.getElementById('claim').disabled = true;
   await loadOwned(); draw();

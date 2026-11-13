@@ -1,18 +1,33 @@
 package studio.timeandtime.claimmap;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Binds a web session to a Minecraft account via a short-lived 6 digit
- * in-game code (plan.md: ผูกบัญชีเว็บกับผู้เล่น).
+ * Binds a web session to a Minecraft account.
  *
+ * <p>Two ways to obtain a session token:
  * <ol>
- *   <li>Player runs {@code /link} in game to receive a 6 digit code.</li>
- *   <li>The code is exchanged on the web site for a session token bound to the player UUID.</li>
+ *   <li>{@link #createSession} - password based: {@code /pass} in game sets a
+ *       password, then {@code POST /api/login} on the web page exchanges
+ *       name+password for a session token.</li>
+ *   <li>{@link #issueCode}/{@link #exchange} - legacy 6 digit in-game code.</li>
  * </ol>
+ *
+ * <p>Sessions are persisted (JSON only) to {@code config/claimmap/sessions.json}
+ * so they survive restarts.
  */
 public final class LinkManager {
 	public record Session(String token, String uuid, String name, long expiresAt) {
@@ -37,9 +52,29 @@ public final class LinkManager {
 	private final Map<String, Code> codes = new ConcurrentHashMap<>();
 	private final Map<String, Session> sessions = new ConcurrentHashMap<>();
 	private final ClaimMapConfig config;
+	private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	private final Path file;
 
 	public LinkManager(ClaimMapConfig config) {
 		this.config = config;
+		this.file = config.sessionsFile();
+	}
+
+	public void load() {
+		if (file == null || !Files.exists(file)) return;
+		try {
+			String json = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+			SavedWrapper w = gson.fromJson(json, SavedWrapper.class);
+			if (w == null || w.sessions == null) return;
+			long now = System.currentTimeMillis();
+			for (SavedSession s : w.sessions) {
+				if (s != null && s.token != null && s.expiresAt > now) {
+					sessions.putIfAbsent(s.token, new Session(s.token, s.uuid, s.name, s.expiresAt));
+				}
+			}
+		} catch (Exception e) {
+			ClaimMap.LOGGER.error("[claimmap] Could not load sessions.json", e);
+		}
 	}
 
 	public String issueCode(String uuid, String name) {
@@ -58,10 +93,21 @@ public final class LinkManager {
 		Code c = codes.remove(code);
 		if (c == null) return null;
 		if (System.currentTimeMillis() >= c.expiresAt) return null;
-		String token = ClaimMapConfig.randomHex(24);
-		long expires = System.currentTimeMillis() + config.sessionHours * 3_600_000L;
-		Session s = new Session(token, c.uuid, c.name, expires);
-		sessions.put(token, s);
+		Session s = newSession(c.uuid, c.name);
+		return s;
+	}
+
+	/** Create a session directly (password login). */
+	public Session createSession(String uuid, String name) {
+		purge();
+		return newSession(uuid, name);
+	}
+
+	private Session newSession(String uuid, String name) {
+		Session s = new Session(ClaimMapConfig.randomHex(24), uuid, name,
+				System.currentTimeMillis() + config.sessionHours * 3_600_000L);
+		sessions.put(s.token(), s);
+		save();
 		return s;
 	}
 
@@ -71,9 +117,45 @@ public final class LinkManager {
 		return sessions.get(token);
 	}
 
+	private void save() {
+		try {
+			Path parent = file.getParent();
+			if (parent != null) Files.createDirectories(parent);
+			SavedWrapper w = new SavedWrapper();
+			w.sessions = new ArrayList<>();
+			for (Session s : sessions.values()) {
+				SavedSession x = new SavedSession();
+				x.token = s.token();
+				x.uuid = s.uuid();
+				x.name = s.name();
+				x.expiresAt = s.expiresAt();
+				w.sessions.add(x);
+			}
+			String json = gson.toJson(w);
+			Path tmp = file.resolveSibling("sessions.json.tmp");
+			Files.write(tmp, json.getBytes(StandardCharsets.UTF_8));
+			Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (IOException e) {
+			ClaimMap.LOGGER.error("[claimmap] Could not save sessions.json", e);
+		}
+	}
+
 	private void purge() {
 		long now = System.currentTimeMillis();
 		codes.entrySet().removeIf(e -> now >= e.getValue().expiresAt);
+		long before = sessions.size();
 		sessions.entrySet().removeIf(e -> !e.getValue().valid(now));
+		if (before != sessions.size()) save();
+	}
+
+	private static final class SavedSession {
+		String token;
+		String uuid;
+		String name;
+		long expiresAt;
+	}
+
+	private static final class SavedWrapper {
+		List<SavedSession> sessions;
 	}
 }
