@@ -5,28 +5,35 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 
 /**
  * File based configuration stored in {@code config/claimmap/claimmap.properties}.
- * Deep risk: keep the HTTP surface bound to loopback and protect every endpoint
- * with a bearer token (see plan.md).
+ *
+ * <p>The HTTP API is self-hosted by the mod. {@code bindAddress} defaults to
+ * {@code 0.0.0.0} so other machines on the LAN can reach it; the owner is
+ * responsible for network security (plain HTTP by design, see PHASES.md B).
  */
 public final class ClaimMapConfig {
 	public static final String FILE_NAME = "config/claimmap/claimmap.properties";
 
 	private final Path file;
 	private final Properties props = new Properties();
-	private final SecureRandom rng = new SecureRandom();
 
 	public int port = 8085;
-	public String bindAddress = "127.0.0.1";
-	/** Master bearer token, generated once and printed on first start. */
+	public String bindAddress = "0.0.0.0";
+	/** Master bearer token, generated once and printed on first start. Script-only. */
 	public String token = "";
+	/** Comma separated whitelist of player names. Empty = no restriction. */
+	public String players = "";
+	/** Comma separated list of admin names. */
+	public String admins = "";
 	public int cellSize = 500;
 	public int maxCellsPerPlayer = 3;
 	/** Radius (in cells) around 0,0 treated as a common / spawn area (unclaimable). */
@@ -41,7 +48,12 @@ public final class ClaimMapConfig {
 	public int sessionHours = 24;
 
 	public ClaimMapConfig() {
-		this.file = FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties");
+		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
+	}
+
+	/** Test/seeded constructor: does not touch FabricLoader. */
+	ClaimMapConfig(Path file) {
+		this.file = file;
 	}
 
 	public void load() {
@@ -53,8 +65,12 @@ public final class ClaimMapConfig {
 			}
 		}
 		port = getInt("port", port, 1, 65535);
-		bindAddress = props.getProperty("bindAddress", bindAddress).trim();
+		String bind = props.getProperty("bindAddress");
+		bindAddress = bind == null ? bindAddress : bind.trim();
+		if (bindAddress.isEmpty()) bindAddress = "0.0.0.0";
 		token = props.getProperty("token", "").trim();
+		players = props.getProperty("players", players).trim();
+		admins = props.getProperty("admins", admins).trim();
 		cellSize = getInt("cellSize", cellSize, 16, 10000);
 		maxCellsPerPlayer = getInt("maxCellsPerPlayer", maxCellsPerPlayer, 1, 100000);
 		spawnProtectedCells = getInt("spawnProtectedCells", spawnProtectedCells, 0, 100000);
@@ -63,12 +79,29 @@ public final class ClaimMapConfig {
 		linkCodeMinutes = getInt("linkCodeMinutes", linkCodeMinutes, 1, 1440);
 		sessionHours = getInt("sessionHours", sessionHours, 1, 8760);
 
+		boolean changed = false;
 		if (token.isEmpty()) {
 			token = randomHex(32);
 			props.setProperty("token", token);
-			save();
-			ClaimMap.LOGGER.info("[claimmap] Generated new master token. Keep it secret!");
-			ClaimMap.LOGGER.info("[claimmap] Master token (Authorization: Bearer {} )", token);
+			changed = true;
+			ClaimMap.LOGGER.info("[claimmap] Generated new master token. Keep it secret! (script-only, never embedded in the web page)");
+		}
+		// Surface the new keys in the owner's file so they can edit them.
+		for (String key : new String[]{"players", "admins", "bindAddress"}) {
+			if (!props.containsKey(key)) {
+				props.setProperty(key, switch (key) {
+					case "players" -> players;
+					case "admins" -> admins;
+					default -> bindAddress;
+				});
+				changed = true;
+			}
+		}
+		if (changed) save();
+
+		if ("127.0.0.1".equals(bindAddress) || "localhost".equalsIgnoreCase(bindAddress)) {
+			ClaimMap.LOGGER.info("[claimmap] bindAddress={} — other machines will NOT be able to open the web page. "
+					+ "Change bindAddress to 0.0.0.0 in config/claimmap/claimmap.properties to allow LAN access.", bindAddress);
 		}
 	}
 
@@ -76,6 +109,8 @@ public final class ClaimMapConfig {
 		props.setProperty("port", Integer.toString(port));
 		props.setProperty("bindAddress", bindAddress);
 		props.setProperty("token", token);
+		props.setProperty("players", players);
+		props.setProperty("admins", admins);
 		props.setProperty("cellSize", Integer.toString(cellSize));
 		props.setProperty("maxCellsPerPlayer", Integer.toString(maxCellsPerPlayer));
 		props.setProperty("spawnProtectedCells", Integer.toString(spawnProtectedCells));
@@ -94,8 +129,43 @@ public final class ClaimMapConfig {
 		}
 	}
 
+	/** True when {@code name} is listed in {@code admins} (case-insensitive, trimmed). */
+	public boolean isAdmin(String name) {
+		return containsName(admins, name);
+	}
+
+	/**
+	 * True when {@code name} may use the server: admins always pass, an empty
+	 * {@code players} list means "no restriction", otherwise the name must be listed.
+	 */
+	public boolean isAllowed(String name) {
+		if (name == null || name.isBlank()) return false;
+		if (isAdmin(name)) return true;
+		if (parseNames(players).isEmpty()) return true;
+		return containsName(players, name);
+	}
+
+	static List<String> parseNames(String csv) {
+		List<String> out = new ArrayList<>();
+		if (csv == null) return out;
+		for (String part : csv.split(",")) {
+			String n = part.trim();
+			if (!n.isEmpty()) out.add(n.toLowerCase(Locale.ROOT));
+		}
+		return out;
+	}
+
+	private static boolean containsName(String csv, String name) {
+		if (name == null || name.isBlank()) return false;
+		String needle = name.trim().toLowerCase(Locale.ROOT);
+		for (String n : parseNames(csv)) {
+			if (n.equals(needle)) return true;
+		}
+		return false;
+	}
+
 	public Path tilesDir() {
-		Path dir = FabricLoader.getInstance().getConfigDir().resolve("claimmap/tiles");
+		Path dir = dir().resolve("tiles");
 		try {
 			Files.createDirectories(dir);
 		} catch (IOException e) {
@@ -105,15 +175,19 @@ public final class ClaimMapConfig {
 	}
 
 	public Path regionsFile() {
-		return FabricLoader.getInstance().getConfigDir().resolve("claimmap/regions.json");
+		return dir().resolve("regions.json");
 	}
 
 	public Path sessionsFile() {
-		return FabricLoader.getInstance().getConfigDir().resolve("claimmap/sessions.json");
+		return dir().resolve("sessions.json");
 	}
 
 	public Path accountsFile() {
-		return FabricLoader.getInstance().getConfigDir().resolve("claimmap/accounts.json");
+		return dir().resolve("accounts.json");
+	}
+
+	private Path dir() {
+		return file.getParent();
 	}
 
 	private int getInt(String key, int def, int min, int max) {

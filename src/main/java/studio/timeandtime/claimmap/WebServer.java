@@ -1,8 +1,6 @@
 package studio.timeandtime.claimmap;
 
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -12,15 +10,17 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
- * Embedded HTTP server on 127.0.0.1:8085 (behind Nginx reverse proxy + TLS,
- * plan.md). Serves both the single-file web page ({@code /}) and the JSON API
- * under {@code /api}. Every request requires "Authorization: Bearer <token>".
- * The web page is bundled in the jar at {@code /claimmap-web/index.html} and
- * the master token is injected at serve time ({@code MYTOKEN} placeholder).
+ * Embedded HTTP server (default {@code 0.0.0.0:8085}). Serves the single page
+ * web UI at {@code /} plus the JSON API under {@code /api} (PHASES.md E).
+ *
+ * <p>The master token from the config is a script-only credential: it is never
+ * embedded in the served page and only {@code POST /api/command} accepts it.
+ * Everything else uses a web session issued by {@code POST /api/login}.
  */
 public final class WebServer {
 	private final ClaimMapConfig config;
@@ -28,6 +28,7 @@ public final class WebServer {
 	private final MapRenderer maps;
 	private final LinkManager links;
 	private final AccountManager accounts;
+	private final LoginThrottle throttle = new LoginThrottle();
 	private HttpServer server;
 	private byte[] webPage;
 
@@ -42,8 +43,8 @@ public final class WebServer {
 	public void start() {
 		try {
 			server = HttpServer.create(new InetSocketAddress(config.bindAddress, config.port), 0);
-			server.createContext("/", this::handle);   // เหลือ "/" ครอบทุก path: หน้าเว็บ + /api
-			server.setExecutor(Executors.newCachedThreadPool());
+			server.createContext("/", this::handle);
+			server.setExecutor(Executors.newFixedThreadPool(8));
 			server.start();
 			ClaimMap.LOGGER.info("[claimmap] HTTP API listening on {}:{}", config.bindAddress, config.port);
 		} catch (IOException e) {
@@ -60,195 +61,257 @@ public final class WebServer {
 	private void handle(HttpExchange ex) throws IOException {
 		String path = ex.getRequestURI().getPath();
 		String method = ex.getRequestMethod();
+		boolean api = path.startsWith("/api/");
+		if (api) {
+			Headers h = ex.getResponseHeaders();
+			h.set("Cache-Control", "no-store");
+			h.set("X-Content-Type-Options", "nosniff");
+			h.set("Referrer-Policy", "no-referrer");
+		}
 		try {
-			switch (method + " " + path) {
-				case "GET /" -> sendWeb(ex);
-				case "GET /index.html" -> sendWeb(ex);
-				case "GET /claim-map.html" -> sendWeb(ex);
-				case "GET /api/me" -> handleMe(ex);
-				case "GET /api/cells" -> handleCells(ex);
-				case "POST /api/login" -> handleLogin(ex);
-				case "POST /api/link" -> handleLink(ex);
-				case "POST /api/command" -> handleCommand(ex);
-				default -> {
-					if (method.equals("GET") && path.startsWith("/api/map/")) handleMap(ex, path);
-					else if (path.startsWith("/api/cells/")) handleCellAction(ex, method, path);
-					else send(ex, 404, "Not found");
+			route(ex, method, path);
+		} catch (Json.ApiError e) {
+			Json.sendError(ex, e);
+		} catch (Exception e) {
+			ClaimMap.LOGGER.error("[claimmap] API error {} {}", method, path, e);
+			try {
+				Json.sendError(ex, 500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
+			} catch (IOException ignored) {
+				// response already committed
+			}
+		} finally {
+			ex.close();
+		}
+	}
+
+	private void route(HttpExchange ex, String method, String path) throws IOException {
+		switch (path) {
+			case "/", "/index.html", "/claim-map.html" -> {
+				requireMethod(ex, method, "GET");
+				sendWeb(ex);
+			}
+			case "/api/login" -> {
+				requireMethod(ex, method, "POST");
+				handleLogin(ex);
+			}
+			case "/api/me" -> {
+				requireMethod(ex, method, "GET");
+				handleMe(ex);
+			}
+			case "/api/link" -> {
+				requireMethod(ex, method, "POST");
+				handleLink(ex);
+			}
+			case "/api/command" -> {
+				requireMethod(ex, method, "POST");
+				handleCommand(ex);
+			}
+			case "/api/cells" -> {
+				requireMethod(ex, method, "GET");
+				handleCells(ex);
+			}
+			default -> {
+				if (path.startsWith("/api/map/")) {
+					requireMethod(ex, method, "GET");
+					handleMap(ex, path);
+				} else if (path.startsWith("/api/cells/")) {
+					handleCellAction(ex, method, path);
+				} else {
+					throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
 				}
 			}
-		} catch (Exception e) {
-			ClaimMap.LOGGER.warn("[claimmap] API error {} {} -> {}", method, path, e.toString());
-			send(ex, 500, "Internal error: " + e);
+		}
+	}
+
+	private void requireMethod(HttpExchange ex, String actual, String expected) {
+		if (!actual.equals(expected)) {
+			throw new Json.ApiError(405, "method_not_allowed", "วิธีเรียกไม่ถูกต้อง ต้องใช้ " + expected)
+					.header("Allow", expected);
 		}
 	}
 
 	// ---- auth ---------------------------------------------------------------
 
+	/** Authenticated caller: a web session, or the script-only master token. */
+	private record Auth(String name, String uuid, boolean admin, boolean master, LinkManager.Session session) {
+	}
+
 	private String bearer(HttpExchange ex) {
-		Headers h = ex.getRequestHeaders();
-		String auth = h.getFirst("Authorization");
+		String auth = ex.getRequestHeaders().getFirst("Authorization");
 		if (auth == null) return null;
-		String[] parts = auth.split("\\s+");
+		String[] parts = auth.trim().split("\\s+");
 		if (parts.length != 2 || !parts[0].equalsIgnoreCase("Bearer")) return null;
 		return parts[1];
 	}
 
-	private String requireBearer(HttpExchange ex) throws IOException {
-		String token = bearer(ex);
-		if (token == null) {
-			send(ex, 401, "Missing Authorization: Bearer <token>");
-			return null;
-		}
-		return token;
+	private boolean isMaster(String token) {
+		if (token == null || config.token == null || config.token.isEmpty()) return false;
+		return MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8),
+				config.token.getBytes(StandardCharsets.UTF_8));
 	}
 
-	private boolean isMaster(String token) {
-		return token != null && token.equals(config.token);
+	/** Requires a valid session or the master token; throws 401 otherwise. */
+	private Auth requireAuth(HttpExchange ex) {
+		String token = bearer(ex);
+		if (token == null) throw new Json.ApiError(401, "unauthorized", "กรุณาเข้าสู่ระบบ");
+		if (isMaster(token)) return new Auth("admin", null, true, true, null);
+		LinkManager.Session s = links.resolve(token);
+		if (s == null) throw new Json.ApiError(401, "unauthorized", "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
+		// The owner may remove a name from the whitelist while a session is alive.
+		if (!config.isAllowed(s.name())) {
+			throw new Json.ApiError(401, "unauthorized", "ชื่อนี้ไม่อยู่ในรายชื่อผู้เล่นแล้ว");
+		}
+		return new Auth(s.name(), s.uuid(), config.isAdmin(s.name()), false, s);
+	}
+
+	/** Requires a real player session (master token is rejected). */
+	private Auth requireSession(HttpExchange ex) {
+		Auth a = requireAuth(ex);
+		if (a.session() == null) {
+			throw new Json.ApiError(403, "forbidden", "ต้องเข้าสู่ระบบด้วยบัญชีผู้เล่น");
+		}
+		return a;
 	}
 
 	// ---- handlers -----------------------------------------------------------
 
-	private void handleMe(HttpExchange ex) throws IOException {
-		String token = requireBearer(ex);
-		if (token == null) return;
-		if (isMaster(token)) {
-			sendJson(ex, 200, "{\"name\":\"admin\"}");
-			return;
-		}
-		LinkManager.Session s = links.resolve(token);
-		if (s == null) {
-			send(ex, 401, "Invalid token");
-			return;
-		}
-		sendJson(ex, 200, json(s.name()));
-	}
-
-	/** POST /api/login {"name":"...","password":"..."} -> {"token","name"} (password set with /pass in game). */
-	private void handleLogin(HttpExchange ex) throws IOException {
-		String token = requireBearer(ex);
-		if (token == null) return;
-		if (!authorized(token)) {
-			send(ex, 401, "Invalid token");
-			return;
-		}
-		JsonObject body = readJson(ex);
-		String name = body == null ? null : body.get("name") == null ? null : body.get("name").getAsString();
-		String pass = body == null ? null : body.get("password") == null ? null : body.get("password").getAsString();
-		AccountManager.Account a = accounts.verify(name, pass);
-		if (a == null) {
-			send(ex, 403, "Wrong name or password (set it in game with /pass)");
-			return;
-		}
-		LinkManager.Session s = links.createSession(a.uuid, a.name);
-		sendJson(ex, 200, "{\"token\": " + quote(s.token()) + ", \"name\": " + quote(s.name()) + "}");
-	}
-
-	/** Serves the single-file claim map web page bundled in the mod jar. */
+	/** Serves the web page exactly as bundled — never injects any token. */
 	private void sendWeb(HttpExchange ex) throws IOException {
 		if (webPage == null) {
 			byte[] raw;
 			try (InputStream in = WebServer.class.getResourceAsStream("/claimmap-web/index.html")) {
 				if (in == null) {
-					send(ex, 404, "Web page not bundled in this mod jar");
-					return;
+					throw new Json.ApiError(404, "not_found", "ไม่พบหน้าเว็บในไฟล์ม็อด");
 				}
 				raw = in.readAllBytes();
 			}
-			String html = new String(raw, StandardCharsets.UTF_8).replace("MYTOKEN", config.token);
-			webPage = html.getBytes(StandardCharsets.UTF_8);
+			webPage = raw;
 		}
 		ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
-		ex.getResponseHeaders().set("Cache-Control", "no-store");
+		ex.getResponseHeaders().set("Cache-Control", "no-cache");
+		ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
 		ex.sendResponseHeaders(200, webPage.length);
 		try (OutputStream os = ex.getResponseBody()) {
 			os.write(webPage);
 		}
 	}
 
-	private void handleCells(HttpExchange ex) throws IOException {
-		String token = requireBearer(ex);
-		if (token == null) return;
-		if (!authorized(token)) {
-			send(ex, 401, "Invalid token");
-			return;
+	/** POST /api/login {"name","password"} -> {"token","name","admin"}. Public. */
+	private void handleLogin(HttpExchange ex) throws IOException {
+		JsonObject body = Json.readObject(ex);
+		String name = Json.str(body, "name");
+		String password = Json.str(body, "password");
+		if (name == null || name.isBlank() || name.length() > 32 || password == null || password.isEmpty()) {
+			throw new Json.ApiError(400, "bad_request", "ต้องกรอกชื่อผู้เล่นและรหัสผ่าน");
 		}
-		Map<String, String> owners = regions.ownerMap();
-		StringBuilder sb = new StringBuilder("{");
-		boolean first = true;
-		for (Map.Entry<String, String> e : owners.entrySet()) {
-			if (!first) sb.append(',');
-			first = false;
-			sb.append(quote(e.getKey())).append(':').append(quote(e.getValue()));
+		name = name.trim();
+
+		String key = LoginThrottle.key(remoteIp(ex), name);
+		long now = System.currentTimeMillis();
+		long retry = throttle.retryAfterMs(key, now);
+		if (retry > 0) {
+			long seconds = Math.max(1L, (retry + 999L) / 1000L);
+			throw new Json.ApiError(429, "too_many_attempts", "ลองผิดหลายครั้งเกินไป กรุณารออีก " + seconds + " วินาที")
+					.header("Retry-After", Long.toString(seconds))
+					.extra("retryAfterSeconds", seconds);
 		}
-		sb.append('}');
-		sendJson(ex, 200, sb.toString());
+
+		// Same response and roughly the same work for every failure reason.
+		AccountManager.Account account = null;
+		if (config.isAllowed(name)) {
+			account = accounts.verify(name, password);
+		} else {
+			accounts.burnVerify(password);
+		}
+		if (account == null) {
+			throttle.fail(key, now);
+			throw new Json.ApiError(401, "invalid_credentials", "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+		}
+
+		throttle.success(key);
+		LinkManager.Session s = links.createSession(account.uuid, account.name);
+		JsonObject out = new JsonObject();
+		out.addProperty("token", s.token());     // legacy field name, kept for old clients
+		out.addProperty("session", s.token());
+		out.addProperty("name", s.name());
+		out.addProperty("admin", config.isAdmin(s.name()));
+		Json.send(ex, 200, out);
 	}
 
+	/** GET /api/me -> {"name","admin"} */
+	private void handleMe(HttpExchange ex) throws IOException {
+		Auth a = requireAuth(ex);
+		JsonObject out = new JsonObject();
+		out.addProperty("name", a.name());
+		out.addProperty("admin", a.admin());
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/link {"code"} — legacy in-game 6 digit code login. */
 	private void handleLink(HttpExchange ex) throws IOException {
-		String token = requireBearer(ex);
-		if (token == null) return;
-		if (!authorized(token)) {
-			send(ex, 401, "Invalid token");
-			return;
-		}
-		JsonObject body = readJson(ex);
-		String code = body == null ? null : body.get("code") == null ? null : body.get("code").getAsString();
+		requireAuth(ex);
+		JsonObject body = Json.readObject(ex);
+		String code = Json.str(body, "code");
 		if (code == null || !code.matches("\\d{6}")) {
-			send(ex, 400, "Expected {\"code\":\"123456\"}");
-			return;
+			throw new Json.ApiError(400, "bad_request", "รหัสต้องเป็นตัวเลข 6 หลัก");
 		}
 		LinkManager.Session s = links.exchange(code);
 		if (s == null) {
-			send(ex, 403, "Invalid or expired code");
-			return;
+			throw new Json.ApiError(403, "forbidden", "รหัสไม่ถูกต้องหรือหมดอายุ");
 		}
-		sendJson(ex, 200, "{\"token\": " + quote(s.token()) + ", \"name\": " + quote(s.name()) + "}");
+		JsonObject out = new JsonObject();
+		out.addProperty("token", s.token());     // legacy field name, kept for old clients
+		out.addProperty("session", s.token());
+		out.addProperty("name", s.name());
+		out.addProperty("admin", config.isAdmin(s.name()));
+		Json.send(ex, 200, out);
 	}
 
+	/** POST /api/command — master token only (script/console use). */
 	private void handleCommand(HttpExchange ex) throws IOException {
-		String token = requireBearer(ex);
-		if (token == null) return;
+		String token = bearer(ex);
+		if (token == null) throw new Json.ApiError(401, "unauthorized", "กรุณาเข้าสู่ระบบ");
 		if (!isMaster(token)) {
-			send(ex, 403, "Admin (master token) only");
-			return;
+			throw new Json.ApiError(403, "forbidden", "คำสั่งนี้ใช้ได้เฉพาะ master token");
 		}
-		JsonObject body = readJson(ex);
-		String cmd = body == null ? null : body.get("command") == null ? null : body.get("command").getAsString();
-		if (cmd == null || cmd.isEmpty()) {
-			send(ex, 400, "Expected {\"command\":\"say hi\"}");
-			return;
+		JsonObject body = Json.readObject(ex);
+		String cmd = Json.str(body, "command");
+		if (cmd == null || cmd.isBlank()) {
+			throw new Json.ApiError(400, "bad_request", "ต้องระบุ command");
 		}
 		var server = ClaimMap.getServer();
 		if (server == null) {
-			send(ex, 503, "Server not running");
-			return;
+			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
 		}
-		server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), cmd);
-		sendJson(ex, 200, "{\"ok\":true}");
+		// Commands must run on the server thread (R3); fire and forget.
+		server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), cmd));
+		Json.send(ex, 200, true);
 	}
 
-	private void handleMap(HttpExchange ex, String path) throws IOException {
-		String token = requireBearer(ex);
-		if (token == null) return;
-		if (!authorized(token)) {
-			send(ex, 401, "Invalid token");
-			return;
+	/** GET /api/cells -> {"cx,cz":"ownerName",...} */
+	private void handleCells(HttpExchange ex) throws IOException {
+		requireAuth(ex);
+		JsonObject out = new JsonObject();
+		for (Map.Entry<String, String> e : regions.ownerMap().entrySet()) {
+			out.addProperty(e.getKey(), e.getValue());
 		}
-		// /api/map/{x},{z}.png  (x,z may be negative)
+		Json.send(ex, 200, out);
+	}
+
+	/** GET /api/map/{cx},{cz}.png */
+	private void handleMap(HttpExchange ex, String path) throws IOException {
+		requireAuth(ex);
 		String rest = path.substring("/api/map/".length());
 		if (!rest.endsWith(".png")) {
-			send(ex, 404, "Not found");
-			return;
+			throw new Json.ApiError(404, "not_found", "ไม่พบแผนที่ที่เรียก");
 		}
-		String id = rest.substring(0, rest.length() - 4);
-		int[] cell = parseCellId(id);
+		int[] cell = parseCellId(rest.substring(0, rest.length() - 4));
 		if (cell == null) {
-			send(ex, 400, "Bad cell id");
-			return;
+			throw new Json.ApiError(400, "bad_request", "พิกัดช่องไม่ถูกต้อง");
 		}
 		byte[] png = maps.encodedPng(cell[0], cell[1]);
 		if (png == null) {
-			sendCode(ex, 204);
+			Json.sendNoContent(ex);
 			return;
 		}
 		ex.getResponseHeaders().set("Content-Type", "image/png");
@@ -259,8 +322,8 @@ public final class WebServer {
 		}
 	}
 
+	/** /api/cells/{x},{z}[/claim|/members] and DELETE /api/cells/{x},{z} */
 	private void handleCellAction(HttpExchange ex, String method, String path) throws IOException {
-		// /api/cells/{x},{z}[/claim|/members or DELETE]
 		String rest = path.substring("/api/cells/".length());
 		String id;
 		String action = "";
@@ -273,82 +336,55 @@ public final class WebServer {
 		} else {
 			id = rest;
 		}
-		int[] cell;
-		try {
-			cell = parseCellId(id);
-		} catch (Exception e) {
-			cell = null;
+		if (parseCellId(id) == null) {
+			throw new Json.ApiError(400, "bad_request", "พิกัดช่องไม่ถูกต้อง");
 		}
-		if (cell == null) {
-			send(ex, 400, "Bad cell id");
-			return;
-		}
-		String token = requireBearer(ex);
-		if (token == null) return;
-		if (!authorized(token)) {
-			send(ex, 401, "Invalid token");
-			return;
-		}
-		LinkManager.Session sess = isMaster(token) ? null : links.resolve(token);
 
 		switch (action) {
 			case "claim" -> {
-				if (method.equals("POST")) {
-					if (sess == null) {
-						send(ex, 403, "Please enter a /link code first (session token required)");
-						return;
-					}
-					RegionManager.ClaimResult r = regions.claim(cell[0], cell[1], sess.uuid(), sess.name());
-					switch (r) {
-						case OK -> sendJson(ex, 200, "{\"ok\":true}");
-						case ALREADY_CLAIMED -> send(ex, 409, "That cell is already claimed");
-						case COMMON_AREA -> send(ex, 403, "This is the protected spawn area, cannot claim");
-						case LIMIT_REACHED -> send(ex, 403, "Cell claim limit reached");
-					}
-				} else {
-					send(ex, 405, "Method not allowed");
+				requireMethod(ex, method, "POST");
+				Auth a = requireSession(ex);
+				int[] cell = parseCellId(id);
+				RegionManager.ClaimResult r = regions.claim(cell[0], cell[1], a.uuid(), a.name());
+				switch (r) {
+					case OK -> Json.send(ex, 200, true);
+					case ALREADY_CLAIMED -> throw new Json.ApiError(409, "already_claimed", "ช่องนี้ถูกจองแล้ว");
+					case COMMON_AREA -> throw new Json.ApiError(403, "forbidden", "เป็นพื้นที่ส่วนกลาง จองไม่ได้");
+					case LIMIT_REACHED -> throw new Json.ApiError(409, "limit_reached", "จองช่องครบจำนวนที่กำหนดแล้ว");
 				}
 			}
 			case "members" -> {
-				if (!method.equals("POST")) {
-					send(ex, 405, "Method not allowed");
-					return;
+				requireMethod(ex, method, "POST");
+				Auth a = requireSession(ex);
+				JsonObject body = Json.readObject(ex);
+				String mUuid = Json.str(body, "uuid");
+				String mName = Json.str(body, "name");
+				if (mUuid == null || mUuid.isBlank()) {
+					throw new Json.ApiError(400, "bad_request", "ต้องระบุ uuid ของสมาชิก");
 				}
-				if (sess == null) {
-					send(ex, 403, "Admin: master token");
-					return;
-				}
-				JsonObject body = readJson(ex);
-				String mUuid = body == null ? null : body.has("uuid") ? body.get("uuid").getAsString() : null;
-				String mName = body == null ? null : body.has("name") ? body.get("name").getAsString() : "<member>";
-				if (mUuid == null) {
-					send(ex, 400, "Expected {\"uuid\":\"...\",\"name\":\"...\"}");
-					return;
-				}
-				boolean ok = regions.addMember(id, sess.uuid(), mUuid, mName);
-				sendJson(ex, ok ? 200 : 403, ok ? "{\"ok\":true}" : "{\"ok\":false}");
+				boolean ok = regions.addMember(id, a.uuid(), mUuid, mName == null ? "" : mName);
+				if (!ok) throw new Json.ApiError(403, "forbidden", "คุณไม่ใช่เจ้าของช่องนี้");
+				Json.send(ex, 200, true);
 			}
 			default -> {
-				if (method.equals("DELETE")) {
-					boolean admin = isMaster(token);
-					String byUuid = admin ? "admin" : sess == null ? "" : sess.uuid();
-					if (!admin && sess == null) {
-						send(ex, 403, "Please enter a /link code first");
-						return;
-					}
-					boolean ok = regions.unclaim(id, byUuid, admin);
-					sendJson(ex, ok ? 200 : 403, ok ? "{\"ok\":true}" : "{\"ok\":false}");
-				} else {
-					send(ex, 405, "Method not allowed");
-				}
+				requireMethod(ex, method, "DELETE");
+				Auth a = requireAuth(ex);
+				boolean admin = a.master() || a.admin();
+				String byUuid = a.master() ? "admin" : a.uuid();
+				boolean ok = regions.unclaim(id, byUuid, admin);
+				if (!ok) throw new Json.ApiError(403, "forbidden", "ลบช่องนี้ไม่ได้");
+				Json.send(ex, 200, true);
 			}
 		}
 	}
 
 	// ---- helpers ------------------------------------------------------------
 
-	private boolean authorized(String token) {
-		return isMaster(token) || links.resolve(token) != null;
+	private String remoteIp(HttpExchange ex) {
+		var addr = ex.getRemoteAddress();
+		if (addr == null) return "?";
+		if (addr.getAddress() != null) return addr.getAddress().getHostAddress();
+		return addr.getHostString();
 	}
 
 	private static int[] parseCellId(String id) {
@@ -362,54 +398,5 @@ public final class WebServer {
 		} catch (NumberFormatException e) {
 			return null;
 		}
-	}
-
-	private static JsonObject readJson(HttpExchange ex) throws IOException {
-		byte[] body = ex.getRequestBody().readAllBytes();
-		if (body.length == 0) return null;
-		try {
-			JsonElement el = JsonParser.parseString(new String(body, StandardCharsets.UTF_8));
-			return el.isJsonObject() ? el.getAsJsonObject() : null;
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
-	private static String json(String name) {
-		return "{\"name\": " + quote(name == null ? "" : name) + "}";
-	}
-
-	private static String quote(String s) {
-		StringBuilder sb = new StringBuilder("\"");
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (c == '"' || c == '\\') sb.append('\\');
-			sb.append(c);
-		}
-		return sb.append('"').toString();
-	}
-
-	private static void sendJson(HttpExchange ex, int code, String json) throws IOException {
-		byte[] b = json.getBytes(StandardCharsets.UTF_8);
-		ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-		ex.getResponseHeaders().set("Cache-Control", "no-store");
-		ex.sendResponseHeaders(code, b.length);
-		try (OutputStream os = ex.getResponseBody()) {
-			os.write(b);
-		}
-	}
-
-	private static void send(HttpExchange ex, int code, String text) throws IOException {
-		byte[] b = text.getBytes(StandardCharsets.UTF_8);
-		ex.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
-		ex.sendResponseHeaders(code, b.length);
-		try (OutputStream os = ex.getResponseBody()) {
-			os.write(b);
-		}
-	}
-
-	private static void sendCode(HttpExchange ex, int code) throws IOException {
-		ex.sendResponseHeaders(code, -1);
-		ex.close();
 	}
 }

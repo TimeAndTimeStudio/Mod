@@ -54,6 +54,12 @@ public final class ClaimCommands {
 		if (player == null) return 0;
 		String uuid = player.getUUID().toString();
 		String name = player.getGameProfile().name();
+		// Whitelist check first so a name outside `players` can never set a password.
+		// (The /pass takeover hole itself is closed in phase 3 with AuthGate.)
+		if (!config.isAllowed(name)) {
+			player.sendSystemMessage(Component.literal("ชื่อนี้ไม่อยู่ในรายชื่อผู้เล่น"));
+			return 0;
+		}
 		if (!accounts.setPassword(uuid, name, password)) {
 			player.sendSystemMessage(Component.literal("Invalid password: use 4-64 characters and not include spaces."));
 			return 1;

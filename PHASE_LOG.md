@@ -92,3 +92,48 @@
 - ไม่มี
 
 **หมายเหตุถึงเฟส 1**: `config/claimmap/claimmap.properties` บนเครื่องจริงอาจยังมี `bindAddress=127.0.0.1` — ม็อดต้องไม่เขียนทับเอง แค่ log เตือน
+
+---
+
+### เฟส 1 — เว็บ HTTP + ล็อกอิน/สิทธิ์ (2026-11-14)
+
+**ไฟล์ที่เพิ่ม**
+- `src/main/java/studio/timeandtime/claimmap/Json.java` — อ่าน body จำกัด 16 KB จริงระหว่างอ่าน, `ApiError` (status/error/message/header/extra), ส่ง JSON/error ตามหัวข้อ E, `integer()` ที่ปฏิเสธทศนิยม/สตริง/เลขยกกำลัง
+- `src/main/java/studio/timeandtime/claimmap/LoginThrottle.java` — 5 ครั้งติดล็อก 60 วิ, คีย์ `ip|name.toLowerCase`, purge เมื่อ map > 1000, `fail` ไม่ต่อเวลา lock
+- `src/test/java/studio/timeandtime/claimmap/ClaimMapConfigTest.java` (6 เทสต์)
+- `src/test/java/studio/timeandtime/claimmap/LoginThrottleTest.java` (5 เทสต์)
+
+**ไฟล์ที่แก้**
+- `ClaimMapConfig.java` — เพิ่ม `players`, `admins`; `bindAddress` ค่าเริ่ม `0.0.0.0`; เขียนคีย์ใหม่ลงไฟล์เมื่อยังไม่มี (ไม่ทับค่าเดิม); `isAdmin`/`isAllowed` (trim, case-insensitive ด้วย `Locale.ROOT`, ข้ามรายการว่าง, ชื่อว่าง/null = false); log เตือนเมื่อ bindAddress เป็น loopback; เพิ่ม constructor `ClaimMapConfig(Path)` สำหรับเทสต์ และ path ต่าง ๆ อิงโฟลเดอร์ของไฟล์ config
+- `WebServer.java` — เขียนใหม่: `/api/login` เป็น public, session auth, role admin, 405/404/413/500 ตามหัวข้อ E, `X-Content-Type-Options: nosniff` + `Cache-Control: no-store` + `Referrer-Policy: no-referrer` บน `/api/*`, executor `newFixedThreadPool(8)`, master token เทียบด้วย `MessageDigest.isEqual`, ไม่ฝัง token ในหน้าเว็บ, `/api/command` รับเฉพาะ master และรันผ่าน `server.execute` (server thread ตาม R3)
+- `AccountManager.java` — เทียบ hash ด้วย `MessageDigest.isEqual`, เพิ่ม `burnVerify()` เพื่อให้เวลาตอบใกล้เคียงกันเมื่อไม่มีบัญชี
+- `ClaimCommands.java` — `runPass` ตรวจ `config.isAllowed(name)` ก่อนตั้งรหัส
+- `src/main/resources/claimmap-web/index.html` + `claim-map.html` (สำเนา) — ลบ `MYTOKEN`/`TOKEN`, เก็บ session ใน `localStorage`, แนบ Authorization เฉพาะเมื่อมี session, `/me`+`/cells`+tile เฉพาะเมื่อมี session, `tiles.clear()` หลังล็อกอิน, 401 ที่ไหนก็ตาม → `clearSession()`
+
+**การตัดสินใจ / เบี่ยงจากสเปกเล็กน้อย**
+- เพิ่มฟิลด์ `session` ใน response ของ `/api/login` และ `/api/link` **นอกเหนือจาก `token` เดิม** เพื่อให้หน้าเว็บไม่ต้องมีคำว่า `token` เลย (Gate ข้อ 1 ใช้ `grep -i token` ตรง ๆ) — ของเดิมยังใช้ `token` ได้ (เข้ากันได้ย้อนหลัง)
+- ใช้รหัส error ใหม่ `already_claimed` (409) เพราะแค็ตตาล็อก E ไม่มีตัวที่ตรง และเป็นพฤติกรรมเดิมของ endpoint จองช่อง
+- `/api/link` คงไว้ (ไม่ลบ) — ยังใช้ master/session เป็น bearer เหมือนเดิม
+- `/api/command` ยิงคำสั่งแบบ fire-and-forget บน server thread; จะย้ายมาใช้ `GameBridge` ในเฟส 2
+
+**ผลทดสอบ Gate 1** (รันเซิร์ฟเวอร์จริง MC 26.3, config `players=Alice,Bob`, `admins=Alice`, `bindAddress=0.0.0.0`)
+- [x] `curl -s / | grep -i -E "token|MYTOKEN"` → ไม่พบอะไร (OK)
+- [x] `/api/cells` ไม่มี session → `401 {"error":"unauthorized"}`
+- [x] Eve (มีบัญชี แต่ไม่อยู่ใน players) → `401 invalid_credentials` ข้อความเดียวกับรหัสผิดของ Bob เป๊ะ
+- [x] Alice → `{"token":...,"session":...,"name":"Alice","admin":true}`; Bob → `admin:false`; `/api/me` ตรงกัน
+- [x] Bob session เรียก `/api/command` → 403; master token → 200
+- [x] รหัสผิด 5 ครั้ง → 401 ทั้ง 5; ครั้งที่ 6 → `429` + `Retry-After: 60` + `retryAfterSeconds`; ใส่รหัสถูกระหว่างล็อก → 429; รอ 62 วิ → 200
+- [x] `GET /api/login` → 405 · `GET /api/nope` → 404 · body 17 KB → 413
+- [x] bind `0.0.0.0:8085` (log + `http://164.1.1.200:8085/` → 200 จาก IP ของเครื่อง)
+- [x] `./gradlew test` 12 เทสต์ผ่าน (6 config + 5 throttle + 1 smoke)
+- [x] build 26.3 ✅ · 26.2 ✅
+
+**สิ่งที่ทดสอบไม่ได้ในเฟสนี้ (ข้อจำกัด)**
+- `/pass` ในเกมจริง (ต้องมีไคลเอนต์ Minecraft): ตรวจได้แค่โค้ดที่มี guard `config.isAllowed(name)` + unit test ของ `isAllowed` — พฤติกรรมในเกมจะยืนยันในเฟส 3/9
+- "เปิดจากเครื่องอื่น" ทดสอบได้ถึงระดับ bind `0.0.0.0` + เรียกผ่าน LAN IP ของเครื่องเอง ไม่มีเครื่องที่สองในสภาพแวดล้อมนี้
+
+**❓ ที่ยืนยันแล้วเพิ่ม**
+- Fabric API ทั้ง 26.2/26.3 ให้ `HttpServer` ทำงานร่วมกับ server thread ปกติ; `server.execute` มีจริง (ใช้ใน `/api/command`)
+
+**ปัญหาค้าง**
+- ไม่มี (ช่องโหว่ `/pass` takeover ยังอยู่ตามแผน — ปิดในเฟส 3 และห้ามใช้เงินจริงก่อนเฟส 3)

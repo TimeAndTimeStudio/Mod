@@ -34,7 +34,6 @@
 <script>
 // ===== ตั้งค่า =====
 const API = '/api';            // พาธ API (หน้าเว็บอยู่บนเซิร์ฟเวอร์เดียวกับ API)
-const TOKEN = 'MYTOKEN';       // master token (เว็บฝังจากม็อดอัตโนมัติ)
 const CELL = 500;              // ขนาดช่อง (บล็อก)
 const DEMO = false;            // true = ใช้แผนที่ปลอมทดสอบโดยไม่ต้องมีเซิร์ฟเวอร์
 
@@ -48,30 +47,48 @@ function resize(){ cv.width = cv.clientWidth; cv.height = cv.clientHeight; draw(
 addEventListener('resize', resize);
 
 // ----- ล็อกอินด้วยชื่อ + รหัสผ่าน (ตั้งในเกมด้วย /pass) -----
-let sessionToken = localStorage.getItem('claimmap_session') || null;
-let sessName = null;
+let session = localStorage.getItem('claimmap_session') || null;
+let me = null;                 // ชื่อผู้เล่นที่ล็อกอินอยู่
 function authHeaders(json){
-  const h = { Authorization: 'Bearer ' + (sessionToken || TOKEN) };
+  const h = {};
+  if (session) h.Authorization = 'Bearer ' + session;   // ไม่มี session = ไม่แนบ
   if (json) h['Content-Type'] = 'application/json';
   return h;
 }
-let whoami = document.getElementById('whoami');
+const whoami = document.getElementById('whoami');
 function whoamiUpdate(msg){ whoami.textContent = msg; }
+let isAdmin = false;
 
-if (sessionToken){    // มี session เก่า → เช็กว่ายังใช้ได้ไหม
-  fetch(API + '/me', { headers: authHeaders() })
-    .then(r => r.ok ? r.json() : null)
-    .then(d => {
-      if (d && d.name && d.name !== 'admin'){
-        sessName = d.name; me = d.name; whoamiUpdate('ล็อกอิน: ' + d.name);
-      } else {
-        sessionToken = null; localStorage.removeItem('claimmap_session'); whoamiUpdate('เซสชันหมดอายุ');
-      }
-      loadOwned().then(draw);
-    })
-    .catch(() => whoamiUpdate('ยังไม่ได้ล็อกอิน'));
-} else {
-  whoamiUpdate('ยังไม่ได้ล็อกอิน');
+function clearSession(msg){
+  session = null; me = null; isAdmin = false;
+  localStorage.removeItem('claimmap_session');
+  tiles.clear(); owned = {}; sel = null; peek = null;
+  document.getElementById('claim').disabled = true;
+  whoamiUpdate(msg || 'ยังไม่ได้ล็อกอิน');
+  draw();
+}
+
+// 401 จากที่ใดก็ตาม → ลบ session แล้วกลับสู่สภาพยังไม่ล็อกอิน
+function handle401(r){
+  if (r.status !== 401) return false;
+  clearSession('เซสชันหมดอายุ — กรุณาล็อกอินใหม่');
+  return true;
+}
+
+async function boot(){
+  if (!session){ whoamiUpdate('ยังไม่ได้ล็อกอิน'); draw(); return; }
+  try {
+    const r = await fetch(API + '/me', { headers: authHeaders() });
+    if (handle401(r)) return;
+    if (!r.ok){ clearSession('เซสชันใช้งานไม่ได้'); return; }
+    const d = await r.json();
+    me = d.name; isAdmin = !!d.admin;
+    whoamiUpdate('ล็อกอิน: ' + d.name + (isAdmin ? ' (แอดมิน)' : ''));
+    await loadOwned();
+  } catch (e){
+    whoamiUpdate('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+  }
+  draw();
 }
 
 document.getElementById('login').onclick = async () => {
@@ -80,14 +97,29 @@ document.getElementById('login').onclick = async () => {
   if (!name || !pass){ whoamiUpdate('กรอกชื่อ + รหัสผ่านก่อน'); return; }
   const b = document.getElementById('login'); b.disabled = true;
   try {
-    const r = await fetch(`${API}/login`, { method:'POST', headers: authHeaders(true), body: JSON.stringify({ name, password: pass }) });
-    const t = await r.text();
-    if (!r.ok){ whoamiUpdate('ล็อกอินไม่สำเร็จ: ' + t); return; }
-    let d; try { d = JSON.parse(t); } catch(e){ whoamiUpdate('ตอบผิด: ' + t); return; }
-    sessionToken = d.token; sessName = d.name; me = d.name;
-    localStorage.setItem('claimmap_session', sessionToken);
+    // /api/login เป็น public: ไม่แนบ Authorization
+    const r = await fetch(`${API}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, password: pass })
+    });
+    let d = null; try { d = await r.json(); } catch(e){}
+    if (!r.ok){
+      if (r.status === 429){
+        const wait = d && d.retryAfterSeconds ? d.retryAfterSeconds : 60;
+        whoamiUpdate('ลองผิดหลายครั้งเกินไป — รออีก ' + wait + ' วินาที');
+      } else if (r.status === 401){
+        whoamiUpdate('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+      } else {
+        whoamiUpdate('ล็อกอินไม่สำเร็จ: ' + ((d && d.message) || r.status));
+      }
+      return;
+    }
+    session = d.session; me = d.name; isAdmin = !!d.admin;
+    localStorage.setItem('claimmap_session', session);
+    tiles.clear();
     document.getElementById('uname').value = ''; document.getElementById('pass').value = '';
-    whoamiUpdate('ล็อกอิน: ' + d.name);
+    whoamiUpdate('ล็อกอิน: ' + d.name + (isAdmin ? ' (แอดมิน)' : ''));
     document.getElementById('info').textContent = 'ล็อกอินเป็น ' + d.name + ' แล้ว — เลือกช่องเพื่อจองได้เลย';
     await loadOwned(); draw();
   } finally { b.disabled = false; }
@@ -112,11 +144,12 @@ const STALE_MS = 30000;        // รีเฟรชภาพทุก 30 วิ
 function getTile(tx, tz){
   const id = tx + ',' + tz, e = tiles.get(id);
   if (DEMO){ if (!e) tiles.set(id, { img: demoTile(tx, tz), t: Date.now() }); return tiles.get(id).img; }
+  if (!session) return null;   // ยังไม่ล็อกอิน: ไม่เรียก API
   if (!e || (!e.busy && Date.now() - e.t > STALE_MS)){
     const old = e ? e.img : null;
     tiles.set(id, { img: old, t: Date.now(), busy: true });
     fetch(`${API}/map/${id}.png`, { headers: authHeaders() })
-      .then(r => r.status === 200 ? r.blob() : null)
+      .then(r => { if (r.status === 401){ handle401(r); return null; } return r.status === 200 ? r.blob() : null; })
       .then(b => {
         if (!b){ tiles.set(id, { img: null, t: Date.now() }); draw(); return; }
         const img = new Image();
@@ -129,15 +162,14 @@ function getTile(tx, tz){
 }
 setInterval(() => draw(), STALE_MS);   // ดึงภาพใหม่ของช่องที่เห็นอยู่
 
-let me = null;                 // ชื่อผู้เล่นที่ล็อกอินอยู่ (จาก GET /me → {name})
-async function loadMe(){
-  if (DEMO){ me = 'คุณ'; return; }
-  try { me = (await (await fetch(API + '/me', { headers: authHeaders() })).json()).name; } catch(e){}
-}
-
 async function loadOwned(){
   if (DEMO){ owned = { '0,0': 'Steve', '1,0': 'Alex', '-1,0': 'คุณ', ...owned }; return; }
-  try { owned = await (await fetch(API + '/cells', { headers: authHeaders() })).json(); } catch(e){}
+  if (!session) return;        // เรียกเฉพาะเมื่อมี session
+  try {
+    const r = await fetch(API + '/cells', { headers: authHeaders() });
+    if (handle401(r)) return;
+    if (r.ok) owned = await r.json();
+  } catch(e){}
 }
 
 function draw(){
@@ -208,18 +240,24 @@ document.getElementById('zout').onclick = () => { scale = Math.max(scale/1.5, 0.
 
 document.getElementById('claim').onclick = async () => {
   if (!sel || owned[sel]) return;           // กันซ้ำอีกชั้น (เซิร์ฟเวอร์ต้องเช็กเองด้วย)
-  if (!sessionToken){
+  if (!session){
     document.getElementById('info').textContent = 'จองไม่ได้: ต้องล็อกอินก่อน (ในเกม /pass ตั้งรหัส แล้วกรอกชื่อ+รหัส ด้านบน)';
     return;
   }
   const id = sel;
   const r = await fetch(`${API}/cells/${id}/claim`, { method: 'POST', headers: authHeaders(true) });
-  document.getElementById('info').textContent = r.ok ? 'จองสำเร็จ: ' + id : 'จองไม่สำเร็จ: ' + (await r.text());
+  if (handle401(r)) return;
+  let msg = 'จองสำเร็จ: ' + id;
+  if (!r.ok){
+    let d = null; try { d = await r.json(); } catch(e){}
+    msg = 'จองไม่สำเร็จ: ' + ((d && d.message) || r.status);
+  }
+  document.getElementById('info').textContent = msg;
   sel = null; document.getElementById('claim').disabled = true;
   await loadOwned(); draw();
 };
 
-resize(); Promise.all([loadMe(), loadOwned()]).then(draw);
+resize(); boot();
 </script>
 </body>
 </html>

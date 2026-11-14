@@ -116,11 +116,28 @@ public final class AccountManager {
 			String n = name.trim();
 			for (Account a : accounts.values()) {
 				if (a.name != null && a.name.equalsIgnoreCase(n) && a.hash != null) {
-					if (sha256(a.salt + plain).equalsIgnoreCase(a.hash)) return a;
+					if (constantTimeEquals(sha256(a.salt + plain), a.hash)) return a;
 				}
 			}
 			return null;
 		}
+	}
+
+	/**
+	 * Burns one hash computation so an unknown account takes about as long as a
+	 * wrong password (login must not reveal which names exist).
+	 */
+	public void burnVerify(String plain) {
+		sha256(randomSalt() + (plain == null ? "" : plain));
+	}
+
+	private static String randomSalt() {
+		return ClaimMapConfig.randomHex(8);
+	}
+
+	private static boolean constantTimeEquals(String a, String b) {
+		if (a == null || b == null) return false;
+		return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
 	}
 
 	private static String sha256(String s) {
