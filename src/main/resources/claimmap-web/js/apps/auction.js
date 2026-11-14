@@ -6,22 +6,44 @@ export function render(container) {
   let busy = false;
   let data = null;
   const timers = [];
+  let currentTab = 'active';
 
   container.append(
     el('div', { class: 'page-head' },
       el('div', null,
         el('h1', { text: 'ตลาดประมูล' }),
-        el('p', { class: 'hint', text: 'เสนอราคาแข่งกันแบบสด หรือตั้งซื้อทันที · ลงขายได้จากหน้า “ลงขาย” หรือพิมพ์ /ah sell ในเกม' })),
+        el('p', { class: 'hint', text: 'เสนอราคาประมูลแบบสด หรือตั้งราคาซื้อทันที · ลงขายไอเท็มผ่านหน้าขายหรือพิมพ์ /ah sell ในเกม' })),
       el('button', { class: 'primary', type: 'button', onClick: () => navigate('sell') },
-        icon('plus', 16),
-        el('span', { text: 'ลงขาย' })
+        icon('plus', 14),
+        el('span', { text: 'ลงประมูลไอเท็ม' })
       )
     )
   );
 
-  const activeList = el('div', { class: 'list' });
-  const mineList = el('div', { class: 'list' });
-  container.append(el('h2', { text: 'กำลังประมูล' }), activeList, el('h2', { text: 'รายการของฉัน (7 วัน)' }), mineList);
+  /* ADDED: Section switcher tabs */
+  const tabs = el('div', { class: 'tabs', style: 'margin-bottom: 16px;' },
+    el('button', {
+      type: 'button',
+      class: 'active',
+      text: 'กำลังเปิดประมูล',
+      onClick: (e) => switchTab('active', e.target)
+    }),
+    el('button', {
+      type: 'button',
+      text: 'รายการของฉัน',
+      onClick: (e) => switchTab('mine', e.target)
+    })
+  );
+
+  function switchTab(t, btn) {
+    currentTab = t;
+    tabs.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    renderLists();
+  }
+
+  const listContainer = el('div', { class: 'list' });
+  container.append(tabs, listContainer);
 
   function countdownText(auction) {
     return timeLeft(auction.endsAt, Date.now());
@@ -29,38 +51,43 @@ export function render(container) {
 
   function auctionCard(auction, isMine) {
     const currency = (data && data.currency) || state.currency;
-    const countdown = el('span', { text: countdownText(auction) });
+    const countdown = el('span', { style: 'color: var(--accent); font-family: var(--font-mono); font-weight: 600;', text: countdownText(auction) });
     const title = el('div', { class: 'title', text: String(auction.label || auction.itemId) });
     const sub = el('div', { class: 'sub' },
       auction.itemId + ' × ' + money(auction.count)
-        + ' · ผู้ขาย ' + auction.sellerName
+        + ' · ผู้ขาย: ' + auction.sellerName
         + ' · ' + (auction.highBid > 0
           ? 'สูงสุด ' + money(auction.highBid) + ' ' + currency + ' (' + (auction.highBidderName || '-') + ')'
-          : 'ยังไม่มีผู้ประมูล')
-        + ' · เริ่ม ' + money(auction.startPrice) + ' ' + currency);
-    const meta = el('div', { class: 'sub' },
-      'เหลือ ', countdown,
+          : 'ยังไม่มีผู้เสนอราคา')
+        + ' · เริ่มต้น ' + money(auction.startPrice) + ' ' + currency);
+    const meta = el('div', { class: 'sub', style: 'margin-top: 4px;' },
+      'เหลือเวลา: ', countdown,
       auction.buyout ? ' · ซื้อทันที ' + money(auction.buyout) + ' ' + currency : '',
-      auction.status !== 'ACTIVE' ? ' · สถานะ ' + auction.status : '');
+      auction.status !== 'ACTIVE' ? ' · [' + auction.status + ']' : '');
 
-    const actions = el('div', { class: 'actions' });
+    const actions = el('div', { class: 'actions', style: 'display: flex; gap: 8px; align-items: flex-end;' });
+
     if (auction.status === 'ACTIVE' && auction.canBid) {
       const amount = el('input', {
-        type: 'number', value: String(auction.minBid || auction.startPrice), min: 1, inputMode: 'numeric'
+        type: 'number',
+        value: String(auction.minBid || auction.startPrice),
+        min: 1,
+        inputMode: 'numeric',
+        style: 'width: 110px;'
       });
       const bidButton = el('button', { class: 'primary', type: 'button', text: 'เสนอราคา' });
       bidButton.addEventListener('click', async () => {
         if (busy) return;
         const value = Number(amount.value);
-        if (!Number.isInteger(value) || value < 1) { toast('จำนวนเงินไม่ถูกต้อง', 'error'); return; }
+        if (!Number.isInteger(value) || value < 1) { toast('กรุณาระบุจำนวนเงินที่ถูกต้อง', 'error'); return; }
         const ok = await confirmModal({
-          title: 'ยืนยันการเสนอราคา',
-          confirmText: 'เสนอราคา',
+          title: 'ยืนยันเสนอราคาประมูล',
+          confirmText: 'ยืนยันเสนอราคา',
           lines: [
             { label: 'ไอเท็ม', value: String(auction.label || auction.itemId) },
-            { label: 'ราคาขั้นต่ำ', value: money(auction.minBid) + ' ' + currency },
+            { label: 'ราคาเสนอขั้นต่ำ', value: money(auction.minBid) + ' ' + currency },
             { label: 'ราคาที่เสนอ', value: money(value) + ' ' + currency },
-            { label: 'ยอดคงเหลือตอนนี้', value: money(state.balance) + ' ' + currency }
+            { label: 'ยอดเงินคงเหลือ', value: money(state.balance) + ' ' + currency }
           ]
         });
         if (!ok) return;
@@ -68,7 +95,7 @@ export function render(container) {
         bidButton.disabled = true;
         try {
           const out = await api('POST', '/api/auctions/' + encodeURIComponent(auction.id) + '/bid', { amount: value });
-          toast('เสนอราคาแล้ว ' + money(out.highBid) + ' ' + currency, 'ok');
+          toast('เสนอราคา ' + money(out.highBid) + ' ' + currency + ' สำเร็จ', 'ok');
           state.balance = out.balance;
           refreshStatus();
         } catch (e) {
@@ -78,14 +105,16 @@ export function render(container) {
           await load();
         }
       });
-      const amountWrap = el('div', { style: 'display: flex; flex-direction: column; gap: 4px;' },
-        el('label', { class: 'mono-label', style: 'font-size: 10px;', text: 'ราคาประมูล' }),
+
+      const amountWrap = el('div', { class: 'field', style: 'margin-bottom: 0;' },
+        el('label', { text: 'ราคา' }),
         amount
       );
       actions.append(amountWrap, bidButton);
     }
+
     if (auction.status === 'ACTIVE' && auction.buyout && !auction.mine) {
-      const buyButton = el('button', { class: 'primary', type: 'button', text: 'ซื้อทันที' });
+      const buyButton = el('button', { class: 'ghost', type: 'button', text: 'ซื้อทันที' });
       buyButton.addEventListener('click', async () => {
         if (busy) return;
         const currencyNow = (data && data.currency) || state.currency;
@@ -94,7 +123,7 @@ export function render(container) {
           confirmText: 'ซื้อทันที',
           lines: [
             { label: 'ไอเท็ม', value: String(auction.label || auction.itemId) },
-            { label: 'ราคา', value: money(auction.buyout) + ' ' + currencyNow },
+            { label: 'ราคาซื้อทันที', value: money(auction.buyout) + ' ' + currencyNow },
             { label: 'ยอดคงเหลือตอนนี้', value: money(state.balance) + ' ' + currencyNow },
             { label: 'ยอดคงเหลือหลังซื้อ', value: money(state.balance - auction.buyout) + ' ' + currencyNow }
           ]
@@ -104,7 +133,7 @@ export function render(container) {
         buyButton.disabled = true;
         try {
           const out = await api('POST', '/api/auctions/' + encodeURIComponent(auction.id) + '/buyout', {});
-          toast('ซื้อสำเร็จ ของอยู่ในกล่องของ', 'ok');
+          toast('สั่งซื้อไอเท็มสำเร็จ ของถูกส่งไปยังกล่องรับของแล้ว', 'ok');
           state.balance = out.balance;
           state.mailboxCount = out.mailboxCount;
           refreshStatus();
@@ -117,17 +146,18 @@ export function render(container) {
       });
       actions.append(buyButton);
     }
+
     if (auction.canCancel) {
       const cancelButton = el('button', { class: 'danger', type: 'button', text: 'ยกเลิก' });
       cancelButton.addEventListener('click', async () => {
         if (busy) return;
         const ok = await confirmModal({
-          title: 'ยืนยันยกเลิกรายการ',
-          confirmText: 'ยกเลิก',
+          title: 'ยืนยันยกเลิกการประมูล',
+          confirmText: 'ยกเลิกรายการ',
           danger: true,
           lines: [
             { label: 'ไอเท็ม', value: String(auction.label || auction.itemId) },
-            { label: 'ผลลัพธ์', value: 'ของจะกลับเข้ากล่องของ' }
+            { label: 'ผลลัพธ์', value: 'ไอเท็มจะถูกส่งกลับเข้ากล่องรับของของคุณ' }
           ]
         });
         if (!ok) return;
@@ -135,7 +165,7 @@ export function render(container) {
         cancelButton.disabled = true;
         try {
           const out = await api('POST', '/api/auctions/' + encodeURIComponent(auction.id) + '/cancel', {});
-          toast('ยกเลิกแล้ว ของอยู่ในกล่องของ', 'ok');
+          toast('ยกเลิกรายการประมูลแล้ว ไอเท็มกลับสู่กล่องรับของ', 'ok');
           state.mailboxCount = out.mailboxCount;
           refreshStatus();
         } catch (e) {
@@ -151,26 +181,45 @@ export function render(container) {
     const card = el('div', { class: 'item' },
       itemSlot(auction.itemId, auction.count, 40),
       el('div', { class: 'main' }, title, sub, meta),
-      actions.childElementCount ? actions : null);
+      actions.childElementCount ? actions : null
+    );
     card.dataset.auctionId = auction.id;
     return card;
   }
 
   function renderLists() {
     if (disposed) return;
-    clear(activeList);
-    clear(mineList);
+    clear(listContainer);
     if (!data) {
-      activeList.append(el('div', { class: 'empty', text: 'กำลังโหลด…' }));
+      listContainer.append(el('div', { class: 'empty', text: 'กำลังโหลดรายการประมูล…' }));
       return;
     }
-    const active = (data.auctions || []);
-    if (!active.length) activeList.append(el('div', { class: 'empty', text: 'ยังไม่มีรายการประมูล' }));
-    else for (const auction of active) activeList.append(auctionCard(auction, false));
 
-    const mine = (data.mine || []);
-    if (!mine.length) mineList.append(el('div', { class: 'empty', text: 'ยังไม่มีรายการของคุณ' }));
-    else for (const auction of mine) mineList.append(auctionCard(auction, true));
+    if (currentTab === 'active') {
+      const active = data.auctions || [];
+      if (!active.length) {
+        listContainer.append(
+          el('div', { class: 'empty' },
+            el('div', { style: 'font-weight: 600; margin-bottom: 4px;', text: 'ยังไม่มีรายการประมูลที่กำลังดำเนินอยู่' }),
+            el('div', { class: 'hint', text: 'คุณสามารถเป็นคนแรกที่ลงประมูลไอเท็มได้เลย' })
+          )
+        );
+      } else {
+        for (const auction of active) listContainer.append(auctionCard(auction, false));
+      }
+    } else {
+      const mine = data.mine || [];
+      if (!mine.length) {
+        listContainer.append(
+          el('div', { class: 'empty' },
+            el('div', { style: 'font-weight: 600; margin-bottom: 4px;', text: 'คุณยังไม่มีรายการประมูลของตนเอง' }),
+            el('div', { class: 'hint', text: 'เมื่อคุณลงประมูลไอเท็ม รายการจะปรากฏในแท็บนี้' })
+          )
+        );
+      } else {
+        for (const auction of mine) listContainer.append(auctionCard(auction, true));
+      }
+    }
   }
 
   async function load() {
@@ -180,29 +229,30 @@ export function render(container) {
       renderLists();
     } catch (e) {
       if (e.status === 401) return;
-      clear(activeList);
-      activeList.append(el('div', { class: 'empty', text: e.message || 'โหลดรายการประมูลไม่สำเร็จ' }));
+      clear(listContainer);
+      listContainer.append(el('div', { class: 'empty', text: e.message || 'โหลดรายการประมูลไม่สำเร็จ' }));
     }
   }
 
+  // Periodic countdown text updater
   timers.push(setInterval(() => {
     if (disposed || document.visibilityState !== 'visible' || !data) return;
-    for (const card of activeList.children) {
+    for (const card of listContainer.children) {
       const id = card.dataset.auctionId;
       if (!id) continue;
-      const auction = (data.auctions || []).find(a => a.id === id);
+      const auction = (data.auctions || []).find(a => a.id === id) || (data.mine || []).find(a => a.id === id);
       if (!auction) continue;
-      const meta = card.querySelectorAll('.sub')[1];
-      if (!meta) continue;
-      meta.textContent = 'เหลือ ' + countdownText(auction)
-        + (auction.buyout ? ' · ซื้อทันที ' + money(auction.buyout) : '')
-        + (auction.status !== 'ACTIVE' ? ' · สถานะ ' + auction.status : '');
+      const countdownEl = card.querySelector('.sub span');
+      if (countdownEl) {
+        countdownEl.textContent = countdownText(auction);
+      }
     }
   }, 1000));
 
+  // Live polling
   timers.push(setInterval(() => {
     if (document.visibilityState === 'visible') load();
-  }, 4000));
+  }, 5000));
 
   load();
 

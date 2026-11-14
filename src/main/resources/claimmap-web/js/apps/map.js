@@ -8,29 +8,32 @@ export function render(container) {
   container.append(
     el('div', { class: 'page-head' },
       el('div', null,
-        el('h1', { text: 'แผนที่ดินแดน' }),
-        el('p', { class: 'hint', text: 'สำรวจพื้นที่จอง chunk 500×500 บล็อก · สีส้ม = ของคุณ, สีแดง = ของคนอื่น' })))
+        el('h1', { class: 'page-title', text: 'แผนที่ดินแดน' }),
+        el('p', { class: 'hint', text: 'สำรวจพื้นที่จอง chunk 500×500 บล็อก · สีส้ม = ของคุณ, สีแดง = ของคนอื่น' }))
+    )
   );
 
   const xInput = el('input', { type: 'number', value: '0', min: -30000000, max: 30000000 });
   const zInput = el('input', { type: 'number', value: '0', min: -30000000, max: 30000000 });
-  const goButton = el('button', { class: 'secondary', type: 'button', text: 'ไปยังพิกัด' });
-  const zoomIn = el('button', { class: 'secondary', type: 'button', title: 'ขยาย' }, icon('plus', 14));
-  const zoomOut = el('button', { class: 'secondary', type: 'button', title: 'ย่อ' }, icon('close', 14));
-  const claimButton = el('button', { class: 'primary', type: 'button', text: 'จองช่องนี้', disabled: true });
-  const transferButton = el('button', { class: 'secondary', type: 'button', text: 'โอนกรรมสิทธิ์', hidden: true });
-  const unclaimButton = el('button', { class: 'secondary', type: 'button', text: 'ยกเลิกการจอง', hidden: true });
+  const goButton = el('button', { class: 'btn btn-secondary', type: 'button', text: 'ไปยังพิกัด' });
+  const zoomIn = el('button', { class: 'btn btn-secondary icon-only', type: 'button', title: 'ขยาย' }, icon('plus', 14));
+  const zoomOut = el('button', { class: 'btn btn-secondary icon-only', type: 'button', title: 'ย่อ' }, icon('close', 14));
+  const claimButton = el('button', { class: 'btn btn-primary', type: 'button', text: 'จองช่องนี้', disabled: true });
+  const transferButton = el('button', { class: 'btn btn-secondary', type: 'button', text: 'โอนกรรมสิทธิ์', hidden: true });
+  const unclaimButton = el('button', { class: 'btn btn-secondary danger', type: 'button', text: 'ยกเลิกการจอง', hidden: true });
+
   const toolbar = el('div', { class: 'map-toolbar' },
     el('div', { style: 'display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;' },
-      el('div', { class: 'field' }, el('label', { text: 'พิกัด X (COORD)' }), xInput),
-      el('div', { class: 'field' }, el('label', { text: 'พิกัด Z (COORD)' }), zInput),
+      el('div', { class: 'field' }, el('label', { text: 'พิกัด X' }), xInput),
+      el('div', { class: 'field' }, el('label', { text: 'พิกัด Z' }), zInput),
       goButton
     ),
-    el('div', { style: 'display: flex; gap: 8px;' }, zoomIn, zoomOut),
-    el('div', { style: 'display: flex; gap: 10px; flex-wrap: wrap;' }, claimButton, transferButton, unclaimButton)
+    el('div', { style: 'display: flex; gap: 6px;' }, zoomIn, zoomOut),
+    el('div', { style: 'display: flex; gap: 8px; flex-wrap: wrap;' }, claimButton, transferButton, unclaimButton)
   );
+
   const canvas = el('canvas', { id: 'map-canvas' });
-  const info = el('div', { class: 'map-info', text: 'ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง · สีส้ม = ของคุณ สีแดง = ของคนอื่น' });
+  const info = el('div', { class: 'map-info', text: 'ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง · สีส้ม = ของคุณ, สีแดง = ของคนอื่น' });
   container.append(toolbar, canvas, info);
 
   const g = canvas.getContext('2d');
@@ -91,48 +94,50 @@ export function render(container) {
     const W = canvas.width;
     const H = canvas.height;
     const px = CELL * scale;
-    g.fillStyle = '#111';
+    g.fillStyle = '#0A0A0A';
     g.fillRect(0, 0, W, H);
     const x0 = Math.floor((cx - W / 2 / scale) / CELL);
     const x1 = Math.floor((cx + W / 2 / scale) / CELL);
     const z0 = Math.floor((cz - H / 2 / scale) / CELL);
     const z1 = Math.floor((cz + H / 2 / scale) / CELL);
     g.imageSmoothingEnabled = false;
+
     for (let tx = x0; tx <= x1; tx++) {
       for (let tz = z0; tz <= z1; tz++) {
         const sx = W / 2 + (tx * CELL - cx) * scale;
         const sz = H / 2 + (tz * CELL - cz) * scale;
         const tile = getTile(tx, tz);
-        g.fillStyle = '#262626';
+        g.fillStyle = '#171717';
         g.fillRect(sx, sz, px, px);
         if (tile) g.drawImage(tile, sx, sz, px, px);
         else if (px > 90) {
-          g.fillStyle = '#777';
-          g.font = '12px sans-serif';
+          g.fillStyle = '#555';
+          g.font = '11px sans-serif';
           g.fillText('ยังไม่ได้สำรวจ', sx + 4, sz + px / 2);
         }
         const id = tx + ',' + tz;
         if (owned[id]) {
-          g.fillStyle = owned[id] === me ? 'rgba(255,150,0,.45)' : 'rgba(220,40,40,.4)';
+          g.fillStyle = owned[id] === me ? 'rgba(255,77,0,.4)' : 'rgba(220,40,40,.35)';
           g.fillRect(sx, sz, px, px);
         }
-        if (sel === id) { g.fillStyle = 'rgba(255,230,0,.4)'; g.fillRect(sx, sz, px, px); }
+        if (sel === id) { g.fillStyle = 'rgba(255,230,0,.35)'; g.fillRect(sx, sz, px, px); }
         if (peek === id) {
           g.strokeStyle = '#fff';
-          g.lineWidth = 3;
+          g.lineWidth = 2;
           g.strokeRect(sx + 1, sz + 1, px - 2, px - 2);
           g.lineWidth = 1;
         }
-        g.strokeStyle = 'rgba(0,0,0,.6)';
+        g.strokeStyle = '#262626';
         g.strokeRect(sx, sz, px, px);
         if (px > 70) {
           g.fillStyle = '#fff';
-          g.font = '12px sans-serif';
+          g.font = '11px monospace';
           g.fillText(id + (owned[id] ? ' · ' + owned[id] : ''), sx + 4, sz + 14);
         }
       }
     }
-    g.strokeStyle = '#fff';
+
+    g.strokeStyle = '#FF4D00';
     g.beginPath();
     g.moveTo(W / 2 - 8, H / 2);
     g.lineTo(W / 2 + 8, H / 2);
@@ -186,6 +191,7 @@ export function render(container) {
     claimButton.disabled = true;
     transferButton.hidden = true;
     unclaimButton.hidden = true;
+
     if (owned[id]) {
       peek = id;
       const isOwner = owned[id] === me;

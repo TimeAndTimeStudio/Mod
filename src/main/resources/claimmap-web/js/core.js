@@ -1,9 +1,10 @@
 import { icon, hydrateIcons } from './icons.js';
-// Shared session, API, router and small UI helpers for the mobile web app.
-// Everything that comes from the server is written with textContent, never
-// innerHTML (PHASES.md 8.3).
+
+// Shared session, API, router and minimal Swiss UI helpers for Time SMP.
+// Everything from the server is written with textContent, never innerHTML.
 
 const SESSION_KEY = 'claimmap_session';
+const THEME_KEY = 'claimmap_theme';
 const CURRENCY_FALLBACK = 'เหรียญ';
 
 export const state = {
@@ -12,7 +13,10 @@ export const state = {
   admin: false,
   balance: 0,
   currency: CURRENCY_FALLBACK,
-  mailboxCount: 0
+  mailboxCount: 0,
+  lastX: null,
+  lastZ: null,
+  hasPos: false
 };
 
 export class ApiError extends Error {
@@ -82,7 +86,7 @@ export async function api(method, path, body, options = {}) {
   return data;
 }
 
-// ---- DOM helpers (no innerHTML for server data) ---------------------------
+// ---- DOM helpers ----------------------------------------------------------
 
 export function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
@@ -137,7 +141,7 @@ export function randomId() {
   return 'r-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 
-// ---- toast + confirm modal ------------------------------------------------
+// ---- toast & dialog -------------------------------------------------------
 
 let toastTimer = null;
 export function toast(message, kind) {
@@ -146,7 +150,7 @@ export function toast(message, kind) {
   box.textContent = message || '';
   box.className = 'show' + (kind ? ' ' + kind : '');
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { box.className = ''; }, 4200);
+  toastTimer = setTimeout(() => { box.className = ''; }, 3800);
 }
 
 export function showError(e) {
@@ -154,44 +158,46 @@ export function showError(e) {
   toast((e && e.message) || 'ทำรายการไม่สำเร็จ', 'error');
 }
 
-/**
- * Confirmation dialog. lines = [{ label, value }].
- * Resolves true only when the user presses the confirm button.
- */
-export function confirmModal({ title, lines = [], confirmText = 'ยืนยัน', danger = false, busyText = 'กำลังดำเนินการ…' }) {
+/* ADDED: Clean Native Dialog Confirmation */
+export function confirmModal({ title, lines = [], confirmText = 'ยืนยัน', danger = false }) {
   return new Promise(resolve => {
-    const backdrop = el('div', { class: 'modal-backdrop' });
-    const confirm = el('button', {
-      class: danger ? 'danger' : 'primary',
-      type: 'button',
-      text: confirmText
-    });
-    const cancel = el('button', { class: 'secondary', type: 'button', text: 'ยกเลิก' });
-    const panel = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' },
-      el('h2', { text: title || 'ยืนยันรายการ' }),
-      el('ul', { class: 'modal-lines' }, lines.map(line =>
-        el('li', null, el('span', { text: line.label }), el('span', { text: line.value })))),
-      el('div', { class: 'modal-actions' }, cancel, confirm)
-    );
-    backdrop.append(panel);
+    const dialog = document.getElementById('confirm-dialog');
+    if (!dialog || typeof dialog.showModal !== 'function') {
+      const ok = window.confirm(title + '\n' + lines.map(l => l.label + ': ' + l.value).join('\n'));
+      resolve(ok);
+      return;
+    }
+    const titleEl = document.getElementById('confirm-dialog-title');
+    const bodyEl = document.getElementById('confirm-dialog-body');
+    const btnCancel = document.getElementById('confirm-btn-cancel');
+    const btnSubmit = document.getElementById('confirm-btn-submit');
 
-    const finish = value => {
-      document.removeEventListener('keydown', onKey);
-      backdrop.remove();
-      resolve(value);
-    };
-    const onKey = e => { if (e.key === 'Escape') finish(false); };
-    document.addEventListener('keydown', onKey);
-    backdrop.addEventListener('click', e => { if (e.target === backdrop) finish(false); });
-    cancel.addEventListener('click', () => finish(false));
-    confirm.addEventListener('click', () => {
-      confirm.disabled = true;
-      cancel.disabled = true;
-      confirm.textContent = busyText;
-      finish(true);
-    });
-    document.body.append(backdrop);
-    confirm.focus();
+    if (titleEl) titleEl.textContent = title;
+    clear(bodyEl);
+    for (const l of lines) {
+      bodyEl.append(el('div', { class: 'confirm-line', style: 'display: flex; justify-content: space-between; padding: 4px 0;' },
+        el('span', { class: 'mono-label', text: l.label }),
+        el('strong', { class: 'num', text: String(l.value) })
+      ));
+    }
+
+    btnSubmit.textContent = confirmText;
+    btnSubmit.className = danger ? 'btn btn-primary danger' : 'btn btn-primary';
+
+    const onCancel = () => { cleanup(); resolve(false); };
+    const onSubmit = e => { e.preventDefault(); cleanup(); resolve(true); };
+
+    function cleanup() {
+      dialog.close();
+      btnCancel.removeEventListener('click', onCancel);
+      dialog.removeEventListener('cancel', onCancel);
+      btnSubmit.removeEventListener('click', onSubmit);
+    }
+
+    btnCancel.addEventListener('click', onCancel);
+    dialog.addEventListener('cancel', onCancel);
+    btnSubmit.addEventListener('click', onSubmit);
+    dialog.showModal();
   });
 }
 
@@ -200,6 +206,20 @@ export function confirmModal({ title, lines = [], confirmText = 'ยืนยั
 const routes = new Map();
 let currentApp = null;
 let started = false;
+
+/* ADDED: Route titles mapping for breadcrumb wayfinding */
+const ROUTE_TITLES = {
+  home: 'หน้าแรก',
+  map: 'แผนที่ดินแดน',
+  buy: 'ซื้อของ',
+  sell: 'ลงขาย',
+  auction: 'ตลาดประมูล',
+  prices: 'ดัชนีราคากลาง',
+  wallet: 'กระเป๋าเงิน',
+  mailbox: 'กล่องรับของ',
+  about: 'คู่มือ / คำสั่งในเกม',
+  admin: 'แผงควบคุมแอดมิน'
+};
 
 export function register(name, app) {
   routes.set(name, app);
@@ -216,11 +236,18 @@ export function navigate(name) {
   else location.hash = target;
 }
 
+function updateBreadcrumb(route) {
+  const crumb = document.getElementById('view-breadcrumb');
+  if (crumb) {
+    crumb.textContent = ROUTE_TITLES[route] || 'หน้าแรก';
+  }
+}
+
 function renderLogin(container) {
-  const name = el('input', { id: 'login-name', type: 'text', placeholder: 'ชื่อผู้เล่น', autocomplete: 'username', maxLength: 32 });
+  const name = el('input', { id: 'login-name', type: 'text', placeholder: 'ชื่อผู้เล่นในเกม', autocomplete: 'username', maxLength: 32 });
   const password = el('input', { id: 'login-pass', type: 'password', placeholder: 'รหัสผ่าน', autocomplete: 'current-password', maxLength: 64 });
   const submit = el('button', { class: 'primary', type: 'submit', text: 'เข้าสู่ระบบ' });
-  const error = el('p', { class: 'hint', id: 'login-error', text: '' });
+  const error = el('p', { class: 'field-error', id: 'login-error', text: '' });
 
   const form = el('form', {
     onSubmit: async e => {
@@ -228,7 +255,7 @@ function renderLogin(container) {
       error.textContent = '';
       const user = name.value.trim();
       const pass = password.value;
-      if (!user || !pass) { error.textContent = 'กรอกชื่อและรหัสผ่านก่อน'; return; }
+      if (!user || !pass) { error.textContent = 'กรอกชื่อและรหัสผ่านก่อนเข้าสู่ระบบ'; return; }
       submit.disabled = true;
       try {
         const data = await api('POST', '/api/login', { name: user, password: pass });
@@ -253,21 +280,34 @@ function renderLogin(container) {
       }
     }
   },
-    el('div', { class: 'field' }, el('label', { text: 'ชื่อผู้เล่น (PLAYER NAME)' }), name),
-    el('div', { class: 'field' }, el('label', { text: 'รหัสผ่าน (PASSWORD)' }), password),
-    el('div', { class: 'form-actions' }, submit),
-    error
+    el('div', { class: 'field' },
+      el('label', null, el('span', { text: 'ชื่อผู้เล่น' }), el('span', { class: 'req', text: '*' })),
+      name,
+      el('span', { class: 'field-help', text: 'ชื่อเดียวกับที่ใช้ในเกม Time SMP' })
+    ),
+    el('div', { class: 'field' },
+      el('label', null, el('span', { text: 'รหัสผ่าน' }), el('span', { class: 'req', text: '*' })),
+      password,
+      el('span', { class: 'field-help', text: 'รหัสที่ตั้งไว้ตอนเข้าเซิร์ฟเวอร์ครั้งแรก' })
+    ),
+    error,
+    el('div', { class: 'form-actions' }, submit)
   );
 
-  const logoImg = el('img', { src: '/img/logo.png', alt: 'TIME SMP', style: 'height: 44px; object-fit: contain; margin-bottom: 16px; display: block;' });
   const box = el('div', { class: 'login-wrap' },
     el('div', { class: 'card' },
-      logoImg,
-      el('h1', { text: 'เข้าสู่ระบบ // LOGIN' }),
-      el('p', { class: 'hint', text: 'ใช้ชื่อและรหัสผ่านเดียวกับที่ตั้งไว้ตอนเข้าเกม' }),
+      el('div', { style: 'display: flex; align-items: center; gap: 10px; margin-bottom: 16px;' },
+        el('img', { src: '/img/logo.png', alt: 'Time SMP', style: 'height: 32px; width: auto; display: block;' }),
+        el('h2', { style: 'font-size: 18px;', text: 'Time SMP Login' })
+      ),
+      el('p', { class: 'hint', text: 'เข้าสู่ระบบตลาดและระบบจัดการพื้นที่ส่วนตัวของคุณ' }),
       form,
-      el('p', { class: 'notice' }, icon('warn', 16), 'ระบบนี้เชื่อมต่อกับเซิร์ฟเวอร์ Time SMP ภายใน')
-    ));
+      el('p', { class: 'hint', style: 'font-size: 12px; margin-top: 20px;' },
+        'ยังไม่มีรหัส? เข้าเกม Minecraft แล้วพิมพ์ ',
+        el('code', { class: 'mono', text: '/pass <รหัส>' })
+      )
+    )
+  );
   container.append(box);
   name.focus();
 }
@@ -277,6 +317,7 @@ function paintTabs() {
   for (const button of document.querySelectorAll('[data-route]')) {
     button.classList.toggle('active', button.getAttribute('data-route') === active);
   }
+  updateBreadcrumb(active);
   document.body.classList.toggle('logged-out', !state.session);
 }
 
@@ -300,13 +341,31 @@ export async function renderRoute() {
     if (location.hash !== '#home') { location.hash = '#home'; return; }
     return;
   }
-  const route = routes.get(name) || routes.get('home');
+  const route = routes.get(name);
+  if (!route) {
+    /* ADDED: Clean 404 View */
+    app.append(
+      el('div', { class: 'empty-state' },
+        el('div', { class: 'empty-state-title', text: '404 — ไม่พบหน้าที่ต้องการ' }),
+        el('p', { class: 'empty-state-desc', text: 'เส้นทางที่คุณเรียกไม่มีอยู่หรือถูกย้ายแล้ว' }),
+        el('button', { class: 'btn btn-primary', onClick: () => navigate('home') }, 'กลับหน้าแรก')
+      )
+    );
+    return;
+  }
+
   try {
     const handle = await route.render(app);
     currentApp = handle && typeof handle.dispose === 'function' ? handle : null;
   } catch (e) {
     if (e && e.status === 401) return;
-    app.append(el('div', { class: 'empty', text: (e && e.message) || 'เปิดหน้านี้ไม่ได้' }));
+    app.append(
+      el('div', { class: 'empty-state' },
+        el('div', { class: 'empty-state-title', text: 'โหลดหน้านี้ไม่สำเร็จ' }),
+        el('p', { class: 'empty-state-desc', text: (e && e.message) || 'กรุณาลองใหม่อีกครั้ง' }),
+        el('button', { class: 'btn btn-secondary', onClick: () => renderRoute() }, 'ลองใหม่')
+      )
+    );
   }
 }
 
@@ -315,9 +374,37 @@ export function notifyUnauthorized() {
   if (unauthorizedHandler) unauthorizedHandler();
 }
 
+/* ADDED: Quick Theme Initializer */
+export function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY) || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem(THEME_KEY, next);
+    });
+  }
+}
+
+/* ADDED: Keyboard Shortcuts */
+export function initShortcuts() {
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+      e.preventDefault();
+      const s = document.querySelector('input[type="search"], input[type="text"]');
+      if (s) { s.focus(); s.select(); }
+    }
+  });
+}
+
 export function startRouter() {
   if (started) return;
   started = true;
+  initTheme();
+  initShortcuts();
   setUnauthorizedHandler(() => {
     if (currentApp && typeof currentApp.dispose === 'function') currentApp.dispose();
     currentApp = null;
@@ -332,7 +419,7 @@ export function startRouter() {
   if (logout) logout.addEventListener('click', () => { notifyUnauthorized(); paintStatus(); });
 }
 
-// ---- status bar -----------------------------------------------------------
+// ---- status bar & polling -------------------------------------------------
 
 let statusTimer = null;
 let statusFailures = 0;
@@ -340,18 +427,19 @@ let statusDelay = 5000;
 
 function paintStatus() {
   const who = document.getElementById('who-name');
-  const role = document.getElementById('who-role');
   const balance = document.getElementById('balance');
   const currency = document.getElementById('currency');
   const box = document.getElementById('mailbox');
-  if (who) who.textContent = state.me || (state.session ? '…' : 'ยังไม่ได้เข้าสู่ระบบ');
-  if (role) role.textContent = state.admin ? 'แอดมิน' : (state.me ? 'ผู้เล่น' : '');
+  if (who) who.textContent = state.me || (state.session ? '…' : 'Guest');
   if (balance) balance.textContent = money(state.balance);
   if (currency) currency.textContent = state.currency || CURRENCY_FALLBACK;
-  if (box) box.textContent = String(state.mailboxCount || 0);
-  for (const badge of document.querySelectorAll('[data-mailbox-count]')) {
-    badge.textContent = String(state.mailboxCount || 0);
-    badge.hidden = !state.mailboxCount;
+  if (box) {
+    box.textContent = String(state.mailboxCount || 0);
+    box.hidden = !state.mailboxCount;
+  }
+  for (const b of document.querySelectorAll('[data-mailbox-count]')) {
+    b.textContent = String(state.mailboxCount || 0);
+    b.hidden = !state.mailboxCount;
   }
   for (const node of document.querySelectorAll('[data-admin-only]')) node.hidden = !state.admin;
   const logout = document.getElementById('btn-logout');

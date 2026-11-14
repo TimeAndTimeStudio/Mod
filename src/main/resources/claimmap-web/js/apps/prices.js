@@ -12,18 +12,41 @@ function formatItemName(id) {
 export function render(container) {
   let disposed = false;
   let data = null;
+  let sortMode = 'name-asc';
 
   container.append(
     el('div', { class: 'page-head' },
       el('div', null,
         el('h1', { text: 'ดัชนีราคากลาง' }),
-        el('p', { class: 'hint', text: 'ตารางราคารับซื้อและขายออกของร้านค้าเซิร์ฟเวอร์ (ช่องเก็บของ Minecraft)' })))
+        el('p', { class: 'hint', text: 'ตารางราคารับซื้อและขายออกของระบบเศรษฐกิจเซิร์ฟเวอร์ Time SMP' })))
   );
-  const stale = el('div');
-  const search = el('input', { type: 'search', placeholder: 'ค้นหาไอเท็มที่มีราคา...' });
-  const updated = el('p', { class: 'hint', text: '' });
+
+  const staleNotice = el('div');
+  const search = el('input', { type: 'search', placeholder: 'ค้นหาไอเท็ม (เช่น diamond, iron, oak)...' });
+
+  /* ADDED: Sort selector for price indexing */
+  const sortSelect = el('select', { style: 'width: auto; min-width: 180px;' },
+    el('option', { value: 'name-asc', text: 'เรียงตามชื่อ (A-Z)' }),
+    el('option', { value: 'buy-desc', text: 'ราคาซื้อสูงสุด' }),
+    el('option', { value: 'buy-asc', text: 'ราคาซื้อต่ำสุด' }),
+    el('option', { value: 'sell-desc', text: 'ราคาขายสูงสุด' })
+  );
+  sortSelect.addEventListener('change', () => {
+    sortMode = sortSelect.value;
+    renderGrid();
+  });
+
+  const updatedHint = el('p', { class: 'hint', text: '', style: 'margin-top: 8px;' });
   const tableWrap = el('div');
-  container.append(stale, el('div', { class: 'toolbar' }, el('div', { class: 'field' }, search)), updated, tableWrap);
+
+  const toolbar = el('div', { class: 'toolbar', style: 'margin-bottom: 12px;' },
+    el('div', { class: 'field', style: 'flex: 1;' }, search),
+    el('div', { class: 'field' }, sortSelect)
+  );
+
+  container.append(staleNotice, toolbar, updatedHint, tableWrap);
+
+  search.addEventListener('input', () => renderGrid());
 
   function renderGrid() {
     if (disposed) return;
@@ -33,13 +56,25 @@ export function render(container) {
       return;
     }
     const query = search.value.trim().toLowerCase();
-    const entries = Object.entries(data.items || {})
-      .filter(([id]) => !query || id.toLowerCase().includes(query) || formatItemName(id).toLowerCase().includes(query))
-      .sort((a, b) => a[0].localeCompare(b[0]));
+    let entries = Object.entries(data.items || {})
+      .filter(([id]) => !query || id.toLowerCase().includes(query) || formatItemName(id).toLowerCase().includes(query));
+
+    // Sort entries
+    if (sortMode === 'name-asc') {
+      entries.sort((a, b) => a[0].localeCompare(b[0]));
+    } else if (sortMode === 'buy-desc') {
+      entries.sort((a, b) => (b[1].buy || 0) - (a[1].buy || 0));
+    } else if (sortMode === 'buy-asc') {
+      entries.sort((a, b) => (a[1].buy || 0) - (b[1].buy || 0));
+    } else if (sortMode === 'sell-desc') {
+      entries.sort((a, b) => (b[1].sell || 0) - (a[1].sell || 0));
+    }
+
     if (!entries.length) {
-      tableWrap.append(el('div', { class: 'empty', text: 'ไม่พบไอเท็มที่มีราคา' }));
+      tableWrap.append(el('div', { class: 'empty', text: 'ไม่พบไอเท็มที่ค้นหา' }));
       return;
     }
+
     const grid = el('div', { class: 'inv-grid' });
     for (const [id, price] of entries) {
       const card = el('div', {
@@ -90,15 +125,14 @@ export function render(container) {
         // ignore
       }
     }
-    clear(stale);
+    clear(staleNotice);
     if (data && data.stale) {
-      stale.append(el('p', { class: 'notice' }, icon('warn', 16), 'ราคายังเป็นข้อมูลเก่า ระบบกำลังพยายามอัปเดต'));
+      staleNotice.append(el('p', { class: 'notice' }, icon('warn', 14), 'ราคายังเป็นข้อมูลเก่า ระบบกำลังเชื่อมต่ออัปเดตอัตโนมัติ'));
     }
-    updated.textContent = data && data.updatedAt ? 'อัปเดตล่าสุด ' + dateTime(data.updatedAt) : 'ยังไม่มีเวลาอัปเดต';
+    updatedHint.textContent = data && data.updatedAt ? 'อัปเดตข้อมูลล่าสุดเมื่อ ' + dateTime(data.updatedAt) : 'พร้อมใช้งาน';
     renderGrid();
   }
 
-  search.addEventListener('input', renderGrid);
   load();
 
   return {

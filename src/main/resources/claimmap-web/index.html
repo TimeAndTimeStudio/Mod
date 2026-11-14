@@ -1,123 +1,174 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="th" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#FF4D00">
-<title>TIME SMP // KINETIC TERMINAL</title>
+<title>Time SMP — Market & Territory Terminal</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<header id="statusbar">
-  <div class="brand">
-    <div class="brand-box" data-route="home" role="button" tabindex="0">
-      <img src="/img/logo.png" alt="TIME SMP Logo" class="brand-logo-img">
-      <div class="brand-text">
-        <span class="brand-title">TIME SMP</span>
-        <span class="brand-sub">SURVIVAL TERMINAL</span>
+<div id="root">
+  <!-- App Shell: Header -->
+  <header id="app-header">
+    <div class="header-left">
+      <a class="brand-link" href="#home" title="หน้าแรก">
+        <img src="/img/logo.png" alt="Time SMP" class="brand-logo">
+        <span class="brand-name">Time SMP</span>
+      </a>
+      <span class="header-sep">/</span>
+      <!-- ADDED: Dynamic Breadcrumb / View title -->
+      <nav class="breadcrumb-trail" aria-label="Breadcrumb">
+        <span id="view-breadcrumb" class="crumb-active">Home</span>
+      </nav>
+    </div>
+
+    <div class="header-right">
+      <div class="status-indicator" title="สถานะการเชื่อมต่อ">
+        <span class="status-dot"></span>
+        <span class="status-label">Online</span>
+      </div>
+
+      <!-- ADDED: Quick Theme Switcher (Dark / Light) -->
+      <button id="theme-toggle" class="btn-ghost icon-only" type="button" title="สลับธีม สว่าง / มืด" aria-label="Toggle theme">
+        <span class="theme-icon" data-icon="theme" data-icon-size="15"></span>
+      </button>
+
+      <a class="metric-link" href="#wallet" title="กระเป๋าเงิน">
+        <span class="metric-icon" data-icon="wallet" data-icon-size="14"></span>
+        <span id="balance" class="metric-val">0</span>
+        <span id="currency" class="metric-unit">เหรียญ</span>
+      </a>
+
+      <a class="metric-link" href="#mailbox" title="กล่องรับของ">
+        <span class="metric-icon" data-icon="mailbox" data-icon-size="14"></span>
+        <span class="metric-text">Mail</span>
+        <span id="mailbox" class="metric-badge" data-mailbox-count hidden>0</span>
+      </a>
+
+      <div class="user-chip">
+        <span class="user-icon" data-icon="user" data-icon-size="14"></span>
+        <span id="who-name" class="user-name">Guest</span>
+        <button id="btn-logout" class="btn-ghost btn-sm" type="button" title="ออกจากระบบ" hidden>
+          <span data-icon="logout" data-icon-size="13"></span>
+          <span>Exit</span>
+        </button>
       </div>
     </div>
-    <div class="system-status">
-      <span class="status-dot"></span>
-      <span class="status-text">SYS.ONLINE</span>
-    </div>
-  </div>
-  <div class="user-deck">
-    <div class="user-pill" title="สถานะบัญชี">
-      <span class="pill-ico" data-icon="user" data-icon-size="14"></span>
-      <span id="who-name">OFFLINE</span>
-      <span id="who-role" class="badge"></span>
-    </div>
-    <button id="btn-balance" class="metric-pill" type="button" data-route="wallet" title="ดูกระเป๋าเงิน">
-      <span class="pill-ico" data-icon="coin" data-icon-size="14"></span>
-      <span id="balance">0</span>
-      <span id="currency">เหรียญ</span>
-    </button>
-    <button id="btn-mailbox-badge" class="metric-pill mailbox-pill" type="button" data-route="mailbox" title="ดูกล่องของ">
-      <span class="pill-ico" data-icon="mailbox" data-icon-size="14"></span>
-      <span class="mailbox-label">MAIL</span>
-      <span id="mailbox" class="badge count-badge" data-mailbox-count>0</span>
-    </button>
-    <button id="btn-logout" class="icon-btn logout-btn" type="button" title="ออกจากระบบ" hidden>
-      <span data-icon="logout" data-icon-size="14"></span>
-      <span class="btn-text">EXIT</span>
-    </button>
-  </div>
-</header>
+  </header>
 
-<div id="offline-banner" style="display: none;" hidden>
-  <span class="banner-ico" data-icon="warn" data-icon-size="16"></span>
-  <span class="banner-text">DISCONNECTED FROM SERVER // RETRYING CONNECTION...</span>
+  <!-- ADDED: Global Inline Offline / Notice Strip -->
+  <div id="offline-banner" class="alert-strip" style="display: none;" hidden>
+    <span class="alert-icon" data-icon="warn" data-icon-size="14"></span>
+    <span class="alert-message">Disconnected from game server. Reconnecting automatically...</span>
+  </div>
+
+  <!-- App Shell: Main Navigation Bar -->
+  <nav id="app-nav" aria-label="Main Navigation">
+    <div class="nav-container">
+      <div class="nav-links">
+        <a class="nav-item" href="#home" data-route="home">
+          <span class="nav-icon" data-icon="home" data-icon-size="15"></span>
+          <span>หน้าแรก</span>
+        </a>
+        <a class="nav-item" href="#map" data-route="map">
+          <span class="nav-icon" data-icon="map" data-icon-size="15"></span>
+          <span>แผนที่ดินแดน</span>
+        </a>
+        <a class="nav-item" href="#buy" data-route="buy">
+          <span class="nav-icon" data-icon="buy" data-icon-size="15"></span>
+          <span>ซื้อของ</span>
+        </a>
+        <a class="nav-item" href="#sell" data-route="sell">
+          <span class="nav-icon" data-icon="sell" data-icon-size="15"></span>
+          <span>ลงขาย</span>
+        </a>
+        <a class="nav-item" href="#auction" data-route="auction">
+          <span class="nav-icon" data-icon="auction" data-icon-size="15"></span>
+          <span>ตลาดประมูล</span>
+        </a>
+        <a class="nav-item" href="#prices" data-route="prices">
+          <span class="nav-icon" data-icon="prices" data-icon-size="15"></span>
+          <span>ราคากลาง</span>
+        </a>
+        <a class="nav-item" href="#wallet" data-route="wallet">
+          <span class="nav-icon" data-icon="wallet" data-icon-size="15"></span>
+          <span>กระเป๋าเงิน</span>
+        </a>
+        <a class="nav-item" href="#mailbox" data-route="mailbox">
+          <span class="nav-icon" data-icon="mailbox" data-icon-size="15"></span>
+          <span>กล่องของ</span>
+          <span class="nav-badge-pill" data-mailbox-count hidden>0</span>
+        </a>
+        <a class="nav-item" href="#about" data-route="about">
+          <span class="nav-icon" data-icon="help" data-icon-size="15"></span>
+          <span>วิธีเล่น / คำสั่ง</span>
+        </a>
+        <a class="nav-item nav-admin" href="#admin" data-route="admin" data-admin-only hidden>
+          <span class="nav-icon" data-icon="admin" data-icon-size="15"></span>
+          <span>แอดมิน</span>
+        </a>
+      </div>
+
+      <!-- ADDED: Keyboard shortcut hint -->
+      <div class="nav-shortcuts-hint" aria-hidden="true">
+        <span class="kbd-label">Press <kbd>/</kbd> to search</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- App Main Content Area -->
+  <main id="app" role="main" aria-live="polite">
+    <!-- ADDED: Initial Loading Skeleton State -->
+    <div class="skeleton-view" aria-label="Loading content">
+      <div class="skeleton-line lg" style="width: 240px; margin-bottom: 24px;"></div>
+      <div class="skeleton-line" style="width: 480px; margin-bottom: 32px;"></div>
+      <div class="skeleton-grid">
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block"></div>
+        <div class="skeleton-block"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- App Shell: Footer -->
+  <footer id="app-footer">
+    <div class="footer-inner">
+      <div class="footer-left">
+        <span class="footer-brand">Time SMP Survival Terminal</span>
+        <span class="footer-sep">·</span>
+        <span class="footer-meta">Minecraft Fabric 1.21.x</span>
+        <span class="footer-sep">·</span>
+        <span id="footer-server-status" class="footer-meta">Port 25565 / 8085</span>
+      </div>
+      <div class="footer-right">
+        <a href="#about" class="footer-link">คู่มือคำสั่ง</a>
+        <a href="#prices" class="footer-link">ดัชนีราคา</a>
+        <a href="#map" class="footer-link">พิกัดแผนที่</a>
+        <span class="footer-copy">© Time &amp; Time Studio</span>
+      </div>
+    </div>
+  </footer>
 </div>
 
-<div class="ticker-strip" aria-hidden="true">
-  <div class="ticker-content">
-    <span>TIME SMP // KINETIC MARKET TERMINAL</span>
-    <span class="ticker-sep">/</span>
-    <span>SYSTEM 0.0.0.0:8085</span>
-    <span class="ticker-sep">/</span>
-    <span>INSTANT COMMERCE</span>
-    <span class="ticker-sep">/</span>
-    <span>CHUNK CLAIMS 500x500</span>
-    <span class="ticker-sep">/</span>
-    <span>JSONBIN PRICE ENGINE</span>
-    <span class="ticker-sep">/</span>
-    <span>TIME SMP // KINETIC MARKET TERMINAL</span>
-    <span class="ticker-sep">/</span>
-    <span>SYSTEM 0.0.0.0:8085</span>
-    <span class="ticker-sep">/</span>
-  </div>
-</div>
-
-<nav id="nav-deck" aria-label="เมนูหลัก">
-  <div class="nav-scroller">
-    <button class="nav-btn" type="button" data-route="home">
-      <span class="nav-ico" data-icon="home" data-icon-size="16"></span>
-      <span class="nav-label">หน้าแรก</span>
-    </button>
-    <button class="nav-btn" type="button" data-route="map">
-      <span class="nav-ico" data-icon="map" data-icon-size="16"></span>
-      <span class="nav-label">แผนที่</span>
-    </button>
-    <button class="nav-btn" type="button" data-route="buy">
-      <span class="nav-ico" data-icon="buy" data-icon-size="16"></span>
-      <span class="nav-label">ซื้อ</span>
-    </button>
-    <button class="nav-btn" type="button" data-route="sell">
-      <span class="nav-ico" data-icon="sell" data-icon-size="16"></span>
-      <span class="nav-label">ลงขาย</span>
-    </button>
-    <button class="nav-btn" type="button" data-route="auction">
-      <span class="nav-ico" data-icon="auction" data-icon-size="16"></span>
-      <span class="nav-label">ประมูล</span>
-    </button>
-    <button class="nav-btn" type="button" data-route="wallet">
-      <span class="nav-ico" data-icon="wallet" data-icon-size="16"></span>
-      <span class="nav-label">กระเป๋า</span>
-    </button>
-    <button class="nav-btn" type="button" data-route="mailbox">
-      <span class="nav-ico" data-icon="mailbox" data-icon-size="16"></span>
-      <span class="nav-label">กล่องของ</span>
-      <span class="nav-badge" data-mailbox-count hidden>0</span>
-    </button>
-    <button class="nav-btn" type="button" data-route="prices">
-      <span class="nav-ico" data-icon="prices" data-icon-size="16"></span>
-      <span class="nav-label">ราคากลาง</span>
-    </button>
-    <button class="nav-btn admin-btn" type="button" data-route="admin" data-admin-only hidden>
-      <span class="nav-ico" data-icon="admin" data-icon-size="16"></span>
-      <span class="nav-label">แอดมิน</span>
-    </button>
-  </div>
-</nav>
-
-<main id="app" aria-live="polite"></main>
-
+<!-- Floating Toast Notification -->
 <div id="toast" role="status" aria-live="polite"></div>
+
+<!-- Confirm Dialog Modal -->
+<dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title">
+  <form method="dialog" id="confirm-form">
+    <h3 id="confirm-dialog-title" class="dialog-title">ยืนยันการทำรายการ</h3>
+    <div id="confirm-dialog-body" class="dialog-body"></div>
+    <div class="dialog-actions">
+      <button id="confirm-btn-cancel" class="btn btn-secondary" type="button">ยกเลิก</button>
+      <button id="confirm-btn-submit" class="btn btn-primary" type="submit">ยืนยัน</button>
+    </div>
+  </form>
+</dialog>
 
 <script type="module" src="/js/main.js"></script>
 </body>

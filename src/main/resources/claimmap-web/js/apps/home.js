@@ -1,147 +1,94 @@
 import { el, state, navigate, money } from '../core.js';
 import { icon } from '../icons.js';
 
-const PRIMARY = [
-  { key: 'buy', icon: 'buy', name: 'ซื้อของ', code: 'MARKET.BUY', desc: 'ซื้อจากร้านค้าเซิร์ฟเวอร์และตลาดผู้เล่น' },
-  { key: 'sell', icon: 'sell', name: 'ลงขาย', code: 'MARKET.SELL', desc: 'ดึงของจากกระเป๋า, Ender Chest และกล่องในพื้นที่' },
-  { key: 'auction', icon: 'auction', name: 'ประมูล', code: 'MARKET.AUCTION', desc: 'เสนอราคาแข่งกันแบบสด หรือตั้งซื้อทันที' }
-];
-
-const SECONDARY = [
-  { key: 'map', icon: 'map', name: 'แผนที่โลก', code: 'WORLD.GRID', desc: 'ตรวจสอบพิกัดและพื้นที่จอง' },
-  { key: 'wallet', icon: 'wallet', name: 'กระเป๋าเงิน', code: 'LEDGER.WALLET', desc: 'ยอดเงิน ประวัติ และการโอน' },
-  { key: 'mailbox', icon: 'mailbox', name: 'กล่องรับของ', code: 'DEPOT.MAILBOX', desc: 'พัสดุและไอเท็มรอรับเข้าตัว' },
-  { key: 'prices', icon: 'prices', name: 'ดัชนีราคา', code: 'INDEX.PRICES', desc: 'ราคากลางซื้อขายของเซิร์ฟเวอร์' }
-];
-
 export function render(container) {
-  // Hero Command Deck
-  const hero = el('section', { class: 'hero' },
-    el('div', { class: 'hero-main' },
-      el('div', { class: 'hero-kicker' },
-        el('span', { class: 'sys-tag', text: '00 // SYSTEM DECK' }),
-        el('span', { class: 'sys-code', text: 'NODE: 0.0.0.0:8085' })
-      ),
-      el('h1', { text: state.me ? 'OPERATOR: ' + state.me : 'TIME SMP' }),
-      el('p', { class: 'hint', text: 'ศูนย์กลางการค้าเสรี จัดการกรรมสิทธิ์ที่ดิน และระบบเศรษฐกิจอัตโนมัติ' })
-    ),
-    el('div', { class: 'hero-stats' },
-      el('div', { class: 'stat-box' },
-        el('div', { class: 'stat-header' },
-          icon('coin', 14),
-          el('span', { class: 'stat-label', text: 'ยอดเงินคงเหลือ' })
-        ),
-        el('div', { class: 'stat-num' },
-          el('strong', { class: 'stat-value', text: money(state.balance) }),
-          el('span', { class: 'stat-unit', text: state.currency || 'เหรียญ' })
-        ),
-        el('button', { class: 'stat-btn', type: 'button', onClick: () => navigate('wallet') },
-          icon('arrow', 14),
-          el('span', { text: 'ดูกระเป๋าเงิน' })
-        )
-      ),
-      el('div', { class: 'stat-box' },
-        el('div', { class: 'stat-header' },
-          icon('mailbox', 14),
-          el('span', { class: 'stat-label', text: 'พัสดุในกล่อง' })
-        ),
-        el('div', { class: 'stat-num' },
-          el('strong', { class: 'stat-value', text: String(state.mailboxCount || 0) }),
-          el('span', { class: 'stat-unit', text: 'รายการ' })
-        ),
-        el('button', { class: 'stat-btn', type: 'button', onClick: () => navigate('mailbox') },
-          icon('arrow', 14),
-          el('span', { text: 'เปิดกล่องของ' })
-        )
+  // Page Header
+  container.append(
+    el('div', { class: 'page-head' },
+      el('div', null,
+        el('h1', { class: 'page-title', text: state.me ? 'ยินดีต้อนรับ, ' + state.me : 'Time SMP Terminal' }),
+        el('p', { class: 'hint', text: 'ระบบศูนย์กลางเศรษฐกิจ การค้าไอเท็ม และการถือครองกรรมสิทธิ์ที่ดิน' })),
+      el('div', { style: 'display: flex; gap: 8px;' },
+        el('button', { class: 'btn btn-secondary', onClick: () => navigate('prices') }, 'ดัชนีราคา'),
+        el('button', { class: 'btn btn-primary', onClick: () => navigate('buy') }, 'เข้าสู่ร้านค้า')
       )
     )
   );
-  container.append(hero);
 
-  // Primary Commerce Grid
-  container.append(
-    el('div', { class: 'section-head' },
-      el('div', { class: 'section-title-wrap' },
-        el('span', { class: 'section-prefix', text: '01 //' }),
-        el('h2', { text: 'ตลาดและการค้า' }),
-        el('span', { class: 'section-tag', text: 'COMMERCE HUB' })
-      )
+  // Top Metrics Strip
+  const metrics = el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 32px;' },
+    el('div', { class: 'card', style: 'margin-bottom: 0;' },
+      el('span', { class: 'mono-label', text: 'ยอดเงินคงเหลือ' }),
+      el('div', { style: 'font-size: 24px; font-weight: 600; margin: 4px 0;' },
+        el('span', { class: 'num', text: money(state.balance) }),
+        el('span', { class: 'hint', style: 'font-size: 14px; margin-left: 6px;', text: state.currency || 'เหรียญ' })
+      ),
+      el('button', { class: 'btn btn-ghost btn-sm', style: 'padding: 0;', onClick: () => navigate('wallet') }, 'เปิดกระเป๋าเงิน →')
     ),
-    el('div', { class: 'tile-grid primary-grid' }, PRIMARY.map(app =>
-      el('button', { class: 'app-tile primary-tile', type: 'button', onClick: () => navigate(app.key) },
-        el('div', { class: 'tile-top' },
-          el('span', { class: 'tile-code', text: app.code }),
-          el('span', { class: 'tile-ico' }, icon(app.icon, 22))
-        ),
-        el('div', { class: 'tile-content' },
-          el('span', { class: 'tile-name', text: app.name }),
-          el('span', { class: 'tile-desc', text: app.desc })
-        ),
-        el('div', { class: 'tile-bottom' },
-          el('span', { class: 'tile-action', text: 'เข้าสู่แอป' }),
-          icon('arrow', 14)
-        )
-      )
-    ))
+    el('div', { class: 'card', style: 'margin-bottom: 0;' },
+      el('span', { class: 'mono-label', text: 'ของในกล่องจดหมาย' }),
+      el('div', { style: 'font-size: 24px; font-weight: 600; margin: 4px 0;' },
+        el('span', { class: 'num', text: String(state.mailboxCount || 0) }),
+        el('span', { class: 'hint', style: 'font-size: 14px; margin-left: 6px;', text: 'รายการรอรับ' })
+      ),
+      el('button', { class: 'btn btn-ghost btn-sm', style: 'padding: 0;', onClick: () => navigate('mailbox') }, 'รับของเข้าตัว →')
+    ),
+    el('div', { class: 'card', style: 'margin-bottom: 0;' },
+      el('span', { class: 'mono-label', text: 'พิกัดผู้เล่นล่าสุด' }),
+      el('div', { style: 'font-size: 24px; font-weight: 600; margin: 4px 0;' },
+        el('span', { class: 'num', text: typeof state.lastX === 'number' ? `X ${state.lastX}, Z ${state.lastZ}` : 'ยังไม่มีพิกัด' })
+      ),
+      el('button', { class: 'btn btn-ghost btn-sm', style: 'padding: 0;', onClick: () => navigate('map') }, 'เปิดแผนที่สำรวจ →')
+    )
   );
+  container.append(metrics);
 
-  // Secondary Tools Grid
-  const secondaryApps = SECONDARY.slice();
+  // Fast Navigation Ruled List (Swiss Technical Architecture)
+  const navItems = [
+    { key: 'buy', index: '01', title: 'ซื้อของ (Market & Shop)', desc: 'ซื้อสินค้าจากร้านค้ากลางเซิร์ฟเวอร์ หรือเลือกซื้อจากผู้เล่นอื่นในราคาซื้อทันที' },
+    { key: 'sell', index: '02', title: 'ลงขาย (Inventory & Territory)', desc: 'ดึงของจากในกระเป๋าตัวละคร, Ender Chest หรือกล่องในเขตของคุณขึ้นสู่ตลาด' },
+    { key: 'auction', index: '03', title: 'ตลาดประมูล (Live Auctions)', desc: 'แข่งขันเสนอราคาแบบสด ชนะการประมูลเพื่อรับของ หรือตั้งราคาซื้อทันที' },
+    { key: 'prices', index: '04', title: 'ดัชนีราคากลาง (Price Engine)', desc: 'ตรวจสอบราคาซื้อและราคารับซื้อของไอเท็มทุกชนิด เชื่อมต่อฐานข้อมูลระบบของคุณ' },
+    { key: 'map', index: '05', title: 'แผนที่ดินแดน (Territory Map)', desc: 'สำรวจพื้นที่จอง chunk 500×500 บล็อก จัดการและโอนกรรมสิทธิ์เขต' },
+    { key: 'wallet', index: '06', title: 'กระเป๋าเงินและธุรกรรม (Ledger)', desc: 'ตรวจสอบประวัติการเงิน โอนเงินให้ผู้เล่นอื่นโดยไม่มีค่าธรรมเนียม' },
+    { key: 'mailbox', index: '07', title: 'กล่องรับของ (Mailbox Depot)', desc: 'รับไอเท็มทั้งหมดที่ได้จากการซื้อและประมูล พร้อมระบบเช็คช่องว่างในกระเป๋า' }
+  ];
+
   if (state.admin) {
-    secondaryApps.push({
+    navItems.push({
       key: 'admin',
-      icon: 'admin',
-      name: 'ระบบแอดมิน',
-      code: 'SYS.SECURITY',
-      desc: 'ควบคุมระบบเงิน ราคากลาง และความปลอดภัย'
+      index: '08',
+      title: 'แผงควบคุมแอดมิน (Admin Console)',
+      desc: 'ควบคุมระบบเศรษฐกิจ ปรับยอดเงิน ปลดบล็อกไอเท็ม และจัดการบัญชีผู้เล่น'
     });
   }
 
-  container.append(
-    el('div', { class: 'section-head' },
-      el('div', { class: 'section-title-wrap' },
-        el('span', { class: 'section-prefix', text: '02 //' }),
-        el('h2', { text: 'เครื่องมือและทรัพยากร' }),
-        el('span', { class: 'section-tag', text: 'UTILITIES' })
-      )
-    ),
-    el('div', { class: 'tile-grid secondary-grid' }, secondaryApps.map(app =>
-      el('button', { class: 'app-tile secondary-tile', type: 'button', onClick: () => navigate(app.key) },
-        el('div', { class: 'tile-top' },
-          el('span', { class: 'tile-code', text: app.code }),
-          el('span', { class: 'tile-ico' }, icon(app.icon, 18))
+  const list = el('div', { class: 'ruled-list' });
+  for (const item of navItems) {
+    list.append(
+      el('div', {
+        class: 'ruled-row',
+        style: 'cursor: pointer; padding: 16px 8px;',
+        onClick: () => navigate(item.key)
+      },
+        el('div', { class: 'row-main' },
+          el('div', { style: 'display: flex; align-items: baseline; gap: 12px;' },
+            el('span', { class: 'mono-label', style: 'color: var(--accent);', text: item.index }),
+            el('span', { class: 'row-title', text: item.title })
+          ),
+          el('div', { class: 'row-meta', style: 'padding-left: 26px;', text: item.desc })
         ),
-        el('div', { class: 'tile-content' },
-          el('span', { class: 'tile-name', text: app.name }),
-          el('span', { class: 'tile-desc', text: app.desc })
-        ),
-        el('div', { class: 'tile-bottom' },
-          el('span', { class: 'tile-action', text: 'เปิดใช้งาน' }),
-          icon('arrow', 12)
+        el('div', { class: 'row-actions' },
+          el('span', { class: 'btn btn-ghost btn-sm', text: 'เปิด →' })
         )
       )
-    ))
-  );
+    );
+  }
 
-  // In-Game Commands Reference Terminal
   container.append(
-    el('div', { class: 'section-head' },
-      el('div', { class: 'section-title-wrap' },
-        el('span', { class: 'section-prefix', text: '03 //' }),
-        el('h2', { text: 'คำสั่งคอนโซลในเกม' }),
-        el('span', { class: 'section-tag', text: 'CLI REFERENCE' })
-      )
+    el('div', { style: 'margin-top: 16px; margin-bottom: 8px;' },
+      el('h3', { style: 'font-size: 16px; font-weight: 600;', text: 'บริการทั้งหมดในระบบ' })
     ),
-    el('div', { class: 'card' },
-      el('div', { class: 'list' },
-        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/bal' }), el('span', { class: 'hint', text: 'ตรวจสอบยอดเงินคงเหลือในบัญชี' })),
-        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/pay <ผู้เล่น> <จำนวน>' }), el('span', { class: 'hint', text: 'โอนเงินให้ผู้เล่นคนอื่นในระบบ' })),
-        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/sell hand | /sell all' }), el('span', { class: 'hint', text: 'ขายไอเท็มในมือหรือในกระเป๋าให้ร้านค้า' })),
-        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/buy <item> <จำนวน>' }), el('span', { class: 'hint', text: 'ซื้อไอเท็มจากร้านค้า (ส่งเข้ากล่องของ)' })),
-        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/mail | /mail claim' }), el('span', { class: 'hint', text: 'ตรวจสอบและรับไอเท็มจากกล่องเข้าตัว' })),
-        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/claim | /claim transfer <ผู้เล่น>' }), el('span', { class: 'hint', text: 'จองพื้นที่ chunk 500x500 หรือโอนเขตให้ผู้เล่นอื่น' })),
-        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/claimmap here | /claimmap transfer' }), el('span', { class: 'hint', text: 'ตรวจสอบพิกัดหรือคำสั่งจัดการเขตแอดมิน' }))
-      )
-    )
+    list
   );
 }
