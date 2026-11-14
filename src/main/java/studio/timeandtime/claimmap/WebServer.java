@@ -36,6 +36,7 @@ public final class WebServer {
 	private final PriceService prices;
 	private final MailboxManager mailbox;
 	private final ShopManager shop;
+	private final AuctionManager auctions;
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
@@ -46,7 +47,7 @@ public final class WebServer {
 
 	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
 			AccountManager accounts, EconomyManager economy, PriceService prices, MailboxManager mailbox,
-			ShopManager shop) {
+			ShopManager shop, AuctionManager auctions) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
@@ -56,6 +57,7 @@ public final class WebServer {
 		this.prices = prices;
 		this.mailbox = mailbox;
 		this.shop = shop;
+		this.auctions = auctions;
 	}
 
 	public void start() {
@@ -160,8 +162,14 @@ public final class WebServer {
 				requireMethod(ex, method, "POST");
 				handleMailboxClaim(ex);
 			}
+			case "/api/auctions" -> {
+				requireMethod(ex, method, "GET");
+				handleAuctions(ex);
+			}
 			default -> {
-				if (path.startsWith("/api/map/")) {
+				if (path.startsWith("/api/auctions/")) {
+					handleAuctionAction(ex, method, path);
+				} else if (path.startsWith("/api/map/")) {
 					requireMethod(ex, method, "GET");
 					handleMap(ex, path);
 				} else if (path.startsWith("/api/cells/")) {
@@ -670,6 +678,130 @@ public final class WebServer {
 		out.addProperty("remaining", outcome.remaining());
 		out.addProperty("skipped", outcome.skipped());
 		Json.send(ex, 200, out);
+	}
+
+	// ---- auctions -----------------------------------------------------------
+
+	/** GET /api/auctions — active listings plus the caller's 7-day history. */
+	private void handleAuctions(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requireAuctionEnabled();
+		UUID uuid = sessionUuid(a);
+		JsonArray list = new JsonArray();
+		for (AuctionManager.Auction au : auctions.all()) {
+			if (!au.isActive()) continue;
+			list.add(auctionView(au, uuid));
+		}
+		JsonArray mine = new JsonArray();
+		for (AuctionManager.Auction au : auctions.recentForSeller(uuid.toString())) {
+			mine.add(auctionView(au, uuid));
+		}
+		JsonObject out = new JsonObject();
+		out.addProperty("currency", config.currencyName);
+		out.add("auctions", list);
+		out.add("mine", mine);
+		Json.send(ex, 200, out);
+	}
+
+	private JsonObject auctionView(AuctionManager.Auction au, UUID viewer) {
+		JsonObject o = new JsonObject();
+		o.addProperty("id", au.id);
+		o.addProperty("sellerName", au.sellerName);
+		o.addProperty("itemId", au.itemId);
+		o.addProperty("count", au.count);
+		o.addProperty("label", au.label);
+		o.addProperty("startPrice", au.startPrice);
+		o.addProperty("buyout", au.buyout);
+		o.addProperty("highBid", au.highBid);
+		o.addProperty("highBidderName", au.highBidderName);
+		o.addProperty("endsAt", au.endsAt);
+		o.addProperty("status", au.status);
+		o.addProperty("minBid", auctions.minBid(au));
+		o.addProperty("finalPrice", au.finalPrice);
+		o.addProperty("winner", au.winner == null ? null : au.winner.equals(viewer.toString()) ? "คุณ" : null);
+		boolean mine = au.seller.equals(viewer.toString());
+		o.addProperty("mine", mine);
+		o.addProperty("canBid", au.isActive() && !mine && !viewer.toString().equals(au.highBidder));
+		o.addProperty("canCancel", au.isActive() && mine && au.highBidder == null);
+		return o;
+	}
+
+	/** POST /api/auctions/{id}/{bid|buyout|cancel} */
+	private void handleAuctionAction(HttpExchange ex, String method, String path) throws IOException {
+		requireMethod(ex, method, "POST");
+		Auth a = requireSession(ex);
+		requireAuctionEnabled();
+		String rest = path.substring("/api/auctions/".length());
+		int slash = rest.indexOf('/');
+		if (slash <= 0 || slash == rest.length() - 1) {
+			throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+		}
+		String id = rest.substring(0, slash);
+		String action = rest.substring(slash + 1);
+		UUID uuid = sessionUuid(a);
+		switch (action) {
+			case "bid" -> {
+				JsonObject body = Json.readObject(ex);
+				Long amount = Json.integer(body, "amount");
+				if (amount == null || amount < 1 || amount > EconomyManager.MAX_MONEY) {
+					throw new Json.ApiError(400, "invalid_amount", "จำนวนเงินไม่ถูกต้อง");
+				}
+				AuctionManager.BidOutcome o = auctions.bid(uuid, a.name(), id, amount);
+				if (o.result() != AuctionManager.Result.OK) throw auctionError(o.result(), o.minBid());
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("highBid", o.highBid());
+				out.addProperty("endsAt", o.endsAt());
+				out.addProperty("balance", economy.balance(uuid));
+				Json.send(ex, 200, out);
+			}
+			case "buyout" -> {
+				Json.readObject(ex);   // must still be a JSON object, even if empty
+				AuctionManager.Result r = auctions.buyout(uuid, a.name(), id);
+				if (r != AuctionManager.Result.OK) throw auctionError(r, 0);
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("balance", economy.balance(uuid));
+				out.addProperty("mailboxCount", mailbox.count(uuid));
+				Json.send(ex, 200, out);
+			}
+			case "cancel" -> {
+				Json.readObject(ex);
+				AuctionManager.Result r = auctions.cancel(uuid, a.admin(), id);
+				if (r != AuctionManager.Result.OK) throw auctionError(r, 0);
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("mailboxCount", mailbox.count(uuid));
+				Json.send(ex, 200, out);
+			}
+			default -> throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+		}
+	}
+
+	private void requireAuctionEnabled() {
+		requireMarketEnabled();
+		if (auctions.isDisabled()) {
+			throw new Json.ApiError(503, "market_disabled", "ระบบตลาดถูกปิดชั่วคราวเพราะไฟล์ข้อมูลเสีย กรุณาแจ้งแอดมิน");
+		}
+	}
+
+	private Json.ApiError auctionError(AuctionManager.Result r, long minBid) {
+		return switch (r) {
+			case NOT_FOUND -> new Json.ApiError(404, "not_found", "ไม่พบรายการประมูลนี้");
+			case CLOSED -> new Json.ApiError(409, "auction_closed", "รายการนี้ปิดแล้ว");
+			case OWN_AUCTION -> new Json.ApiError(409, "own_auction", "ประมูลรายการของตัวเองไม่ได้");
+			case ALREADY_HIGHEST -> new Json.ApiError(409, "already_highest", "คุณเป็นผู้ประมูลสูงสุดอยู่แล้ว");
+			case BID_TOO_LOW -> new Json.ApiError(409, "bid_too_low", "ต้องประมูลอย่างน้อย " + minBid);
+			case USE_BUYOUT -> new Json.ApiError(409, "use_buyout", "ราคานี้ถึงขั้นซื้อทันที กรุณาใช้ปุ่มซื้อทันที");
+			case LIMIT_REACHED -> new Json.ApiError(409, "limit_reached", "เกินจำนวนที่อนุญาต หรือกล่องของเต็ม");
+			case INSUFFICIENT -> new Json.ApiError(409, "insufficient_funds", "ยอดเงินไม่พอ");
+			case FROZEN -> new Json.ApiError(409, "account_frozen", "บัญชีนี้ถูกระงับการค้า");
+			case HAS_BIDS -> new Json.ApiError(409, "has_bids", "มีผู้ประมูลแล้ว ยกเลิกไม่ได้");
+			case FORBIDDEN -> new Json.ApiError(403, "forbidden", "ไม่มีสิทธิ์กับรายการนี้");
+			case BAD_REQUEST -> new Json.ApiError(400, "invalid_amount", "ข้อมูลไม่ถูกต้อง");
+			case DISABLED -> new Json.ApiError(503, "market_disabled", "ระบบตลาดถูกปิดชั่วคราว");
+			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
+		};
 	}
 
 	private void requireShopEnabled() {

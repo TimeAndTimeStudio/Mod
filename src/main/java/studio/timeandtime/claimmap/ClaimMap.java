@@ -47,6 +47,7 @@ public class ClaimMap implements ModInitializer {
 	private PriceService prices;
 	private MailboxManager mailbox;
 	private ShopManager shop;
+	private AuctionManager auctions;
 	private AuthGate authGate;
 	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
@@ -72,9 +73,13 @@ public class ClaimMap implements ModInitializer {
 		prices.loadCache();
 		mailbox = new MailboxManager(config.mailboxFile(), System::currentTimeMillis, config.mailboxMaxEntries);
 		mailbox.load();
+		auctions = new AuctionManager(config.dataDir(), config, economy, mailbox, System::currentTimeMillis);
+		auctions.load();
+		auctions.validateEscrow();
 		shop = new ShopManager(config, economy, mailbox, prices, System::currentTimeMillis);
+		shop.attachAuctions(auctions);
 		protection = new Protection(regions);
-		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop);
+		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions);
 
 		backupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
 			Thread t = new Thread(r, "claimmap-backup");
@@ -89,7 +94,9 @@ public class ClaimMap implements ModInitializer {
 		});
 		prices.start(priceExecutor);
 
-		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox).register();
+		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices)
+				.register();
+		new AuctionTicker(auctions).register();
 		protection.register();
 		authGate.registerHooks();
 
@@ -99,6 +106,7 @@ public class ClaimMap implements ModInitializer {
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			this.server = server;
 			ItemRegistryAdapter.init(server);
+			auctions.closeExpired(System.currentTimeMillis());
 			maps.start();
 			web.start();
 			LOGGER.info("[claimmap] Started. Web map/API on {}:{} (see config/claimmap/claimmap.properties)",

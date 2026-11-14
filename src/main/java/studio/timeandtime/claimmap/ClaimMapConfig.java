@@ -67,6 +67,14 @@ public final class ClaimMapConfig {
 	public int shopDailyBuyQty = 0;
 	/** Maximum entries in one player's mailbox. */
 	public int mailboxMaxEntries = 500;
+	/** Auction house (PHASES.md 6.2). */
+	public int auctionMaxActivePerPlayer = 5;
+	public int auctionDefaultHours = 24;
+	public int auctionMaxHours = 72;
+	public int auctionFeePercent = 5;
+	public int auctionListFeePercent = 0;
+	public int auctionMinIncrementPercent = 5;
+	public int auctionAntiSnipeSeconds = 60;
 
 	public ClaimMapConfig() {
 		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
@@ -110,6 +118,14 @@ public final class ClaimMapConfig {
 		shopMaxQtyPerTx = getInt("shopMaxQtyPerTx", shopMaxQtyPerTx, 1, 1_000_000);
 		shopDailyBuyQty = getInt("shopDailyBuyQty", shopDailyBuyQty, 0, 1_000_000);
 		mailboxMaxEntries = getInt("mailboxMaxEntries", mailboxMaxEntries, 1, 100_000);
+		auctionMaxActivePerPlayer = getInt("auctionMaxActivePerPlayer", auctionMaxActivePerPlayer, 1, 1000);
+		auctionDefaultHours = getInt("auctionDefaultHours", auctionDefaultHours, 1, 720);
+		auctionMaxHours = getInt("auctionMaxHours", auctionMaxHours, 1, 720);
+		if (auctionDefaultHours > auctionMaxHours) auctionDefaultHours = auctionMaxHours;
+		auctionFeePercent = getInt("auctionFeePercent", auctionFeePercent, 0, 100);
+		auctionListFeePercent = getInt("auctionListFeePercent", auctionListFeePercent, 0, 100);
+		auctionMinIncrementPercent = getInt("auctionMinIncrementPercent", auctionMinIncrementPercent, 1, 1000);
+		auctionAntiSnipeSeconds = getInt("auctionAntiSnipeSeconds", auctionAntiSnipeSeconds, 0, 3600);
 
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
@@ -132,7 +148,9 @@ public final class ClaimMapConfig {
 		// Surface the new keys in the owner's file so they can edit them.
 		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance",
 				"pbkdf2Iterations", "pricesUrl", "pricesAccessKey", "priceRefreshSeconds", "sellPercent",
-				"buyPercent", "blockedItems", "shopMaxQtyPerTx", "shopDailyBuyQty", "mailboxMaxEntries"}) {
+				"buyPercent", "blockedItems", "shopMaxQtyPerTx", "shopDailyBuyQty", "mailboxMaxEntries",
+				"auctionMaxActivePerPlayer", "auctionDefaultHours", "auctionMaxHours", "auctionFeePercent",
+				"auctionListFeePercent", "auctionMinIncrementPercent", "auctionAntiSnipeSeconds"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
@@ -149,6 +167,13 @@ public final class ClaimMapConfig {
 					case "shopMaxQtyPerTx" -> Integer.toString(shopMaxQtyPerTx);
 					case "shopDailyBuyQty" -> Integer.toString(shopDailyBuyQty);
 					case "mailboxMaxEntries" -> Integer.toString(mailboxMaxEntries);
+					case "auctionMaxActivePerPlayer" -> Integer.toString(auctionMaxActivePerPlayer);
+					case "auctionDefaultHours" -> Integer.toString(auctionDefaultHours);
+					case "auctionMaxHours" -> Integer.toString(auctionMaxHours);
+					case "auctionFeePercent" -> Integer.toString(auctionFeePercent);
+					case "auctionListFeePercent" -> Integer.toString(auctionListFeePercent);
+					case "auctionMinIncrementPercent" -> Integer.toString(auctionMinIncrementPercent);
+					case "auctionAntiSnipeSeconds" -> Integer.toString(auctionAntiSnipeSeconds);
 					default -> bindAddress;
 				});
 				changed = true;
@@ -187,6 +212,13 @@ public final class ClaimMapConfig {
 		props.setProperty("shopMaxQtyPerTx", Integer.toString(shopMaxQtyPerTx));
 		props.setProperty("shopDailyBuyQty", Integer.toString(shopDailyBuyQty));
 		props.setProperty("mailboxMaxEntries", Integer.toString(mailboxMaxEntries));
+		props.setProperty("auctionMaxActivePerPlayer", Integer.toString(auctionMaxActivePerPlayer));
+		props.setProperty("auctionDefaultHours", Integer.toString(auctionDefaultHours));
+		props.setProperty("auctionMaxHours", Integer.toString(auctionMaxHours));
+		props.setProperty("auctionFeePercent", Integer.toString(auctionFeePercent));
+		props.setProperty("auctionListFeePercent", Integer.toString(auctionListFeePercent));
+		props.setProperty("auctionMinIncrementPercent", Integer.toString(auctionMinIncrementPercent));
+		props.setProperty("auctionAntiSnipeSeconds", Integer.toString(auctionAntiSnipeSeconds));
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);
@@ -266,6 +298,10 @@ public final class ClaimMapConfig {
 
 	public Path shopUsageFile() {
 		return dir().resolve("shop-usage.json");
+	}
+
+	public Path auctionsFile() {
+		return dir().resolve("auctions.json");
 	}
 
 	private Path dir() {

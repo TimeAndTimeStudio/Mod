@@ -27,6 +27,10 @@ import net.minecraft.world.item.ItemStack;
  *   <li>{@code /sell hand|all}        - sell to the shop</li>
  *   <li>{@code /buy <item> <qty>}     - buy from the shop (items go to the mailbox)</li>
  *   <li>{@code /mail [claim]}         - list / claim mailbox items</li>
+ *   <li>{@code /ah}                   - auction house list</li>
+ *   <li>{@code /ah sell <start> [buyout] [hours]} - list the held stack</li>
+ *   <li>{@code /ah bid <id> <amount>} - place a bid</li>
+ *   <li>{@code /ah cancel <id>}       - cancel a listing without bids</li>
  *   <li>{@code /claim}                - claim the cell the player is standing in</li>
  *   <li>{@code /claimmap here}        - show info about the current cell</li>
  *   <li>{@code /claimmap reload}      - reload config + regions (operator)</li>
@@ -41,13 +45,16 @@ public final class ClaimCommands {
 	private final AuthGate authGate;
 	private final ShopManager shop;
 	private final MailboxManager mailbox;
+	private final AuctionManager auctions;
+	private final PriceService prices;
 	private final Map<UUID, SellAllPlan> sellAllPlans = new HashMap<>();
 
 	private record SellAllPlan(Map<String, Integer> items, long expiresAt) {
 	}
 
 	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
-			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox) {
+			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
+			AuctionManager auctions, PriceService prices) {
 		this.regions = regions;
 		this.links = links;
 		this.accounts = accounts;
@@ -56,6 +63,8 @@ public final class ClaimCommands {
 		this.authGate = authGate;
 		this.shop = shop;
 		this.mailbox = mailbox;
+		this.auctions = auctions;
+		this.prices = prices;
 	}
 
 	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
@@ -104,6 +113,32 @@ public final class ClaimCommands {
 			dispatcher.register(Commands.literal("mail").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runMailList(ctx.getSource()))
 					.then(Commands.literal("claim").executes(ctx -> runMailClaim(ctx.getSource()))));
+
+			dispatcher.register(Commands.literal("ah").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runAhList(ctx.getSource()))
+					.then(Commands.literal("sell")
+							.then(Commands.argument("start", StringArgumentType.word())
+									.executes(ctx -> runAhSell(ctx.getSource(),
+											StringArgumentType.getString(ctx, "start"), "0", "0"))
+									.then(Commands.argument("buyout", StringArgumentType.word())
+											.executes(ctx -> runAhSell(ctx.getSource(),
+													StringArgumentType.getString(ctx, "start"),
+													StringArgumentType.getString(ctx, "buyout"), "0"))
+											.then(Commands.argument("hours", StringArgumentType.word())
+													.executes(ctx -> runAhSell(ctx.getSource(),
+															StringArgumentType.getString(ctx, "start"),
+															StringArgumentType.getString(ctx, "buyout"),
+															StringArgumentType.getString(ctx, "hours")))))))
+					.then(Commands.literal("bid")
+							.then(Commands.argument("id", StringArgumentType.word())
+									.then(Commands.argument("amount", StringArgumentType.word())
+											.executes(ctx -> runAhBid(ctx.getSource(),
+													StringArgumentType.getString(ctx, "id"),
+													StringArgumentType.getString(ctx, "amount"))))))
+					.then(Commands.literal("cancel")
+							.then(Commands.argument("id", StringArgumentType.word())
+									.executes(ctx -> runAhCancel(ctx.getSource(),
+											StringArgumentType.getString(ctx, "id"))))));
 
 			dispatcher.register(Commands.literal("claim").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaim(ctx.getSource())));
@@ -345,6 +380,148 @@ public final class ClaimCommands {
 		player.sendSystemMessage(Component.literal("รับของ " + o.claimed() + " ชิ้น (คงเหลือในกล่อง "
 				+ o.remaining() + " รายการ" + (o.skipped() > 0 ? ", รับไม่ได้ " + o.skipped() + " รายการ" : "") + ")"));
 		return 1;
+	}
+
+	// ---- auction house ------------------------------------------------------
+
+	private int runAhList(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		if (auctions.isDisabled()) {
+			player.sendSystemMessage(Component.literal("ระบบตลาดถูกปิดชั่วคราว กรุณาแจ้งแอดมิน"));
+			return 0;
+		}
+		List<AuctionManager.Auction> all = auctions.all();
+		int active = 0;
+		StringBuilder sb = new StringBuilder("ตลาดประมูล:\n");
+		for (AuctionManager.Auction a : all) {
+			if (!a.isActive()) continue;
+			if (active >= 10) { sb.append("... และอีก ").append(active + 1).append(" รายการ\n"); break; }
+			active++;
+			sb.append("- ").append(a.id).append(' ').append(a.label).append(" x").append(a.count)
+					.append(" เริ่ม ").append(a.startPrice);
+			if (a.buyout != null) sb.append(" ซื้อทันที ").append(a.buyout);
+			if (a.highBid > 0) sb.append(" ล่าสุด ").append(a.highBid);
+			long mins = Math.max(0, (a.endsAt - System.currentTimeMillis()) / 60_000L);
+			sb.append(" เหลือ ").append(mins).append(" นาที\n");
+		}
+		if (active == 0) {
+			player.sendSystemMessage(Component.literal("ยังไม่มีการประมูล\n/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"));
+			return 0;
+		}
+		player.sendSystemMessage(Component.literal(sb.toString()));
+		return 1;
+	}
+
+	private int runAhSell(CommandSourceStack src, String startText, String buyoutText, String hoursText) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		if (auctions.isDisabled()) {
+			player.sendSystemMessage(Component.literal("ระบบตลาดถูกปิดชั่วคราว กรุณาแจ้งแอดมิน"));
+			return 0;
+		}
+		long start;
+		long buyoutRaw;
+		int hours;
+		try {
+			start = Long.parseLong(startText);
+			buyoutRaw = Long.parseLong(buyoutText);
+			hours = Integer.parseInt(hoursText);
+		} catch (NumberFormatException e) {
+			player.sendSystemMessage(Component.literal("ตัวเลขไม่ถูกต้อง"));
+			return 0;
+		}
+		ItemStack hand = player.getMainHandItem();
+		if (hand == null || hand.isEmpty()) {
+			player.sendSystemMessage(Component.literal("มือหลักว่าง เลือกของที่จะประมูลก่อน"));
+			return 0;
+		}
+		String itemId = ItemCodecs.idOf(hand);
+		if (prices.isBlocked(itemId) || !ItemRegistryAdapter.exists(itemId)) {
+			player.sendSystemMessage(Component.literal("ไอเท็มนี้ลงประมูลไม่ได้"));
+			return 0;
+		}
+		var server = ClaimMap.getServer();
+		if (server == null) return 0;
+		String itemJson = ItemCodecs.encode(hand, server.registryAccess());
+		int count = hand.getCount();
+		String label = ItemRegistryAdapter.label(itemId);
+		Long buyout = buyoutRaw <= 0 ? null : buyoutRaw;
+
+		AuctionManager.CreatePlan plan = new AuctionManager.CreatePlan(player.getUUID().toString(),
+				player.getGameProfile().name(), itemJson, itemId, count, label, start, buyout, hours);
+		AuctionManager.CreateOutcome check = auctions.planCreate(plan);
+		if (check.result() != AuctionManager.Result.OK) {
+			player.sendSystemMessage(Component.literal("ลงประมูลไม่ได้: " + auctionErrorText(check.result())));
+			return 0;
+		}
+
+		// Take the stack only after validation; put it back if the listing fails.
+		ItemStack backup = hand.copy();
+		hand.setCount(0);
+		AuctionManager.CreateOutcome o = auctions.create(plan);
+		if (o.result() != AuctionManager.Result.OK) {
+			player.getInventory().setItem(player.getInventory().getSelectedSlot(), backup);
+			player.sendSystemMessage(Component.literal("ลงประมูลไม่ได้: " + auctionErrorText(o.result())));
+			return 0;
+		}
+		player.sendSystemMessage(Component.literal("ลงประมูลแล้ว " + o.auctionId() + " " + label + " x" + count
+				+ " ราคาเริ่ม " + start + " " + config.currencyName
+				+ (buyout == null ? "" : " (ซื้อทันที " + buyout + ")")));
+		return 1;
+	}
+
+	private int runAhBid(CommandSourceStack src, String id, String amountText) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		long amount;
+		try {
+			amount = Long.parseLong(amountText);
+		} catch (NumberFormatException e) {
+			player.sendSystemMessage(Component.literal("จำนวนเงินต้องเป็นจำนวนเต็ม"));
+			return 0;
+		}
+		AuctionManager.BidOutcome o = auctions.bid(player.getUUID(), player.getGameProfile().name(), id, amount);
+		if (o.result() == AuctionManager.Result.OK) {
+			player.sendSystemMessage(Component.literal("ประมูล " + id + " ที่ " + amount + " " + config.currencyName
+					+ " (คงเหลือ " + economy.balance(player.getUUID()) + ")"));
+		} else if (o.result() == AuctionManager.Result.BID_TOO_LOW) {
+			player.sendSystemMessage(Component.literal("ต้องประมูลอย่างน้อย " + o.minBid()));
+		} else {
+			player.sendSystemMessage(Component.literal("ประมูลไม่ได้: " + auctionErrorText(o.result())));
+		}
+		return 1;
+	}
+
+	private int runAhCancel(CommandSourceStack src, String id) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		AuctionManager.Result r = auctions.cancel(player.getUUID(), false, id);
+		if (r == AuctionManager.Result.OK) {
+			player.sendSystemMessage(Component.literal("ยกเลิกแล้ว ของจะอยู่ในกล่องของ พิมพ์ /mail claim"));
+		} else {
+			player.sendSystemMessage(Component.literal("ยกเลิกไม่ได้: " + auctionErrorText(r)));
+		}
+		return 1;
+	}
+
+	private static String auctionErrorText(AuctionManager.Result r) {
+		return switch (r) {
+			case NOT_FOUND -> "ไม่พบรายการนี้";
+			case CLOSED -> "รายการนี้ปิดแล้ว";
+			case OWN_AUCTION -> "ประมูลรายการของตัวเองไม่ได้";
+			case ALREADY_HIGHEST -> "คุณเป็นผู้ประมูลสูงสุดอยู่แล้ว";
+			case BID_TOO_LOW -> "ราคาต่ำเกินไป";
+			case USE_BUYOUT -> "ราคานี้ถึงขั้นซื้อทันที กรุณาใช้ปุ่มซื้อทันที";
+			case LIMIT_REACHED -> "ลงประมูลครบจำนวนสูงสุดแล้ว หรือกล่องของเต็ม";
+			case INSUFFICIENT -> "ยอดเงินไม่พอ";
+			case FROZEN -> "บัญชีถูกระงับการค้า";
+			case DISABLED -> "ระบบตลาดถูกปิดชั่วคราว";
+			case HAS_BIDS -> "มีผู้ประมูลแล้ว ยกเลิกไม่ได้";
+			case FORBIDDEN -> "ไม่มีสิทธิ์กับรายการนี้";
+			case BAD_REQUEST -> "ข้อมูลไม่ถูกต้อง";
+			default -> "เกิดข้อผิดพลาดภายใน กรุณาลองใหม่";
+		};
 	}
 
 	private static String sellErrorText(ShopManager.Result r) {

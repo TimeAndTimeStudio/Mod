@@ -76,8 +76,16 @@ public final class ShopManager {
 		this.usageFile = cfg.shopUsageFile();
 	}
 
+	private volatile AuctionManager auctions;
+
+	/** Market-wide kill switch: a corrupt auctions.json also stops the shop (R6). */
+	public void attachAuctions(AuctionManager auctions) {
+		this.auctions = auctions;
+	}
+
 	public boolean isDisabled() {
-		return economy.isDisabled() || mailbox.isDisabled();
+		AuctionManager a = auctions;
+		return economy.isDisabled() || mailbox.isDisabled() || (a != null && a.isDisabled());
 	}
 
 	/** Unit sell price, or 0 when the item has no sell price. */

@@ -289,3 +289,44 @@
 **⚠️ Gate 5 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
 ที่ยังยืนยันไม่ได้เพราะไม่มีไคลเอนต์: ขายของ 64 ชิ้นแล้วของหาย/เงินเพิ่มตรง, ปฏิเสธของมี enchant/ชื่อ/ความเสียหาย, `/sell all` สรุปตรงกับเงินจริง, ซื้อตอน inventory เต็มแล้วของเข้ากล่อง + `/mail claim` รับได้บางส่วน, arbitrage test ในเกม, freeze ในการซื้อขาย
 → logic และ unit test พร้อม; การรับของ (`claim`) และการขายถูกทดสอบเฉพาะเส้นทาง error/offline
+
+---
+
+### เฟส 6 — ตลาดประมูล (2026-11-14)
+
+**ไฟล์ที่เพิ่ม**
+- `AuctionManager.java` — `auctions.json` (`version:1`), สถานะ `ACTIVE/SOLD/EXPIRED/CANCELLED`, escrow ต่อรายการ (`Acct.escrow(id)`), `planCreate`/`create`/`bid`/`buyout`/`cancel`/`closeExpired`/`settle`, `validateEscrow`, prune 7 วัน
+- `AuctionTicker.java` — `END_SERVER_TICK` ทุก 20 tick → `closeExpired(...)`
+- `src/test/java/.../AuctionManagerTest.java` (13 เทสต์)
+
+**ไฟล์ที่แก้**
+- `ClaimMapConfig.java` — `auctionMaxActivePerPlayer=5`, `auctionDefaultHours=24`, `auctionMaxHours=72`, `auctionFeePercent=5`, `auctionListFeePercent=0`, `auctionMinIncrementPercent=5`, `auctionAntiSnipeSeconds=60`, `auctionsFile()`
+- `ShopManager.java` — `attachAuctions(...)`; `isDisabled()` นับ `auctions.isDisabled()` ด้วย (ไฟล์ประมูลเสีย → ร้านปิดทั้งตลาดตาม R6)
+- `ClaimMap.java` — โหลด+ตรวจ escrow ก่อนสร้างร้าน, ticker, settle รอบแรกตอน `SERVER_STARTED`, ส่ง manager ให้ WebServer/commands
+- `WebServer.java` — `GET /api/auctions` (ของตัวเอง + ประวัติ 7 วัน), `POST /api/auctions/{id}/bid|buyout|cancel`
+- `ClaimCommands.java` — `/ah`, `/ah sell <ราคาเริ่ม> [ซื้อทันที|0] [ชั่วโมง]`, `/ah bid <id> <เงิน>`, `/ah cancel <id>`
+
+**การตัดสินใจ**
+- เงินทุกขั้นผ่าน `EconomyManager.apply` ชุดเดียว: bid = คืนเงินผู้นำเดิม + รับเงินใหม่ (atomic), buyout = คืนผู้นำ + รับเงินผู้ซื้อ + จ่ายผู้ขาย + ค่าธรรมเนียม
+- `minBid` = ราคาเริ่ม (ยังไม่มี bid) หรือ `highBid + max(1, ceil(highBid*5%))`
+- กัน sniping: bid ใน `antiSnipeSeconds` สุดท้าย → `endsAt = now + antiSnipeSeconds`
+- `settle` idempotent ด้วย `paidOut`/`itemDelivered`; ตั้ง `status=SOLD` **ก่อน**ส่งของ เพื่อให้ invariant `ACTIVE ⇒ escrow == highBid` ยังจริงถ้าดับกลางทาง; ส่งของไม่สำเร็จ (กล่องเต็ม) → คง `itemDelivered=false` แล้ว tick ถัดไปลองใหม่ ไม่จ่ายซ้ำ
+- ลงประมูล: ตรวจ plan → ถอดของจากมือ → `create`; ถ้า `create` ล้มจะใส่ stack เดิมคืนช่องเดิม
+- ซื้อทันทีใช้ `buyout` แยก endpoint; ราคาที่ ≥ buyout ส่ง `use_buyout` ให้หน้าเว็บพาไปปุ่มซื้อทันที
+- id รายการ = `au_<base36 time>_<counter>`; entry กล่องของ = `mb_au_<id>_winner` / `mb_au_<id>_return` (กันซ้ำ)
+- `validateEscrow()` เรียกท้าย `load()`: escrow ใน ledger ต้องเท่ากับ `highBid` ของรายการ ACTIVE ไม่งั้น `.corrupt-<ms>` + ปิดตลาด
+- **ข้อสังเกต operational:** 26.x pause เซิร์ฟเวอร์เมื่อว่าง 60 วิ → tick หยุด → settle จะเกิดตอน tick แรกหลังมีคนเข้า (หรือตอน start ถ้าเลยเวลาแล้ว) — ไม่ใช่ข้อมูลหาย
+
+**ผลทดสอบ**
+- [x] `./gradlew test` ผ่าน 75 เทสต์ (เพิ่ม 13 auction) — ครอบวงจรเต็ม, outbid คืนเงิน, buyout คืนผู้นำ, ยกเลิก, anti-snipe, settle ซ้ำไม่เปลี่ยนยอด/ไม่เพิ่ม mail, จำลองดับหลังจ่ายก่อนส่งของแล้ว retry, ขอบเขตราคา/ชั่วโมง/จำนวนรายการ, ไฟล์เสียปิดตลาด+ปิดร้าน, escrow ไม่ตรงตอน start, bid พร้อมกัน 24 thread แล้ว escrow = highBid, invariant 0
+- [x] รันเซิร์ฟเวอร์จริง (fixture `auctions.json` เพราะลงของในเกมไม่ได้): `GET /api/auctions` → minBid 100/canBid true; bid 100 → Bob 1057, escrow 100, `endsAt` +60 วิ (anti-snipe ทำงาน)
+- [x] bid ตัวเอง → 409 `own_auction`; bid ซ้ำตอนเป็นผู้นำ → 409 `already_highest`; id ไม่มี → 404; `POST /api/auctions` → 405; ไม่มี session → 401
+- [x] ปล่อยให้หมดเวลา → ticker settle: `status=SOLD`, Alice +95 (หัก 5%), `CheckLedger` PASS, Bob ได้ `mb_au_au_fixture_1_winner` 3 เพชร, escrow 0
+- [x] `POST .../buyout` → Bob 857 (−200), Alice +190, Bob ได้มรกต 5, escrow 0
+- [x] `POST .../cancel` โดยไม่ใช่เจ้าของ → 403; เจ้าของ → OK และของกลับเข้ากล่อง (`mb_au_..._return`)
+- [x] `CheckLedger` PASS หลังทุกธุรกรรม (`lastSeq=111`, invariant 0)
+- [x] build 26.3 ✅ · 26.2 ✅
+
+**⚠️ Gate 6 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
+ที่ยังยืนยันไม่ได้เพราะไม่มีไคลเอนต์: `/ah sell` ถอด stack จริงจากมือและคืนของเมื่อล้ม, `/ah` แสดงผลในแชท, `/ah bid`/`/ah cancel` จากในเกม, พฤติกรรมกล่องของเต็มตอนผู้ชนะรับของ, และการที่ผู้เล่นออฟไลน์ตอนปิดประมูล (ของต้องรอในกล่อง)
+→ แกนเงิน/escrow/settle และ API ถูกทดสอบครบทั้ง unit + runtime ด้วย fixture
