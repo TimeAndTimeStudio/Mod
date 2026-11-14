@@ -37,77 +37,116 @@ export function render(container) {
   // ---- player market -------------------------------------------------------
 
   function renderMarket() {
-    const note = el('p', { class: 'hint', text: 'ของจะถูกย้ายออกจากช่องที่เลือกทันทีที่ลงขาย ถ้ายกเลิกหรือหมดอายุ ของจะเข้ากล่องของ' });
-    const select = el('select', { 'aria-label': 'เลือกไอเท็มที่จะลงขาย' });
+    const note = el('p', { class: 'hint', text: 'เลือกไอเท็มจากตาราง 1×1 ด้านล่าง (รวมของจากกระเป๋า, Ender Chest และกล่องในเขตที่คุณจองไว้)' });
+    const search = el('input', { type: 'search', placeholder: 'ค้นหาไอเท็มในตัว / ในเขต...' });
     const refresh = el('button', { class: 'secondary', type: 'button' },
       icon('refresh', 16),
-      el('span', { text: 'รีเฟรชของ' })
+      el('span', { text: 'รีเฟรชรายการของ' })
     );
+
+    const gridWrap = el('div');
+    const selectedWrap = el('div', { class: 'notice' }, 'กรุณาคลิกเลือกไอเท็มจากตาราง 1×1 ด้านบนเพื่อลงขาย');
+
+    let selectedItem = null;
     const qty = el('input', { type: 'number', value: '1', min: 1, max: 2304, inputMode: 'numeric' });
     const start = el('input', { type: 'number', value: '100', min: 1, inputMode: 'numeric' });
     const buyout = el('input', { type: 'number', min: 0, placeholder: 'ไม่บังคับ', inputMode: 'numeric' });
     const hours = el('input', { type: 'number', value: '48', min: 1, max: 168, inputMode: 'numeric' });
-    const submit = el('button', { class: 'primary', type: 'button', text: 'ลงขายในตลาด' });
-    const selected = el('p', { class: 'pick-preview', text: 'กำลังโหลดของ…' });
+    const submit = el('button', { class: 'primary', type: 'button', text: 'ลงขายในตลาด', disabled: true });
 
-    function fillSources() {
-      clear(select);
+    function renderSourceGrid() {
+      clear(gridWrap);
       if (!sources) {
-        select.append(el('option', { value: '', text: 'กำลังโหลด…' }));
+        gridWrap.append(el('div', { class: 'empty', text: 'กำลังโหลดรายการของในตัวและในเขต…' }));
         return;
       }
       if (!sources.length) {
-        select.append(el('option', { value: '', text: 'ไม่พบของ (ต้องออนไลน์และอยู่ในพื้นที่ที่โหลด)' }));
-        selected.textContent = 'ไม่พบของที่พร้อมลงขาย';
+        gridWrap.append(el('div', { class: 'empty', text: 'ไม่พบของที่พร้อมลงขาย (ต้องออนไลน์ในเกมและมีของในตัวหรือในกล่องเขตของคุณ)' }));
         return;
       }
-      for (const item of sources) {
-        select.append(el('option', { value: item.ref, text: sourceLabel(item) }));
+      const q = search.value.trim().toLowerCase();
+      const filtered = sources.filter(s => !q || (s.label || s.itemId).toLowerCase().includes(q) || s.area.toLowerCase().includes(q));
+      if (!filtered.length) {
+        gridWrap.append(el('div', { class: 'empty', text: 'ไม่พบไอเท็มที่ค้นหา' }));
+        return;
       }
-      select.selectedIndex = 0;
-      updatePreview();
+      const grid = el('div', { class: 'source-grid' });
+      for (const item of filtered) {
+        const isSelected = selectedItem && selectedItem.ref === item.ref;
+        const card = el('div', {
+          class: 'source-slot-card' + (isSelected ? ' selected' : ''),
+          onClick: () => {
+            selectedItem = item;
+            updateSelection();
+            renderSourceGrid();
+          }
+        },
+          itemSlot(item.itemId, item.count, 44),
+          el('div', { class: 'source-item-name', text: item.label || item.itemId }),
+          el('span', { class: 'source-area-tag', text: item.area })
+        );
+        grid.append(card);
+      }
+      gridWrap.append(grid);
     }
 
-    function updatePreview() {
-      const item = (sources || []).find(s => s.ref === select.value);
-      if (!item) { selected.textContent = 'เลือกไอเท็มก่อน'; return; }
-      qty.max = String(item.count);
-      if (Number(qty.value) > item.count) qty.value = String(item.count);
-      selected.textContent = 'เลือก: ' + item.label + ' × ' + item.count + ' จาก ' + item.area;
+    function updateSelection() {
+      clear(selectedWrap);
+      if (!selectedItem) {
+        selectedWrap.textContent = 'กรุณาคลิกเลือกไอเท็มจากตาราง 1×1 ด้านบนเพื่อลงขาย';
+        submit.disabled = true;
+        return;
+      }
+      submit.disabled = false;
+      qty.max = String(selectedItem.count);
+      if (Number(qty.value) > selectedItem.count || Number(qty.value) <= 1) {
+        qty.value = String(selectedItem.count);
+      }
+      selectedWrap.append(
+        itemSlot(selectedItem.itemId, selectedItem.count, 40),
+        el('div', { style: 'display: flex; flex-direction: column; gap: 4px;' },
+          el('strong', { style: 'color: var(--white); font-size: 14px;', text: 'เลือกแล้ว: ' + (selectedItem.label || selectedItem.itemId) + ' × ' + selectedItem.count + ' ชิ้น' }),
+          el('span', { class: 'hint', style: 'color: var(--orange); margin: 0;', text: 'แหล่งที่เก็บ: ' + selectedItem.area + ' · รหัส ' + selectedItem.ref })
+        )
+      );
     }
 
     async function load() {
       if (disposed) return;
       try {
         sources = await fetchSources();
-        fillSources();
-        note.textContent = 'ของจะถูกย้ายออกจากช่องที่เลือกทันทีที่ลงขาย · เฉพาะกล่องในพื้นที่ที่โหลดอยู่';
+        if (selectedItem) {
+          selectedItem = sources.find(s => s.ref === selectedItem.ref) || null;
+        }
+        updateSelection();
+        renderSourceGrid();
       } catch (e) {
         sources = [];
-        fillSources();
+        updateSelection();
+        renderSourceGrid();
         if (e.status === 409) note.textContent = 'ต้องเข้าเกมก่อนจึงจะดึงของจากกระเป๋าและกล่องได้';
         else if (e.status !== 401) showError(e);
       }
     }
 
-    select.addEventListener('change', updatePreview);
+    search.addEventListener('input', renderSourceGrid);
     refresh.addEventListener('click', load);
+
     submit.addEventListener('click', async () => {
-      if (busy) return;
-      const item = (sources || []).find(s => s.ref === select.value);
-      if (!item) { toast('เลือกไอเท็มก่อน', 'error'); return; }
+      if (busy || !selectedItem) return;
+      const item = selectedItem;
       const n = Number(qty.value);
       const s = Number(start.value);
       const b = buyout.value === '' ? null : Number(buyout.value);
       const h = Number(hours.value);
-      if (!Number.isInteger(n) || n < 1 || n > item.count) { toast('จำนวนไม่ถูกต้อง', 'error'); return; }
+      if (!Number.isInteger(n) || n < 1 || n > item.count) { toast('จำนวนไม่ถูกต้อง (1-' + item.count + ')', 'error'); return; }
       if (!Number.isInteger(s) || s < 1) { toast('ราคาเริ่มต้นไม่ถูกต้อง', 'error'); return; }
       if (b !== null && (!Number.isInteger(b) || b <= s)) { toast('ซื้อทันทีต้องมากกว่าราคาเริ่ม', 'error'); return; }
       const ok = await confirmModal({
-        title: 'ยืนยันลงขาย',
+        title: 'ยืนยันลงขายในตลาด',
         confirmText: 'ลงขาย',
         lines: [
-          { label: 'ไอเท็ม', value: item.label + ' × ' + money(n) },
+          { label: 'ไอเท็ม', value: (item.label || item.itemId) + ' × ' + money(n) },
           { label: 'แหล่งของ', value: item.area },
           { label: 'ราคาเริ่ม', value: money(s) + ' ' + state.currency },
           { label: 'ซื้อทันที', value: b === null ? 'ไม่ตั้ง' : money(b) + ' ' + state.currency },
@@ -121,7 +160,8 @@ export function render(container) {
         const out = await api('POST', '/api/auctions', {
           ref: item.ref, count: n, startPrice: s, buyout: b === null ? 0 : b, hours: h
         });
-        toast('ลงขายแล้ว รหัส ' + out.id, 'ok');
+        toast('ลงขายแล้ว รหัสประมูล #' + out.id, 'ok');
+        selectedItem = null;
         await load();
       } catch (e) {
         showError(e);
@@ -133,13 +173,16 @@ export function render(container) {
 
     body.append(note,
       el('div', { class: 'card' },
-        el('div', { class: 'field' },
-          el('label', { text: 'ไอเท็มจากกระเป๋า / กล่อง (ITEM SOURCE)' }),
-          select
+        el('div', { style: 'display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;' },
+          el('div', { class: 'field', style: 'flex: 1 1 240px; margin-bottom: 0;' },
+            el('label', { text: 'ตารางของในตัว + เขต (1×1 INVENTORY GRID)' }),
+            search
+          ),
+          refresh
         ),
-        el('div', { style: 'margin-bottom: 18px;' }, refresh),
-        el('div', { class: 'notice' }, selected),
-        el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin: 20px 0;' },
+        gridWrap,
+        selectedWrap,
+        el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin: 24px 0 10px;' },
           el('div', { class: 'field' }, el('label', { text: 'จำนวน (QTY)' }), qty),
           el('div', { class: 'field' }, el('label', { text: 'ราคาเริ่ม (START)' }), start),
           el('div', { class: 'field' }, el('label', { text: 'ซื้อทันที (BUYOUT)' }), buyout),
@@ -147,7 +190,7 @@ export function render(container) {
         ),
         el('div', { class: 'form-actions' }, submit)
       ),
-      el('p', { class: 'hint', text: 'ดูรายการที่ลงแล้วได้ที่หน้า “ซื้อ” หรือ “ประมูล”' }));
+      el('p', { class: 'hint', text: 'ดูรายการที่ลงขายแล้วได้ที่หน้า “ซื้อ” หรือ “ประมูล”' }));
     load();
   }
 

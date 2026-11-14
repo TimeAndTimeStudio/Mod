@@ -365,7 +365,10 @@ export async function refreshStatus() {
       await api('GET', '/api/health');
       statusFailures = 0;
       statusDelay = 5000;
-      if (banner) banner.hidden = true;
+      if (banner) {
+        banner.hidden = true;
+        banner.style.display = 'none';
+      }
       paintStatus();
       return;
     }
@@ -375,16 +378,25 @@ export async function refreshStatus() {
     if (typeof data.mailboxCount === 'number') state.mailboxCount = data.mailboxCount;
     statusFailures = 0;
     statusDelay = 5000;
-    if (banner) banner.hidden = true;
+    if (banner) {
+      banner.hidden = true;
+      banner.style.display = 'none';
+    }
     paintStatus();
   } catch (e) {
     if (e.status === 401 || e.status === 403) {
-      if (banner) banner.hidden = true;
+      if (banner) {
+        banner.hidden = true;
+        banner.style.display = 'none';
+      }
       return;
     }
     statusFailures++;
     if (statusFailures >= 2) {
-      if (banner) banner.hidden = false;
+      if (banner) {
+        banner.hidden = false;
+        banner.style.display = 'flex';
+      }
     }
     statusDelay = 2500;
   }
@@ -409,7 +421,10 @@ export function startStatus() {
 
 export async function boot() {
   const banner = document.getElementById('offline-banner');
-  if (banner) banner.hidden = true;
+  if (banner) {
+    banner.hidden = true;
+    banner.style.display = 'none';
+  }
   startRouter();
   if (state.session) {
     try {

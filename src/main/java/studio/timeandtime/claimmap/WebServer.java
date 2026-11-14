@@ -118,6 +118,10 @@ public final class WebServer {
 				requireMethod(ex, method, "GET");
 				sendWeb(ex);
 			}
+			case "/api/health" -> {
+				requireMethod(ex, method, "GET");
+				handleHealth(ex);
+			}
 			case "/api/login" -> {
 				requireMethod(ex, method, "POST");
 				handleLogin(ex);
@@ -353,6 +357,15 @@ public final class WebServer {
 		try (OutputStream os = ex.getResponseBody()) {
 			os.write(webPage);
 		}
+	}
+
+	/** GET /api/health -> {"status":"ok","name":"Time SMP","time":...}. Public. */
+	private void handleHealth(HttpExchange ex) throws IOException {
+		JsonObject out = new JsonObject();
+		out.addProperty("status", "ok");
+		out.addProperty("name", "Time SMP");
+		out.addProperty("time", System.currentTimeMillis());
+		Json.send(ex, 200, out);
 	}
 
 	/** POST /api/login {"name","password"} -> {"token","name","admin"}. Public. */
