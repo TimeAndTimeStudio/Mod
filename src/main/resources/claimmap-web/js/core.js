@@ -357,6 +357,7 @@ export async function renderRoute() {
   try {
     const handle = await route.render(app);
     currentApp = handle && typeof handle.dispose === 'function' ? handle : null;
+    hydrateIcons(app);
   } catch (e) {
     if (e && e.status === 401) return;
     app.append(

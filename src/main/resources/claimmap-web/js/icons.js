@@ -60,16 +60,20 @@ export function craftyIcon(itemId, size = 36) {
   img.width = size;
   img.height = size;
   img.loading = 'lazy';
-  img.src = `https://crafty.gg/icons-mc/${rawId}.png`;
+  img.src = `/icons/items/${rawId}.png`;
   img.onerror = () => {
-    img.style.display = 'none';
-    const parent = img.parentNode;
-    if (parent && !parent.querySelector('.inv-ph')) {
-      const ph = document.createElement('div');
-      ph.className = 'inv-ph';
-      ph.textContent = rawId.slice(0, 2).toUpperCase();
-      parent.appendChild(ph);
-    }
+    // If exact name is not found, fallback to crafty.gg or letter placeholder
+    img.onerror = () => {
+      img.style.display = 'none';
+      const parent = img.parentNode;
+      if (parent && !parent.querySelector('.inv-ph')) {
+        const ph = document.createElement('div');
+        ph.className = 'inv-ph';
+        ph.textContent = rawId.slice(0, 2).toUpperCase();
+        parent.appendChild(ph);
+      }
+    };
+    img.src = `https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.21.1/items/${rawId}.png`;
   };
   return img;
 }

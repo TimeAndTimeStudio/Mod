@@ -218,7 +218,7 @@ public final class WebServer {
 				handleAdminAudit(ex);
 			}
 			default -> {
-				if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/icons/")) {
+				if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/icons/") || path.startsWith("/img/") || path.equals("/favicon.png")) {
 					requireMethod(ex, method, "GET");
 					handleStatic(ex, path);
 				} else if (path.startsWith("/api/admin/")) {

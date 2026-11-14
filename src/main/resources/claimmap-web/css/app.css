@@ -144,8 +144,15 @@ p {
 .brand-logo {
   height: 28px;
   width: auto;
+  max-width: 140px;
   object-fit: contain;
   display: block;
+}
+
+.ui-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .brand-name {
