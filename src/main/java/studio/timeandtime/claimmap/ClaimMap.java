@@ -48,6 +48,7 @@ public class ClaimMap implements ModInitializer {
 	private MailboxManager mailbox;
 	private ShopManager shop;
 	private AuctionManager auctions;
+	private TradeManager trades;
 	private AuditLog audit;
 	private AdminService admin;
 	private AuthGate authGate;
@@ -78,6 +79,8 @@ public class ClaimMap implements ModInitializer {
 		auctions = new AuctionManager(config.dataDir(), config, economy, mailbox, System::currentTimeMillis);
 		auctions.load();
 		auctions.validateEscrow();
+		trades = new TradeManager(config.dataDir(), System::currentTimeMillis);
+		trades.load();
 		shop = new ShopManager(config, economy, mailbox, prices, System::currentTimeMillis);
 		shop.attachAuctions(auctions);
 		audit = new AuditLog(config.dataDir(), System::currentTimeMillis);
@@ -87,7 +90,7 @@ public class ClaimMap implements ModInitializer {
 					return s != null && s.getPlayerList().getPlayer(uuid) != null;
 				});
 		protection = new Protection(regions);
-		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions, admin);
+		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions, trades, admin);
 
 		backupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
 			Thread t = new Thread(r, "claimmap-backup");

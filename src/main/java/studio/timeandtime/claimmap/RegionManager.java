@@ -135,6 +135,18 @@ public final class RegionManager {
 		return out;
 	}
 
+	/** Cells the player owns or is a member of (used by web item sources). */
+	public List<CellData> cellsAccessibleBy(String uuid) {
+		List<CellData> out = new ArrayList<>();
+		if (uuid == null) return out;
+		synchronized (lock) {
+			for (CellData c : cells.values()) {
+				if (c.hasAccess(uuid)) out.add(c);
+			}
+		}
+		return out;
+	}
+
 	public int countClaimedBy(String uuid) {
 		int n = 0;
 		synchronized (lock) {

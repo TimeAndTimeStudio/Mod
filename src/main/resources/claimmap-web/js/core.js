@@ -267,7 +267,18 @@ function renderLogin(container) {
   name.focus();
 }
 
+const TAB_ROUTES = { home: 'btn-home', map: 'btn-map', buy: 'btn-buy', sell: 'btn-sell', trade: 'btn-trade', mailbox: 'btn-mailbox' };
+
+function paintTabs() {
+  const active = currentRoute();
+  for (const [route, id] of Object.entries(TAB_ROUTES)) {
+    const button = document.getElementById(id);
+    if (button) button.classList.toggle('active', route === active);
+  }
+}
+
 export async function renderRoute() {
+  paintTabs();
   const app = document.getElementById('app');
   if (!app) return;
   if (currentApp && typeof currentApp.dispose === 'function') {
@@ -310,11 +321,10 @@ export function startRouter() {
     renderRoute();
   });
   window.addEventListener('hashchange', renderRoute);
-  document.getElementById('btn-home').addEventListener('click', () => navigate('home'));
-  document.getElementById('btn-back').addEventListener('click', () => {
-    if (history.length > 1) history.back();
-    else navigate('home');
-  });
+  for (const [route, id] of Object.entries(TAB_ROUTES)) {
+    const button = document.getElementById(id);
+    if (button) button.addEventListener('click', () => navigate(route));
+  }
 }
 
 // ---- status bar -----------------------------------------------------------

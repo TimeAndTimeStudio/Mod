@@ -21,7 +21,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.ClientboundClearDialogPacket;
 import net.minecraft.network.protocol.common.ClientboundShowDialogPacket;
 import net.minecraft.network.protocol.configuration.ClientboundFinishConfigurationPacket;
-import net.minecraft.network.protocol.configuration.ServerboundFinishConfigurationPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.dialog.ActionButton;
@@ -36,6 +35,7 @@ import net.minecraft.server.dialog.body.DialogBody;
 import net.minecraft.server.dialog.body.PlainMessage;
 import net.minecraft.server.dialog.input.TextInput;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerCommonPacketListenerImpl;
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -95,7 +95,7 @@ public final class AuthGate {
 		Phase phase;
 		int fails;
 		final long startedAtMs;
-		boolean finishSeen;
+		boolean dialogShown;
 		boolean pending;
 
 		ConfigState(ServerConfigurationPacketListenerImpl listener, String name, UUID uuid, Phase phase, long startedAtMs) {
@@ -178,7 +178,12 @@ public final class AuthGate {
 	// ---- hooks --------------------------------------------------------------
 
 	public void registerHooks() {
-		ServerConfigurationConnectionEvents.BEFORE_CONFIGURE.register((listener, server) -> beginConfiguration(listener));
+		// CONFIGURE runs on the netty event loop while Fabric is still setting
+		// up the configuration pipeline, and sending a dialog there fails with
+		// "Pipeline has no outbound protocol configured". Only prepare the
+		// state here; the dialog is sent from handleConfigurationFinished,
+		// which runs on the server thread after the pipeline is ready.
+		ServerConfigurationConnectionEvents.CONFIGURE.register((listener, server) -> beginConfiguration(listener));
 		ServerConfigurationConnectionEvents.DISCONNECT.register((listener, server) -> clearConfiguration(listener));
 
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> onJoin(handler.getPlayer()));
@@ -230,7 +235,6 @@ public final class AuthGate {
 		ConfigState state = new ConfigState(listener, profile.name(), profile.id(),
 				hasPassword ? Phase.NEED_LOGIN : Phase.NEED_REGISTER, System.currentTimeMillis());
 		configStates.put(profile.id(), state);
-		sendDialog(state, null);
 	}
 
 	private void clearConfiguration(ServerConfigurationPacketListenerImpl listener) {
@@ -276,6 +280,7 @@ public final class AuthGate {
 	private void sendDialog(ConfigState state, String error) {
 		if (state.phase == Phase.AUTHED) return;
 		Dialog dialog = state.phase == Phase.NEED_LOGIN ? loginDialog(error) : registerDialog(error);
+		state.dialogShown = true;
 		state.listener.send(new ClientboundShowDialogPacket(Holder.direct(dialog)));
 	}
 
@@ -298,7 +303,7 @@ public final class AuthGate {
 	private static Dialog dialog(String title, String error, List<Input> inputs, ActionButton enter) {
 		List<DialogBody> body = error == null
 				? List.<DialogBody>of(new PlainMessage(Component.literal(
-						"รหัสผ่านใช้ร่วมกับเว็บ Claim Map · ช่องกรอกยังไม่มีโหมดซ่อนรหัส"), 260))
+						"รหัสผ่านใช้ร่วมกับเว็บ Claim Map"), 260))
 				: List.<DialogBody>of(new PlainMessage(Component.literal(error), 260));
 		CommonDialogData common = new CommonDialogData(
 				Component.literal(title),
@@ -319,6 +324,32 @@ public final class AuthGate {
 
 	// ---- packets from the configuration phase ------------------------------
 
+	/**
+	 * Called by the ServerCommonPacketListenerImpl mixin before the server sends
+	 * {@link ClientboundFinishConfigurationPacket}. That packet is terminal: the
+	 * configuration encoder is removed from the pipeline right after it is sent,
+	 * so anything sent after it fails. Holding it until authentication keeps the
+	 * client in configuration and lets the dialog use the working encoder.
+	 *
+	 * @return true when the packet may be sent.
+	 */
+	public static boolean allowFinishConfigurationPacket(ServerCommonPacketListenerImpl listener) {
+		if (!(listener instanceof ServerConfigurationPacketListenerImpl configListener)) return true;
+		ClaimMap mod = ClaimMap.instance();
+		AuthGate gate = mod == null ? null : mod.authGate();
+		return gate == null || gate.onFinishConfigurationPacket(configListener);
+	}
+
+	private boolean onFinishConfigurationPacket(ServerConfigurationPacketListenerImpl listener) {
+		GameProfile profile = profileOf(listener);
+		if (profile == null || profile.id() == null) return false;
+		ConfigState state = configStates.get(profile.id());
+		if (state == null || state.listener != listener) return false;
+		if (state.phase == Phase.AUTHED) return true;
+		if (!state.dialogShown) sendDialog(state, null);
+		return false;
+	}
+
 	/** Called by the ServerConfigurationPacketListenerImpl mixin. False = cancel. */
 	public static boolean allowConfigurationFinished(ServerConfigurationPacketListenerImpl listener) {
 		ClaimMap mod = ClaimMap.instance();
@@ -330,16 +361,7 @@ public final class AuthGate {
 		GameProfile profile = profileOf(listener);
 		if (profile == null || profile.id() == null) return false;
 		ConfigState state = configStates.get(profile.id());
-		if (state != null && state.phase == Phase.AUTHED) return true;
-		if (state == null) {
-			beginConfiguration(listener);
-			state = configStates.get(profile.id());
-		}
-		if (state != null) {
-			state.finishSeen = true;
-			sendDialog(state, null);
-		}
-		return false;
+		return state != null && state.phase == Phase.AUTHED;
 	}
 
 	/** Called by the ServerCommonPacketListenerImpl mixin (server thread). */
@@ -450,12 +472,9 @@ public final class AuthGate {
 		state.fails = 0;
 		economy.ensureAccount(state.uuid);
 		state.listener.send(ClientboundClearDialogPacket.INSTANCE);
-		if (state.finishSeen) {
-			// The client already asked to enter the world; continue immediately.
-			state.listener.handleConfigurationFinished(ServerboundFinishConfigurationPacket.INSTANCE);
-		} else {
-			state.listener.send(ClientboundFinishConfigurationPacket.INSTANCE);
-		}
+		// The gate in allowFinishConfigurationPacket now lets this through, which
+		// moves the client to PLAY; its finish acknowledgement spawns the player.
+		state.listener.send(ClientboundFinishConfigurationPacket.INSTANCE);
 	}
 
 	private void failed(ConfigState state, String message) {

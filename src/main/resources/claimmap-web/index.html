@@ -3,13 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#e96f00">
-<title>Claim Map</title>
+<meta name="theme-color" content="#0f766e">
+<title>Claim Map Market</title>
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 <header id="statusbar">
-  <div class="who"><span id="who-name">ยังไม่ได้เข้าสู่ระบบ</span><span id="who-role"></span></div>
+  <div class="brand">
+    <span class="brand-mark">CM</span>
+    <div class="who"><span id="who-name">ยังไม่ได้เข้าสู่ระบบ</span><span id="who-role"></span></div>
+  </div>
   <div class="money">
     <span id="balance" title="ยอดเงิน">0</span>
     <span id="currency">เหรียญ</span>
@@ -18,9 +21,13 @@
 </header>
 <div id="offline-banner" hidden>เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — กำลังลองใหม่</div>
 <main id="app" aria-live="polite"></main>
-<nav id="tabbar">
-  <button id="btn-home" type="button">🏠 หน้าแรก</button>
-  <button id="btn-back" type="button">← ย้อนกลับ</button>
+<nav id="tabbar" aria-label="เมนูหลัก">
+  <button id="btn-home" type="button"><span class="nav-ico">🏠</span>หน้าแรก</button>
+  <button id="btn-map" type="button"><span class="nav-ico">🗺</span>แผนที่</button>
+  <button id="btn-buy" type="button"><span class="nav-ico">🛒</span>ซื้อ</button>
+  <button id="btn-sell" type="button"><span class="nav-ico">🏷</span>ลงขาย</button>
+  <button id="btn-trade" type="button"><span class="nav-ico">🤝</span>เทรด</button>
+  <button id="btn-mailbox" type="button"><span class="nav-ico">📦</span>กล่อง</button>
 </nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="/js/main.js"></script>
