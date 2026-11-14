@@ -48,6 +48,8 @@ public class ClaimMap implements ModInitializer {
 	private MailboxManager mailbox;
 	private ShopManager shop;
 	private AuctionManager auctions;
+	private AuditLog audit;
+	private AdminService admin;
 	private AuthGate authGate;
 	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
@@ -78,8 +80,14 @@ public class ClaimMap implements ModInitializer {
 		auctions.validateEscrow();
 		shop = new ShopManager(config, economy, mailbox, prices, System::currentTimeMillis);
 		shop.attachAuctions(auctions);
+		audit = new AuditLog(config.dataDir(), System::currentTimeMillis);
+		admin = new AdminService(config, economy, accounts, links, prices, auctions, mailbox, shop, audit,
+				uuid -> {
+					MinecraftServer s = server;
+					return s != null && s.getPlayerList().getPlayer(uuid) != null;
+				});
 		protection = new Protection(regions);
-		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions);
+		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions, admin);
 
 		backupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
 			Thread t = new Thread(r, "claimmap-backup");
@@ -94,8 +102,8 @@ public class ClaimMap implements ModInitializer {
 		});
 		prices.start(priceExecutor);
 
-		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices)
-				.register();
+		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices,
+				admin).register();
 		new AuctionTicker(auctions).register();
 		protection.register();
 		authGate.registerHooks();

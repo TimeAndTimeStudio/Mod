@@ -83,6 +83,7 @@ public final class PriceService {
 	private volatile boolean loggedMissingConfig;
 	private ScheduledFuture<?> task;
 	private final Set<String> configBlocked = new HashSet<>();
+	private volatile Set<String> fileUnblocked = Set.of();
 
 	public PriceService(Path dir, ClaimMapConfig cfg, LongSupplier now) {
 		this.dir = dir;
@@ -143,21 +144,25 @@ public final class PriceService {
 				}
 			}
 			overrides = Map.copyOf(o);
-			Set<String> blocked = new HashSet<>();
-			JsonArray arr = root.getAsJsonArray("blocked");
-			if (arr != null) {
-				for (JsonElement e : arr) {
-					if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
-						blocked.add(normalize(e.getAsString()));
-					}
-				}
-			}
-			fileBlocked = Set.copyOf(blocked);
+			fileBlocked = readIdSet(root.getAsJsonArray("blocked"));
+			fileUnblocked = readIdSet(root.getAsJsonArray("unblocked"));
 		} catch (Exception e) {
 			ClaimMap.LOGGER.warn("[claimmap] Could not read price-overrides.json ({})", e.getMessage());
 			overrides = Map.of();
 			fileBlocked = Set.of();
+			fileUnblocked = Set.of();
 		}
+	}
+
+	private static Set<String> readIdSet(JsonArray arr) {
+		if (arr == null) return Set.of();
+		Set<String> out = new HashSet<>();
+		for (JsonElement e : arr) {
+			if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+				out.add(normalize(e.getAsString()));
+			}
+		}
+		return Set.copyOf(out);
 	}
 
 	// ---- refresh ------------------------------------------------------------
@@ -315,7 +320,8 @@ public final class PriceService {
 
 	public boolean isBlocked(String itemId) {
 		String id = normalize(itemId);
-		return configBlocked.contains(id) || fileBlocked.contains(id);
+		if (fileBlocked.contains(id)) return true;
+		return configBlocked.contains(id) && !fileUnblocked.contains(id);
 	}
 
 	/** Immutable copy of every priced, non-blocked item (registry filtering happens at the web layer). */
@@ -377,10 +383,20 @@ public final class PriceService {
 	public void setBlocked(String itemId, boolean blocked) {
 		String id = normalize(itemId);
 		synchronized (Market.LOCK) {
-			Set<String> copy = new HashSet<>(fileBlocked);
-			if (blocked) copy.add(id);
-			else copy.remove(id);
-			fileBlocked = Set.copyOf(copy);
+			Set<String> blockedIds = new HashSet<>(fileBlocked);
+			Set<String> unblockedIds = new HashSet<>(fileUnblocked);
+			if (blocked) {
+				blockedIds.add(id);
+				unblockedIds.remove(id);
+			} else {
+				blockedIds.remove(id);
+				// Let an admin unblock an item that config ``blockedItems`` lists,
+				// without rewriting claimmap.properties (PHASES.md 7.3).
+				if (configBlocked.contains(id)) unblockedIds.add(id);
+				else unblockedIds.remove(id);
+			}
+			fileBlocked = Set.copyOf(blockedIds);
+			fileUnblocked = Set.copyOf(unblockedIds);
 			writeOverridesFile();
 		}
 	}
@@ -391,6 +407,7 @@ public final class PriceService {
 
 	public Set<String> blockedView() {
 		Set<String> all = new HashSet<>(configBlocked);
+		all.removeAll(fileUnblocked);
 		all.addAll(fileBlocked);
 		return Set.copyOf(all);
 	}
@@ -425,6 +442,9 @@ public final class PriceService {
 			JsonArray blocked = new JsonArray();
 			for (String id : new TreeSet<>(fileBlocked)) blocked.add(id);
 			root.add("blocked", blocked);
+			JsonArray unblocked = new JsonArray();
+			for (String id : new TreeSet<>(fileUnblocked)) unblocked.add(id);
+			root.add("unblocked", unblocked);
 			writeAtomic(overridesFile, GSON.toJson(root));
 		} catch (IOException e) {
 			ClaimMap.LOGGER.error("[claimmap] Could not write price-overrides.json", e);

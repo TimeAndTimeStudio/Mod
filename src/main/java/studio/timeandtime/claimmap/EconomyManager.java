@@ -296,6 +296,19 @@ public final class EconomyManager {
 		}
 	}
 
+	/** Snapshot of every player balance (admin overview). */
+	public Map<UUID, Long> balancesView() {
+		synchronized (Market.LOCK) {
+			return Map.copyOf(balances);
+		}
+	}
+
+	public Set<UUID> frozenView() {
+		synchronized (Market.LOCK) {
+			return Set.copyOf(frozen);
+		}
+	}
+
 	public long escrowBalance(String escrowId) {
 		if (escrowId == null) return 0;
 		synchronized (Market.LOCK) {

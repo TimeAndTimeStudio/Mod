@@ -122,7 +122,7 @@ public final class AccountManager {
 		String n = name.trim();
 		synchronized (lock) {
 			for (Account a : accounts.values()) {
-				if (a.name != null && a.name.equalsIgnoreCase(n) && a.hash != null) {
+				if (a.name != null && a.name.equalsIgnoreCase(n) && a.hash != null && !a.hash.isEmpty()) {
 					try {
 						return Optional.of(UUID.fromString(a.uuid));
 					} catch (RuntimeException e) {
@@ -132,6 +132,38 @@ public final class AccountManager {
 			}
 		}
 		return Optional.empty();
+	}
+
+	/** UUID by display name regardless of whether a password is set (admin use). */
+	public Optional<UUID> anyUuidOf(String name) {
+		if (name == null || name.isBlank()) return Optional.empty();
+		String n = name.trim();
+		synchronized (lock) {
+			for (Account a : accounts.values()) {
+				if (a.name != null && a.name.equalsIgnoreCase(n)) {
+					try {
+						return Optional.of(UUID.fromString(a.uuid));
+					} catch (RuntimeException e) {
+						return Optional.empty();
+					}
+				}
+			}
+		}
+		return Optional.empty();
+	}
+
+	public record Identity(String uuid, String name) {
+	}
+
+	/** Every known account (admin overview), newest name wins per uuid. */
+	public List<Identity> identities() {
+		synchronized (lock) {
+			List<Identity> out = new ArrayList<>();
+			for (Account a : accounts.values()) {
+				out.add(new Identity(a.uuid, a.name == null ? "" : a.name));
+			}
+			return out;
+		}
 	}
 
 	/** Current display name for a UUID, if the account exists. */
@@ -146,7 +178,24 @@ public final class AccountManager {
 	public boolean hasPassword(String uuid) {
 		synchronized (lock) {
 			Account a = accounts.get(uuid);
-			return a != null && a.hash != null;
+			return a != null && a.hash != null && !a.hash.isEmpty();
+		}
+	}
+
+	/**
+	 * Forgets the password of one account (admin reset, PHASES.md 7.3).
+	 * The name is kept so the player is told to {@code /register} again.
+	 */
+	public boolean resetPassword(String uuid) {
+		if (uuid == null) return false;
+		synchronized (lock) {
+			Account a = accounts.get(uuid);
+			if (a == null) return false;
+			a.salt = "";
+			a.hash = "";
+			a.updatedAt = System.currentTimeMillis();
+			save();
+			return true;
 		}
 	}
 
@@ -159,7 +208,7 @@ public final class AccountManager {
 		synchronized (lock) {
 			String n = name.trim();
 			for (Account a : accounts.values()) {
-				if (a.name != null && a.name.equalsIgnoreCase(n) && a.hash != null) {
+				if (a.name != null && a.name.equalsIgnoreCase(n) && a.hash != null && !a.hash.isEmpty()) {
 					if (!PasswordHasher.verify(a.hash, a.salt, plain)) return null;
 					if (!PasswordHasher.isModern(a.hash)) {
 						a.hash = PasswordHasher.hash(plain, pbkdf2Iterations);

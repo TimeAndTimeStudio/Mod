@@ -1,7 +1,9 @@
 package studio.timeandtime.claimmap;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -37,6 +39,7 @@ public final class WebServer {
 	private final MailboxManager mailbox;
 	private final ShopManager shop;
 	private final AuctionManager auctions;
+	private final AdminService admin;
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
@@ -47,7 +50,7 @@ public final class WebServer {
 
 	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
 			AccountManager accounts, EconomyManager economy, PriceService prices, MailboxManager mailbox,
-			ShopManager shop, AuctionManager auctions) {
+			ShopManager shop, AuctionManager auctions, AdminService admin) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
@@ -58,6 +61,7 @@ public final class WebServer {
 		this.mailbox = mailbox;
 		this.shop = shop;
 		this.auctions = auctions;
+		this.admin = admin;
 	}
 
 	public void start() {
@@ -166,8 +170,42 @@ public final class WebServer {
 				requireMethod(ex, method, "GET");
 				handleAuctions(ex);
 			}
+			case "/api/admin/overview" -> {
+				requireMethod(ex, method, "GET");
+				handleAdminOverview(ex);
+			}
+			case "/api/admin/money" -> {
+				requireMethod(ex, method, "POST");
+				handleAdminMoney(ex);
+			}
+			case "/api/admin/prices/override" -> {
+				requireMethod(ex, method, "POST");
+				handleAdminPriceOverride(ex);
+			}
+			case "/api/admin/prices/block" -> {
+				requireMethod(ex, method, "POST");
+				handleAdminPriceBlock(ex);
+			}
+			case "/api/admin/prices/refresh" -> {
+				requireMethod(ex, method, "POST");
+				handleAdminPriceRefresh(ex);
+			}
+			case "/api/admin/auctions" -> {
+				requireMethod(ex, method, "GET");
+				handleAdminAuctions(ex);
+			}
+			case "/api/admin/config/reload" -> {
+				requireMethod(ex, method, "POST");
+				handleAdminReload(ex);
+			}
+			case "/api/admin/audit" -> {
+				requireMethod(ex, method, "GET");
+				handleAdminAudit(ex);
+			}
 			default -> {
-				if (path.startsWith("/api/auctions/")) {
+				if (path.startsWith("/api/admin/")) {
+					handleAdminDynamic(ex, method, path);
+				} else if (path.startsWith("/api/auctions/")) {
 					handleAuctionAction(ex, method, path);
 				} else if (path.startsWith("/api/map/")) {
 					requireMethod(ex, method, "GET");
@@ -800,6 +838,240 @@ public final class WebServer {
 			case FORBIDDEN -> new Json.ApiError(403, "forbidden", "ไม่มีสิทธิ์กับรายการนี้");
 			case BAD_REQUEST -> new Json.ApiError(400, "invalid_amount", "ข้อมูลไม่ถูกต้อง");
 			case DISABLED -> new Json.ApiError(503, "market_disabled", "ระบบตลาดถูกปิดชั่วคราว");
+			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
+		};
+	}
+
+	// ---- admin --------------------------------------------------------------
+
+	private Auth requireAdmin(HttpExchange ex, String path) {
+		Auth a = requireSession(ex);
+		if (!a.admin()) {
+			adminDeny(a.name(), ex, path);
+			throw new Json.ApiError(403, "forbidden", "ต้องเป็นแอดมินเท่านั้น");
+		}
+		return a;
+	}
+
+	private void adminDeny(String actor, HttpExchange ex, String path) {
+		admin.auditDenied(actor, clientIp(ex), path);
+	}
+
+	private String clientIp(HttpExchange ex) {
+		try {
+			return ex.getRemoteAddress().getAddress().getHostAddress();
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+
+	private int queryLimit(HttpExchange ex, int def) {
+		String q = ex.getRequestURI().getQuery();
+		if (q == null) return def;
+		for (String part : q.split("&")) {
+			if (part.startsWith("limit=")) {
+				try {
+					return Math.max(1, Math.min(200, Integer.parseInt(part.substring(6))));
+				} catch (NumberFormatException ignored) {
+					return def;
+				}
+			}
+		}
+		return def;
+	}
+
+	private void handleAdminOverview(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/overview");
+		Json.send(ex, 200, admin.overview(a.name(), clientIp(ex)));
+	}
+
+	private void handleAdminMoney(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/money");
+		JsonObject body = Json.readObject(ex);
+		String player = Json.str(body, "player");
+		String op = Json.str(body, "op");
+		Long amount = Json.integer(body, "amount");
+		String reason = Json.str(body, "reason");
+		if (player == null || player.isBlank() || amount == null) {
+			throw new Json.ApiError(400, "bad_request", "ต้องระบุ player และ amount");
+		}
+		if (!AdminService.validReason(reason)) {
+			throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");
+		}
+		AdminService.MoneyOutcome o = admin.money(a.name(), clientIp(ex), player, op, amount, reason);
+		if (o.result() != AdminService.Result.OK) throw adminError(o.result());
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("balance", o.balance());
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminPriceOverride(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/prices/override");
+		JsonObject body = Json.readObject(ex);
+		String item = Json.str(body, "item");
+		String reason = Json.str(body, "reason");
+		Long base = null;
+		if (body.has("base") && !body.get("base").isJsonNull()) {
+			base = Json.integer(body, "base");
+			if (base == null) throw new Json.ApiError(400, "bad_request", "base ต้องเป็นจำนวนเต็ม หรือ null");
+		}
+		if (item == null || item.isBlank()) {
+			throw new Json.ApiError(400, "invalid_item", "ต้องระบุไอเท็ม");
+		}
+		if (!AdminService.validReason(reason)) throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");
+		AdminService.PriceOutcome o = admin.overridePrice(a.name(), clientIp(ex), item, base, reason);
+		if (o.result() != AdminService.Result.OK) throw adminError(o.result());
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("base", o.base());
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminPriceBlock(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/prices/block");
+		JsonObject body = Json.readObject(ex);
+		String item = Json.str(body, "item");
+		String reason = Json.str(body, "reason");
+		JsonElement el = body.get("blocked");
+		if (item == null || item.isBlank()) throw new Json.ApiError(400, "invalid_item", "ต้องระบุไอเท็ม");
+		if (el == null || !el.isJsonPrimitive() || !el.getAsJsonPrimitive().isBoolean()) {
+			throw new Json.ApiError(400, "bad_request", "blocked ต้องเป็น true/false");
+		}
+		if (!AdminService.validReason(reason)) throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");
+		AdminService.Result r = admin.blockItem(a.name(), clientIp(ex), item, el.getAsBoolean(), reason);
+		if (r != AdminService.Result.OK) throw adminError(r);
+		Json.send(ex, 200, Json.ok());
+	}
+
+	private void handleAdminPriceRefresh(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/prices/refresh");
+		Json.readObject(ex);
+		boolean ok = admin.refreshPrices(a.name(), clientIp(ex));
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", ok);
+		if (!ok) out.addProperty("message", "ดึงราคาไม่สำเร็จ ยังใช้ข้อมูลเดิม");
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminAuctions(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/auctions");
+		JsonObject out = new JsonObject();
+		out.add("auctions", admin.auctionsForAdmin(a.name(), clientIp(ex)));
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminReload(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/config/reload");
+		Json.readObject(ex);
+		boolean noRestartNeeded = admin.reloadConfig(a.name(), clientIp(ex));
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("restartNeeded", !noRestartNeeded);
+		if (!noRestartNeeded) out.addProperty("message", "port/bindAddress ต้องรีสตาร์ทเซิร์ฟเวอร์");
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminAudit(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/audit");
+		int limit = queryLimit(ex, 50);
+		JsonArray lines = new JsonArray();
+		for (String line : admin.auditTail(a.name(), clientIp(ex), limit)) {
+			try {
+				lines.add(JsonParser.parseString(line));
+			} catch (RuntimeException ignored) {
+				// skip a torn line; the file itself is append-only
+			}
+		}
+		JsonObject out = new JsonObject();
+		out.add("lines", lines);
+		Json.send(ex, 200, out);
+	}
+
+	/** GET /api/admin/wallet/{name}, POST /api/admin/auctions/{id}/cancel, ... */
+	private void handleAdminDynamic(HttpExchange ex, String method, String path) throws IOException {
+		String rest = path.substring("/api/admin/".length());
+		if (rest.startsWith("wallet/")) {
+			requireMethod(ex, method, "GET");
+			Auth a = requireAdmin(ex, path);
+			String name = rest.substring("wallet/".length());
+			if (name.isBlank() || name.indexOf('/') >= 0) throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+			int limit = queryLimit(ex, 50);
+			var history = admin.wallet(a.name(), clientIp(ex), name, limit);
+			JsonArray arr = new JsonArray();
+			for (EconomyManager.TxView t : history) {
+				JsonObject o = new JsonObject();
+				o.addProperty("seq", t.seq());
+				o.addProperty("t", t.t());
+				o.addProperty("id", t.id());
+				o.addProperty("dir", t.dir());
+				o.addProperty("other", otherName(t.other()));
+				o.addProperty("amount", t.amount());
+				o.addProperty("reason", t.reason());
+				arr.add(o);
+			}
+			JsonObject out = new JsonObject();
+			out.addProperty("player", name);
+			out.add("history", arr);
+			Json.send(ex, 200, out);
+			return;
+		}
+		if (rest.startsWith("auctions/") && rest.endsWith("/cancel")) {
+			requireMethod(ex, method, "POST");
+			Auth a = requireAdmin(ex, path);
+			String id = rest.substring("auctions/".length(), rest.length() - "/cancel".length());
+			JsonObject body = Json.readObject(ex);
+			String reason = Json.str(body, "reason");
+			if (!AdminService.validReason(reason)) throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");
+			AdminService.Result r = admin.cancelAuction(a.name(), clientIp(ex), id, reason);
+			if (r != AdminService.Result.OK) throw adminError(r);
+			Json.send(ex, 200, Json.ok());
+			return;
+		}
+		if (rest.startsWith("accounts/") && rest.endsWith("/freeze")) {
+			requireMethod(ex, method, "POST");
+			Auth a = requireAdmin(ex, path);
+			String name = rest.substring("accounts/".length(), rest.length() - "/freeze".length());
+			JsonObject body = Json.readObject(ex);
+			JsonElement el = body.get("frozen");
+			String reason = Json.str(body, "reason");
+			if (el == null || !el.isJsonPrimitive() || !el.getAsJsonPrimitive().isBoolean()) {
+				throw new Json.ApiError(400, "bad_request", "frozen ต้องเป็น true/false");
+			}
+			if (!AdminService.validReason(reason)) throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");
+			AdminService.Result r = admin.freeze(a.name(), clientIp(ex), name, el.getAsBoolean(), reason);
+			if (r != AdminService.Result.OK) throw adminError(r);
+			JsonObject out = new JsonObject();
+			out.addProperty("ok", true);
+			out.addProperty("frozen", el.getAsBoolean());
+			Json.send(ex, 200, out);
+			return;
+		}
+		if (rest.startsWith("accounts/") && rest.endsWith("/reset-password")) {
+			requireMethod(ex, method, "POST");
+			Auth a = requireAdmin(ex, path);
+			String name = rest.substring("accounts/".length(), rest.length() - "/reset-password".length());
+			JsonObject body = Json.readObject(ex);
+			String reason = Json.str(body, "reason");
+			if (!AdminService.validReason(reason)) throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");
+			AdminService.Result r = admin.resetPassword(a.name(), clientIp(ex), name, reason);
+			if (r != AdminService.Result.OK) throw adminError(r);
+			JsonObject out = new JsonObject();
+			out.addProperty("ok", true);
+			out.addProperty("message", "ลบรหัสผ่านแล้ว ผู้เล่นต้องเข้าเกมและ /register ใหม่ทันที");
+			Json.send(ex, 200, out);
+			return;
+		}
+		throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+	}
+
+	private Json.ApiError adminError(AdminService.Result r) {
+		return switch (r) {
+			case BAD_REQUEST -> new Json.ApiError(400, "bad_request", "ข้อมูลไม่ถูกต้อง");
+			case NO_ACCOUNT -> new Json.ApiError(404, "player_not_found", "ไม่พบบัญชีผู้เล่นนี้");
+			case INSUFFICIENT -> new Json.ApiError(409, "insufficient_funds", "ยอดเงินไม่พอ (ห้ามติดลบ)");
+			case NOT_FOUND -> new Json.ApiError(404, "not_found", "ไม่พบรายการ");
+			case DISABLED -> new Json.ApiError(503, "market_disabled", "ตลาดถูกปิดชั่วคราว");
 			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
 		};
 	}

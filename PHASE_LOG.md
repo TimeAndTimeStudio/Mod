@@ -330,3 +330,43 @@
 **⚠️ Gate 6 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
 ที่ยังยืนยันไม่ได้เพราะไม่มีไคลเอนต์: `/ah sell` ถอด stack จริงจากมือและคืนของเมื่อล้ม, `/ah` แสดงผลในแชท, `/ah bid`/`/ah cancel` จากในเกม, พฤติกรรมกล่องของเต็มตอนผู้ชนะรับของ, และการที่ผู้เล่นออฟไลน์ตอนปิดประมูล (ของต้องรอในกล่อง)
 → แกนเงิน/escrow/settle และ API ถูกทดสอบครบทั้ง unit + runtime ด้วย fixture
+
+---
+
+### เฟส 7 — ระบบแอดมิน (2026-11-14)
+
+**ไฟล์ที่เพิ่ม**
+- `AdminService.java` — รวมทุกการกระทำแอดมิน (เงิน, freeze, reset password, override/block ราคา, ยกเลิกประมูล, reload config, overview/wallet/audit) ใช้ร่วมกันทั้ง `/api/admin/*` และ `/eco`
+- `AuditLog.java` — `audit.jsonl` append-only, เขียนทั้งสำเร็จและถูกปฏิเสธ, `tail()` ≤ 200 บรรทัด
+- `src/test/java/.../AdminServiceTest.java` (9 เทสต์)
+
+**ไฟล์ที่แก้**
+- `AccountManager.java` — `anyUuidOf(name)` (รวมบัญชีที่ยังไม่มีรหัส), `identities()`, `resetPassword(uuid)` (ลบ hash เก็บชื่อไว้ให้ `/register` ใหม่), `hasPassword`/`uuidOf` ไม่คืนบัญชีที่ hash ว่าง
+- `AuctionManager.java` — `adminCancel(id)`: คืน highBid จาก escrow (bypass freeze), ของคืนผู้ขายทางกล่อง, `CANCELLED`, เรียกซ้ำไม่คืนเงินซ้ำ
+- `EconomyManager.java` — `balancesView()`, `frozenView()`
+- `ClaimMapConfig.java` — `reload()` ที่ไม่เปลี่ยน port/bindAddress/token และคืน false เมื่อต้องรีสตาร์ท
+- `PriceService.java` — เก็บ `unblocked` ใน `price-overrides.json` เพื่อให้แอดมินปลดไอเท็มที่ config บล็อกไว้ได้ (แก้บั๊กที่เจอจากเทสต์) · รูปแบบไฟล์เดิม (`blocked`) ยังอ่านได้
+- `Json.java` — `ok()`
+- `ClaimMap.java` — สร้าง `AuditLog`/`AdminService` (predicate online จาก player list), ส่งเข้า `WebServer`/`ClaimCommands`
+- `WebServer.java` — `/api/admin/overview|money|wallet/{name}|prices/override|prices/block|prices/refresh|auctions|auctions/{id}/cancel|accounts/{name}/freeze|accounts/{name}/reset-password|config/reload|audit` · ทุกตัว `requireSession` → admin (ไม่ใช่ = 403 + audit `admin.denied`)
+- `ClaimCommands.java` — `/eco give|take|set <player> <amount> [reason]` (Brigadier `COMMANDS_ADMIN` + ต้อง AUTHED) เรียก `AdminService` ตัวเดียวกับ API
+
+**การตัดสินใจ**
+- ให้แอดมิน "ปลดบล็อก" ไอเท็มที่อยู่ใน `blockedItems` ได้ โดยเก็บ `unblocked` แยกใน `price-overrides.json` (ไม่เขียนทับ properties)
+- `take` เกินยอด → 409 `insufficient_funds` (ไม่ยอมให้ติดลบ) · `set` คำนวณส่วนต่างด้วย `give`/`take` reason `admin.set`
+- `/api/admin/wallet` ตอบ `player_not_found` (404) เมื่อไม่มีบัญชี — เป็นรหัสที่ยังไม่มีในแค็ตตาล็อก E แต่ตรงความหมายกว่า `not_found`
+- `admin.overview` และ `audit` เขียน audit ทุกครั้งที่ถูกเรียก
+
+**ผลทดสอบ**
+- [x] `./gradlew test` ผ่าน 84 เทสต์ (เพิ่ม 9 AdminService)
+- [x] runtime 26.3: Bob (player) เรียก `/api/admin/*` ทั้ง 12 endpoint → 403 `forbidden` ทุกตัว และมีบรรทัด `admin.denied` ใน audit
+- [x] Alice (admin): overview ได้ `invariantOk:true`, `players` 3 คน; `give` Bob 7 → 200 balance 864; `take` 999999 → 409; audit มีทั้ง `ok:true` และ `ok:false` พร้อม IP
+- [x] freeze Bob → `POST /api/pay` 409 `account_frozen`; unfreeze → 200
+- [x] `reset-password` ของ Eve → hash ถูกลบ, session ถูกยกเลิก, ชื่อยังอยู่
+- [x] `prices/block` ปลด `bedrock` → `isBlocked=false` (ไฟล์มี `unblocked:["minecraft:bedrock"]`)
+- [x] build 26.3 ✅ · 26.2 ✅
+- [ ] `/eco` ในเกมจริง (ต้องมีไคลเอนต์ + OP) — unit test ของ `AdminService.money` ครอบตรรกะแล้ว
+- [ ] adminCancel ที่มีผู้เสนอราคาใน runtime — unit test `adminCancelRefundsTheBidderAndReturnsTheItemOnce` ครอบ (ลงประมูลในเกมไม่ได้ในสภาพแวดล้อมนี้)
+
+**⚠️ ข้อจำกัด**
+- reset-password ระหว่างที่ผู้เล่นยังไม่ได้ตั้งรหัสใหม่ ใน offline-mode ใครสวมชื่อนั้นเข้าเกมก่อนจะตั้งรหัสได้ → ต้องแจ้งเจ้าของชื่อให้เข้าเกมทันที (จะเตือนใน UI เฟส 8)

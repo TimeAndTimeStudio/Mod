@@ -187,6 +187,28 @@ public final class ClaimMapConfig {
 		}
 	}
 
+	/**
+	 * Reloads the editable values without changing the listening socket
+	 * (PHASES.md 7.3): {@code port}, {@code bindAddress} and the generated
+	 * master token stay as they were until the next real restart.
+	 * Returns false when the fixed keys were edited, so the caller can say so.
+	 */
+	public boolean reload() {
+		int oldPort = port;
+		String oldBind = bindAddress;
+		String oldToken = token;
+		load();
+		boolean restartNeeded = port != oldPort || !bindAddress.equals(oldBind);
+		port = oldPort;
+		bindAddress = oldBind;
+		token = oldToken;
+		props.setProperty("port", Integer.toString(port));
+		props.setProperty("bindAddress", bindAddress);
+		props.setProperty("token", token);
+		save();
+		return !restartNeeded;
+	}
+
 	public void save() {
 		props.setProperty("port", Integer.toString(port));
 		props.setProperty("bindAddress", bindAddress);

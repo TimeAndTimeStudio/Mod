@@ -409,6 +409,35 @@ public final class AuctionManager {
 		}
 	}
 
+	/**
+	 * Admin cancel of an ACTIVE auction (PHASES.md 7.3): refund the leading bid
+	 * from escrow, return the item to the seller's mailbox, mark CANCELLED.
+	 * Repeat calls are safe: money is refunded only while the auction is ACTIVE.
+	 */
+	public Result adminCancel(String auctionId) {
+		synchronized (Market.LOCK) {
+			if (disabled) return Result.DISABLED;
+			Auction a = byId(auctionId);
+			if (a == null) return Result.NOT_FOUND;
+			if (!a.isActive()) return Result.CLOSED;
+
+			if (a.highBidder != null && a.highBid > 0) {
+				TxResult r = economy.apply(List.of(new Move(Acct.escrow(a.id),
+						Acct.player(UUID.fromString(a.highBidder)), a.highBid,
+						"auction.refund:" + a.id, a.id)), true);
+				if (r != TxResult.OK) return Result.IO_ERROR;
+			}
+			a.highBid = 0;
+			a.status = CANCELLED;
+			a.closedAt = now.getAsLong();
+			if (!a.itemDelivered) {
+				if (deliverSeller(a)) a.itemDelivered = true;
+			}
+			save();
+			return Result.OK;
+		}
+	}
+
 	// ---- settling -----------------------------------------------------------
 
 	/** Called from the server tick and at startup. Idempotent. */

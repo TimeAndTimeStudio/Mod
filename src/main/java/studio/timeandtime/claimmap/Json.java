@@ -133,6 +133,12 @@ final class Json {
 		send(ex, status, o);
 	}
 
+	static JsonObject ok() {
+		JsonObject o = new JsonObject();
+		o.addProperty("ok", true);
+		return o;
+	}
+
 	static void sendError(HttpExchange ex, ApiError e) throws IOException {
 		JsonObject o = new JsonObject();
 		o.addProperty("error", e.code);

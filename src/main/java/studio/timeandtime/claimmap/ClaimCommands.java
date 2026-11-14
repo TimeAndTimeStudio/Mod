@@ -31,6 +31,7 @@ import net.minecraft.world.item.ItemStack;
  *   <li>{@code /ah sell <start> [buyout] [hours]} - list the held stack</li>
  *   <li>{@code /ah bid <id> <amount>} - place a bid</li>
  *   <li>{@code /ah cancel <id>}       - cancel a listing without bids</li>
+ *   <li>{@code /eco give|take|set <player> <amount> [reason]} - admin money (OP only)</li>
  *   <li>{@code /claim}                - claim the cell the player is standing in</li>
  *   <li>{@code /claimmap here}        - show info about the current cell</li>
  *   <li>{@code /claimmap reload}      - reload config + regions (operator)</li>
@@ -47,6 +48,7 @@ public final class ClaimCommands {
 	private final MailboxManager mailbox;
 	private final AuctionManager auctions;
 	private final PriceService prices;
+	private final AdminService admin;
 	private final Map<UUID, SellAllPlan> sellAllPlans = new HashMap<>();
 
 	private record SellAllPlan(Map<String, Integer> items, long expiresAt) {
@@ -54,7 +56,7 @@ public final class ClaimCommands {
 
 	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
 			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
-			AuctionManager auctions, PriceService prices) {
+			AuctionManager auctions, PriceService prices, AdminService admin) {
 		this.regions = regions;
 		this.links = links;
 		this.accounts = accounts;
@@ -65,6 +67,7 @@ public final class ClaimCommands {
 		this.mailbox = mailbox;
 		this.auctions = auctions;
 		this.prices = prices;
+		this.admin = admin;
 	}
 
 	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
@@ -139,6 +142,12 @@ public final class ClaimCommands {
 							.then(Commands.argument("id", StringArgumentType.word())
 									.executes(ctx -> runAhCancel(ctx.getSource(),
 											StringArgumentType.getString(ctx, "id"))))));
+
+			dispatcher.register(Commands.literal("eco")
+					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
+					.then(Commands.literal("give").then(ecoArgs("give")))
+					.then(Commands.literal("take").then(ecoArgs("take")))
+					.then(Commands.literal("set").then(ecoArgs("set"))));
 
 			dispatcher.register(Commands.literal("claim").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaim(ctx.getSource())));
@@ -540,6 +549,46 @@ public final class ClaimCommands {
 			case OFFLINE -> "ต้องเข้าเกมก่อน";
 			default -> "เกิดข้อผิดพลาดภายใน";
 		};
+	}
+
+	private com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> ecoArgs(String op) {
+		return Commands.argument("player", StringArgumentType.word())
+				.then(Commands.argument("amount", StringArgumentType.word())
+						.executes(ctx -> runEco(ctx.getSource(), op,
+								StringArgumentType.getString(ctx, "player"),
+								StringArgumentType.getString(ctx, "amount"), "eco command"))
+						.then(Commands.argument("reason", StringArgumentType.greedyString())
+								.executes(ctx -> runEco(ctx.getSource(), op,
+										StringArgumentType.getString(ctx, "player"),
+										StringArgumentType.getString(ctx, "amount"),
+										StringArgumentType.getString(ctx, "reason")))));
+	}
+
+	private int runEco(CommandSourceStack src, String op, String playerName, String amountText, String reason) {
+		ServerPlayer player = src.getPlayer();
+		if (player != null && !authGate.isAuthed(player.getUUID())) {
+			src.sendFailure(Component.literal("ต้องเข้าสู่ระบบก่อนใช้คำสั่งนี้ (/login)"));
+			return 0;
+		}
+		long amount;
+		try {
+			amount = Long.parseLong(amountText);
+		} catch (NumberFormatException e) {
+			src.sendFailure(Component.literal("จำนวนเงินต้องเป็นจำนวนเต็ม"));
+			return 0;
+		}
+		String actor = player == null ? "CONSOLE" : player.getGameProfile().name();
+		AdminService.MoneyOutcome o = admin.money(actor, null, playerName, op, amount, reason);
+		switch (o.result()) {
+			case OK -> src.sendSuccess(() -> Component.literal("สำเร็จ: " + playerName + " คงเหลือ "
+					+ o.balance() + " " + config.currencyName), true);
+			case NO_ACCOUNT -> src.sendFailure(Component.literal("ไม่พบบัญชีผู้เล่นนี้"));
+			case INSUFFICIENT -> src.sendFailure(Component.literal("ยอดเงินไม่พอ (ห้ามติดลบ)"));
+			case DISABLED -> src.sendFailure(Component.literal("ระบบเงินถูกปิดชั่วคราว"));
+			case BAD_REQUEST -> src.sendFailure(Component.literal("ข้อมูลไม่ถูกต้อง (เหตุผล 3-200 ตัวอักษร)"));
+			default -> src.sendFailure(Component.literal("ทำรายการไม่สำเร็จ"));
+		}
+		return 1;
 	}
 
 	private int runClaim(CommandSourceStack src) {
