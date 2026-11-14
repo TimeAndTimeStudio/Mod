@@ -28,13 +28,14 @@ export function render(container) {
     el('span', { text: 'โอนเงิน' })
   );
 
-  const form = el('div', { class: 'card stack' },
-    el('h2', { text: 'โอนเงินให้ผู้เล่น' }),
-    el('div', { class: 'form-grid' },
-      el('div', null, el('label', { text: 'ผู้รับ' }), toInput),
-      el('div', null, el('label', { text: 'จำนวน (' + (state.currency || 'เหรียญ') + ')' }), amountInput),
-      el('div', null, payButton)
-    )
+  const form = el('div', { class: 'card' },
+    el('h2', { text: 'โอนเงิน // TRANSFER' }),
+    el('p', { class: 'hint', text: 'โอนเหรียญเข้าบัญชีผู้เล่นอื่นทันที' }),
+    el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 18px;' },
+      el('div', { class: 'field' }, el('label', { text: 'ผู้รับ (RECIPIENT)' }), toInput),
+      el('div', { class: 'field' }, el('label', { text: 'จำนวนเงิน (AMOUNT ' + (state.currency || 'เหรียญ') + ')' }), amountInput)
+    ),
+    el('div', { class: 'form-actions' }, payButton)
   );
 
   const history = el('div', { class: 'list' });

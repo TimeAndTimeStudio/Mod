@@ -1,4 +1,4 @@
-import { icon } from '../icons.js';
+import { icon, itemSlot } from '../icons.js';
 import { el, clear, api, state, money, dateTime, confirmModal, showError, toast, refreshStatus } from '../core.js';
 
 export function render(container) {
@@ -14,8 +14,8 @@ export function render(container) {
   container.append(
     el('div', { class: 'page-head' },
       el('div', null,
-        el('h1', { text: 'กล่องรับของ' }),
-        el('p', { class: 'hint', text: 'ของที่ซื้อจากร้าน หรือได้จากประมูล/เทรดจะรออยู่ที่นี่ · ต้องออนไลน์ในเกมก่อนกดรับ' })),
+        el('h1', { text: 'กล่องรับของ // MAILBOX' }),
+        el('p', { class: 'hint', text: 'ของที่ซื้อจากร้านค้าหรือชนะประมูลจะรออยู่ที่นี่ · ตรวจสอบช่องว่างในตัวก่อนกดรับ' })),
       claimButton
     )
   );
@@ -75,6 +75,7 @@ export function render(container) {
     claimButton.disabled = false;
     for (const entry of entries) {
       list.append(el('div', { class: 'item' },
+        itemSlot(entry.itemId, entry.count, 40),
         el('div', { class: 'main' },
           el('div', { class: 'title', text: String(entry.label || entry.itemId) }),
           el('div', { class: 'sub', text: entry.itemId + ' × ' + money(entry.count) + ' · จาก ' + entry.from + ' · ' + dateTime(entry.t) })),

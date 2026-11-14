@@ -21,9 +21,14 @@ export function render(container) {
   const transferButton = el('button', { class: 'secondary', type: 'button', text: 'โอนกรรมสิทธิ์', hidden: true });
   const unclaimButton = el('button', { class: 'secondary', type: 'button', text: 'ยกเลิกการจอง', hidden: true });
   const toolbar = el('div', { class: 'map-toolbar' },
-    el('div', { class: 'field' }, el('label', { text: 'พิกัด X' }), xInput),
-    el('div', { class: 'field' }, el('label', { text: 'พิกัด Z' }), zInput),
-    goButton, zoomIn, zoomOut, claimButton, transferButton, unclaimButton);
+    el('div', { style: 'display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;' },
+      el('div', { class: 'field' }, el('label', { text: 'พิกัด X (COORD)' }), xInput),
+      el('div', { class: 'field' }, el('label', { text: 'พิกัด Z (COORD)' }), zInput),
+      goButton
+    ),
+    el('div', { style: 'display: flex; gap: 8px;' }, zoomIn, zoomOut),
+    el('div', { style: 'display: flex; gap: 10px; flex-wrap: wrap;' }, claimButton, transferButton, unclaimButton)
+  );
   const canvas = el('canvas', { id: 'map-canvas' });
   const info = el('div', { class: 'map-info', text: 'ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง · สีส้ม = ของคุณ สีแดง = ของคนอื่น' });
   container.append(toolbar, canvas, info);

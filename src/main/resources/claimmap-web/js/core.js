@@ -252,18 +252,21 @@ function renderLogin(container) {
         submit.disabled = false;
       }
     }
-  }, el('label', { text: 'ชื่อผู้เล่น' }), name,
-    el('label', { text: 'รหัสผ่าน' }), password,
-    el('div', { class: 'row' }, submit),
-    error);
+  },
+    el('div', { class: 'field' }, el('label', { text: 'ชื่อผู้เล่น (PLAYER NAME)' }), name),
+    el('div', { class: 'field' }, el('label', { text: 'รหัสผ่าน (PASSWORD)' }), password),
+    el('div', { class: 'form-actions' }, submit),
+    error
+  );
 
+  const logoImg = el('img', { src: '/img/logo.png', alt: 'TIME SMP', style: 'height: 44px; object-fit: contain; margin-bottom: 16px; display: block;' });
   const box = el('div', { class: 'login-wrap' },
     el('div', { class: 'card' },
-      el('div', { class: 'login-brand' }, el('span', { class: 'brand-mark' }, 'TS'), el('div', null, el('strong', null, 'TIME SMP'), el('span', null, 'MARKET // TERMINAL'))),
-      el('h1', { text: 'เข้าสู่ระบบ' }),
-      el('p', { class: 'hint', text: 'ใช้ชื่อและรหัสเดียวกับที่ตั้งไว้ในหน้าต่างตอนเข้าเกม' }),
+      logoImg,
+      el('h1', { text: 'เข้าสู่ระบบ // LOGIN' }),
+      el('p', { class: 'hint', text: 'ใช้ชื่อและรหัสผ่านเดียวกับที่ตั้งไว้ตอนเข้าเกม' }),
       form,
-      el('p', { class: 'notice' }, icon('warn', 16), 'ระบบนี้ใช้ HTTP ธรรมดา อย่าใช้รหัสซ้ำกับบริการอื่น')
+      el('p', { class: 'notice' }, icon('warn', 16), 'ระบบนี้เชื่อมต่อกับเซิร์ฟเวอร์ Time SMP ภายใน')
     ));
   container.append(box);
   name.focus();

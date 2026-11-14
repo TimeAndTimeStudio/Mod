@@ -19,11 +19,11 @@ export function render(container) {
   const hero = el('section', { class: 'hero' },
     el('div', { class: 'hero-main' },
       el('div', { class: 'hero-kicker' },
-        el('span', { class: 'sys-tag', text: '// SYSTEM DECK' }),
+        el('span', { class: 'sys-tag', text: '00 // SYSTEM DECK' }),
         el('span', { class: 'sys-code', text: 'NODE: 0.0.0.0:8085' })
       ),
-      el('h1', { text: state.me ? 'ยินดีต้อนรับ, ' + state.me : 'TIME SMP // SURVIVAL MARKET' }),
-      el('p', { class: 'hint', text: 'ระบบศูนย์กลางเศรษฐกิจ การค้าเสรี แลกเปลี่ยนไอเท็ม และการจัดการกรรมสิทธิ์ที่ดิน' })
+      el('h1', { text: state.me ? 'OPERATOR: ' + state.me : 'TIME SMP' }),
+      el('p', { class: 'hint', text: 'ศูนย์กลางการค้าเสรี จัดการกรรมสิทธิ์ที่ดิน และระบบเศรษฐกิจอัตโนมัติ' })
     ),
     el('div', { class: 'hero-stats' },
       el('div', { class: 'stat-box' },
@@ -62,8 +62,8 @@ export function render(container) {
   container.append(
     el('div', { class: 'section-head' },
       el('div', { class: 'section-title-wrap' },
-        el('span', { class: 'section-prefix', text: '//' }),
-        el('h2', { text: 'ระบบตลาดและการค้า' }),
+        el('span', { class: 'section-prefix', text: '01 //' }),
+        el('h2', { text: 'ตลาดและการค้า' }),
         el('span', { class: 'section-tag', text: 'COMMERCE HUB' })
       )
     ),
@@ -100,7 +100,7 @@ export function render(container) {
   container.append(
     el('div', { class: 'section-head' },
       el('div', { class: 'section-title-wrap' },
-        el('span', { class: 'section-prefix', text: '//' }),
+        el('span', { class: 'section-prefix', text: '02 //' }),
         el('h2', { text: 'เครื่องมือและทรัพยากร' }),
         el('span', { class: 'section-tag', text: 'UTILITIES' })
       )
@@ -125,19 +125,22 @@ export function render(container) {
 
   // In-Game Commands Reference Terminal
   container.append(
-    el('div', { class: 'terminal-card' },
-      el('div', { class: 'terminal-header' },
-        el('span', { class: 'terminal-title', text: 'IN-GAME CONSOLE COMMANDS // คำสั่งในเกม' }),
-        el('span', { class: 'terminal-badge', text: 'MINECRAFT 1.21' })
-      ),
-      el('div', { class: 'terminal-body' },
-        el('div', { class: 'cmd-row' }, el('code', { text: '/bal' }), el('span', { text: 'ตรวจสอบยอดเงินคงเหลือในบัญชี' })),
-        el('div', { class: 'cmd-row' }, el('code', { text: '/pay <ผู้เล่น> <จำนวน>' }), el('span', { text: 'โอนเงินให้ผู้เล่นคนอื่นในระบบ' })),
-        el('div', { class: 'cmd-row' }, el('code', { text: '/sell hand | /sell all' }), el('span', { text: 'ขายไอเท็มในมือหรือในกระเป๋าให้ร้านค้า' })),
-        el('div', { class: 'cmd-row' }, el('code', { text: '/buy <item> <จำนวน>' }), el('span', { text: 'ซื้อไอเท็มจากร้านค้า (ส่งเข้ากล่องของ)' })),
-        el('div', { class: 'cmd-row' }, el('code', { text: '/mail | /mail claim' }), el('span', { text: 'ตรวจสอบและรับไอเท็มจากกล่องเข้าตัว' })),
-        el('div', { class: 'cmd-row' }, el('code', { text: '/ah | /ah sell' }), el('span', { text: 'เปิดดูหรือลงขายไอเท็มในตลาดประมูล' })),
-        el('div', { class: 'cmd-row' }, el('code', { text: '/claim | /claimmap here' }), el('span', { text: 'จองพื้นที่ chunk 500x500 หรือตรวจสอบที่ดินปัจจุบัน' }))
+    el('div', { class: 'section-head' },
+      el('div', { class: 'section-title-wrap' },
+        el('span', { class: 'section-prefix', text: '03 //' }),
+        el('h2', { text: 'คำสั่งคอนโซลในเกม' }),
+        el('span', { class: 'section-tag', text: 'CLI REFERENCE' })
+      )
+    ),
+    el('div', { class: 'card' },
+      el('div', { class: 'list' },
+        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/bal' }), el('span', { class: 'hint', text: 'ตรวจสอบยอดเงินคงเหลือในบัญชี' })),
+        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/pay <ผู้เล่น> <จำนวน>' }), el('span', { class: 'hint', text: 'โอนเงินให้ผู้เล่นคนอื่นในระบบ' })),
+        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/sell hand | /sell all' }), el('span', { class: 'hint', text: 'ขายไอเท็มในมือหรือในกระเป๋าให้ร้านค้า' })),
+        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/buy <item> <จำนวน>' }), el('span', { class: 'hint', text: 'ซื้อไอเท็มจากร้านค้า (ส่งเข้ากล่องของ)' })),
+        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/mail | /mail claim' }), el('span', { class: 'hint', text: 'ตรวจสอบและรับไอเท็มจากกล่องเข้าตัว' })),
+        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/claim | /claim transfer <ผู้เล่น>' }), el('span', { class: 'hint', text: 'จองพื้นที่ chunk 500x500 หรือโอนเขตให้ผู้เล่นอื่น' })),
+        el('div', { class: 'item' }, el('code', { class: 'mono-num', text: '/claimmap here | /claimmap transfer' }), el('span', { class: 'hint', text: 'ตรวจสอบพิกัดหรือคำสั่งจัดการเขตแอดมิน' }))
       )
     )
   );

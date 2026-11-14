@@ -1,4 +1,4 @@
-import { icon } from '../icons.js';
+import { icon, itemSlot } from '../icons.js';
 import { el, clear, api, state, money, timeLeft, confirmModal, showError, toast, refreshStatus, navigate } from '../core.js';
 
 export function render(container) {
@@ -78,7 +78,11 @@ export function render(container) {
           await load();
         }
       });
-      actions.append(amount, bidButton);
+      const amountWrap = el('div', { style: 'display: flex; flex-direction: column; gap: 4px;' },
+        el('label', { class: 'mono-label', style: 'font-size: 10px;', text: 'ราคาประมูล' }),
+        amount
+      );
+      actions.append(amountWrap, bidButton);
     }
     if (auction.status === 'ACTIVE' && auction.buyout && !auction.mine) {
       const buyButton = el('button', { class: 'primary', type: 'button', text: 'ซื้อทันที' });
@@ -145,6 +149,7 @@ export function render(container) {
     }
 
     const card = el('div', { class: 'item' },
+      itemSlot(auction.itemId, auction.count, 40),
       el('div', { class: 'main' }, title, sub, meta),
       actions.childElementCount ? actions : null);
     card.dataset.auctionId = auction.id;

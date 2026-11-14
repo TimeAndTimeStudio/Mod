@@ -132,16 +132,21 @@ export function render(container) {
     });
 
     body.append(note,
-      el('div', { class: 'card stack' },
-        el('label', { text: 'ไอเท็มจากกระเป๋า / กล่อง' }), select,
-        el('div', { class: 'row' }, refresh),
-        selected,
-        el('div', { class: 'form-grid' },
-          el('div', null, el('label', { text: 'จำนวน' }), qty),
-          el('div', null, el('label', { text: 'ราคาเริ่ม' }), start),
-          el('div', null, el('label', { text: 'ซื้อทันที (ไม่บังคับ)' }), buyout),
-          el('div', null, el('label', { text: 'ชั่วโมง' }), hours)),
-        el('div', { class: 'row' }, submit)),
+      el('div', { class: 'card' },
+        el('div', { class: 'field' },
+          el('label', { text: 'ไอเท็มจากกระเป๋า / กล่อง (ITEM SOURCE)' }),
+          select
+        ),
+        el('div', { style: 'margin-bottom: 18px;' }, refresh),
+        el('div', { class: 'notice' }, selected),
+        el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin: 20px 0;' },
+          el('div', { class: 'field' }, el('label', { text: 'จำนวน (QTY)' }), qty),
+          el('div', { class: 'field' }, el('label', { text: 'ราคาเริ่ม (START)' }), start),
+          el('div', { class: 'field' }, el('label', { text: 'ซื้อทันที (BUYOUT)' }), buyout),
+          el('div', { class: 'field' }, el('label', { text: 'ระยะเวลา ชม. (HOURS)' }), hours)
+        ),
+        el('div', { class: 'form-actions' }, submit)
+      ),
       el('p', { class: 'hint', text: 'ดูรายการที่ลงแล้วได้ที่หน้า “ซื้อ” หรือ “ประมูล”' }));
     load();
   }
@@ -192,11 +197,17 @@ export function render(container) {
           } finally { busy = false; await load(); }
         });
         list.append(el('div', { class: 'item' },
-          itemSlot(id, 1, 36),
+          itemSlot(id, 1, 40),
           el('div', { class: 'main' },
             el('div', { class: 'title', text: String(info.label || id) }),
             el('div', { class: 'sub', text: id + ' · ขายได้ ' + money(info.sell) + ' ต่อชิ้น' })),
-          el('div', { class: 'actions' }, qty, button)));
+          el('div', { class: 'actions' },
+            el('div', { style: 'display: flex; flex-direction: column; gap: 4px;' },
+              el('label', { class: 'mono-label', style: 'font-size: 10px;', text: 'จำนวน' }),
+              qty
+            ),
+            button
+          )));
       }
     }
 

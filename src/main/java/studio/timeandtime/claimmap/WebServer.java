@@ -43,7 +43,7 @@ public final class WebServer {
 	private final AuctionManager auctions;
 	private final AdminService admin;
 	private static final Pattern STATIC_PATH =
-			Pattern.compile("^/(css|js|icons)/[A-Za-z0-9_./-]+$");
+			Pattern.compile("^/(css|js|icons|img)/[A-Za-z0-9_./-]+$|^/favicon\\.png$");
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;

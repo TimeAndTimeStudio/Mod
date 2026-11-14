@@ -145,11 +145,11 @@ export function render(container) {
       });
     });
     target.append(card('ปรับเงินผู้เล่น',
-      el('label', { text: 'ผู้เล่น' }), player,
-      el('label', { text: 'การกระทำ' }), op,
-      el('label', { text: 'จำนวน' }), amount,
-      el('label', { text: 'เหตุผล' }), reason,
-      el('div', { class: 'row' }, button)));
+      el('div', { class: 'field' }, el('label', { text: 'ผู้เล่น (PLAYER NAME)' }), player),
+      el('div', { class: 'field' }, el('label', { text: 'การกระทำ (ACTION)' }), op),
+      el('div', { class: 'field' }, el('label', { text: 'จำนวน (AMOUNT)' }), amount),
+      el('div', { class: 'field' }, el('label', { text: 'เหตุผล (REASON)' }), reason),
+      el('div', { class: 'form-actions' }, button)));
   }
 
   function renderPrices(target) {
@@ -203,11 +203,10 @@ export function render(container) {
     });
 
     target.append(card('จัดการราคา',
-      el('label', { text: 'item id' }), item,
-      el('label', { text: 'base (ราคากลาง)' }), base,
-      el('label', { text: 'เหตุผล' }), reason,
-      el('div', { class: 'row' }, setButton, blockButton, unblockButton),
-      el('div', { class: 'row' }, refreshButton)));
+      el('div', { class: 'field' }, el('label', { text: 'item id' }), item),
+      el('div', { class: 'field' }, el('label', { text: 'base (ราคากลาง)' }), base),
+      el('div', { class: 'field' }, el('label', { text: 'เหตุผล' }), reason),
+      el('div', { class: 'form-actions' }, setButton, blockButton, unblockButton, refreshButton)));
   }
 
   function renderAuctions(target) {

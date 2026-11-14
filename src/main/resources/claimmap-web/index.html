@@ -3,51 +3,74 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#ff7a00">
-<title>Time SMP // Market Terminal</title>
+<meta name="theme-color" content="#FF4D00">
+<title>TIME SMP // KINETIC TERMINAL</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 <header id="statusbar">
   <div class="brand">
     <div class="brand-box" data-route="home" role="button" tabindex="0">
-      <span class="brand-mark">TS</span>
+      <img src="/img/logo.png" alt="TIME SMP Logo" class="brand-logo-img">
       <div class="brand-text">
         <span class="brand-title">TIME SMP</span>
-        <span class="brand-sub">SURVIVAL // MARKET</span>
+        <span class="brand-sub">SURVIVAL TERMINAL</span>
       </div>
     </div>
     <div class="system-status">
       <span class="status-dot"></span>
-      <span class="status-text">ONLINE</span>
+      <span class="status-text">SYS.ONLINE</span>
     </div>
   </div>
   <div class="user-deck">
     <div class="user-pill" title="สถานะบัญชี">
       <span class="pill-ico" data-icon="user" data-icon-size="14"></span>
-      <span id="who-name">ยังไม่ได้เข้าสู่ระบบ</span>
+      <span id="who-name">OFFLINE</span>
       <span id="who-role" class="badge"></span>
     </div>
-    <button id="btn-balance" class="metric-pill" type="button" data-route="wallet" title="คลิกเพื่อดูกระเป๋าเงิน">
+    <button id="btn-balance" class="metric-pill" type="button" data-route="wallet" title="ดูกระเป๋าเงิน">
       <span class="pill-ico" data-icon="coin" data-icon-size="14"></span>
       <span id="balance">0</span>
       <span id="currency">เหรียญ</span>
     </button>
-    <button id="btn-mailbox-badge" class="metric-pill mailbox-pill" type="button" data-route="mailbox" title="คลิกเพื่อดูกล่องของ">
+    <button id="btn-mailbox-badge" class="metric-pill mailbox-pill" type="button" data-route="mailbox" title="ดูกล่องของ">
       <span class="pill-ico" data-icon="mailbox" data-icon-size="14"></span>
-      <span class="mailbox-label">กล่อง</span>
+      <span class="mailbox-label">MAIL</span>
       <span id="mailbox" class="badge count-badge" data-mailbox-count>0</span>
     </button>
     <button id="btn-logout" class="icon-btn logout-btn" type="button" title="ออกจากระบบ" hidden>
       <span data-icon="logout" data-icon-size="14"></span>
-      <span class="btn-text">ออก</span>
+      <span class="btn-text">EXIT</span>
     </button>
   </div>
 </header>
 
 <div id="offline-banner" hidden>
   <span class="banner-ico" data-icon="warn" data-icon-size="16"></span>
-  <span class="banner-text">ขาดการเชื่อมต่อกับเซิร์ฟเวอร์ — กำลังลองใหม่...</span>
+  <span class="banner-text">DISCONNECTED FROM SERVER // RETRYING CONNECTION...</span>
+</div>
+
+<div class="ticker-strip" aria-hidden="true">
+  <div class="ticker-content">
+    <span>TIME SMP // KINETIC MARKET TERMINAL</span>
+    <span class="ticker-sep">/</span>
+    <span>SYSTEM 0.0.0.0:8085</span>
+    <span class="ticker-sep">/</span>
+    <span>INSTANT COMMERCE</span>
+    <span class="ticker-sep">/</span>
+    <span>CHUNK CLAIMS 500x500</span>
+    <span class="ticker-sep">/</span>
+    <span>JSONBIN PRICE ENGINE</span>
+    <span class="ticker-sep">/</span>
+    <span>TIME SMP // KINETIC MARKET TERMINAL</span>
+    <span class="ticker-sep">/</span>
+    <span>SYSTEM 0.0.0.0:8085</span>
+    <span class="ticker-sep">/</span>
+  </div>
 </div>
 
 <nav id="nav-deck" aria-label="เมนูหลัก">

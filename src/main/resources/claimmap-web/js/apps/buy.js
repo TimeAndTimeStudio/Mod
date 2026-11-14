@@ -75,11 +75,17 @@ export function render(container) {
         }
       });
       list.append(el('div', { class: 'item' },
-        itemSlot(id, 1, 36),
+        itemSlot(id, 1, 40),
         el('div', { class: 'main' },
           el('div', { class: 'title', text: String(info.label || id) }),
           el('div', { class: 'sub', text: id + ' · ซื้อ ' + money(info.buy) + ' ' + (shop.currency || state.currency) + ' ต่อชิ้น' })),
-        el('div', { class: 'actions' }, qty, button)));
+        el('div', { class: 'actions' },
+          el('div', { style: 'display: flex; flex-direction: column; gap: 4px;' },
+            el('label', { class: 'mono-label', style: 'font-size: 10px;', text: 'จำนวน' }),
+            qty
+          ),
+          button
+        )));
     }
   }	function renderPlayers() {
 		if (disposed) return;
