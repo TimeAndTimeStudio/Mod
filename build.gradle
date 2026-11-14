@@ -44,6 +44,13 @@ dependencies {
 
 	// Fabric API.
 	implementation "net.fabricmc.fabric-api:fabric-api:${fabApiVersion}"
+
+	testImplementation "org.junit.jupiter:junit-jupiter:5.13.4"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
 }
 
 processResources {
