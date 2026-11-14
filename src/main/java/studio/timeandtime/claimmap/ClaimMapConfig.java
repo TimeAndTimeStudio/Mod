@@ -50,6 +50,8 @@ public final class ClaimMapConfig {
 	public String currencyName = "เหรียญ";
 	/** Money granted to a brand new player account. */
 	public long startingBalance = 1000L;
+	/** PBKDF2 work factor for in-game / web passwords. */
+	public int pbkdf2Iterations = 210_000;
 
 	public ClaimMapConfig() {
 		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
@@ -85,6 +87,7 @@ public final class ClaimMapConfig {
 		currencyName = props.getProperty("currencyName", currencyName).trim();
 		if (currencyName.isEmpty()) currencyName = "เหรียญ";
 		startingBalance = getLong("startingBalance", startingBalance, 0L, 1_000_000_000_000_000L);
+		pbkdf2Iterations = getInt("pbkdf2Iterations", pbkdf2Iterations, 10_000, 2_000_000);
 
 		boolean changed = false;
 		if (token.isEmpty()) {
@@ -94,13 +97,15 @@ public final class ClaimMapConfig {
 			ClaimMap.LOGGER.info("[claimmap] Generated new master token. Keep it secret! (script-only, never embedded in the web page)");
 		}
 		// Surface the new keys in the owner's file so they can edit them.
-		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance"}) {
+		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance",
+				"pbkdf2Iterations"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
 					case "admins" -> admins;
 					case "currencyName" -> currencyName;
 					case "startingBalance" -> Long.toString(startingBalance);
+					case "pbkdf2Iterations" -> Integer.toString(pbkdf2Iterations);
 					default -> bindAddress;
 				});
 				changed = true;
@@ -129,6 +134,7 @@ public final class ClaimMapConfig {
 		props.setProperty("sessionHours", Integer.toString(sessionHours));
 		props.setProperty("currencyName", currencyName);
 		props.setProperty("startingBalance", Long.toString(startingBalance));
+		props.setProperty("pbkdf2Iterations", Integer.toString(pbkdf2Iterations));
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);

@@ -30,21 +30,36 @@ public final class ClaimCommands {
 	private final AccountManager accounts;
 	private final ClaimMapConfig config;
 	private final EconomyManager economy;
+	private final AuthGate authGate;
 
 	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
-			EconomyManager economy) {
+			EconomyManager economy, AuthGate authGate) {
 		this.regions = regions;
 		this.links = links;
 		this.accounts = accounts;
 		this.config = config;
 		this.economy = economy;
+		this.authGate = authGate;
 	}
 
-	public void register() {
-		CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
-			dispatcher.register(Commands.literal("pass").requires(src -> src.getPlayer() != null)
+	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
+			dispatcher.register(Commands.literal("login").requires(src -> src.getPlayer() != null)
 					.then(Commands.argument("password", StringArgumentType.string())
-							.executes(ctx -> runPass(ctx.getSource(), StringArgumentType.getString(ctx, "password")))));
+							.executes(ctx -> runLogin(ctx.getSource(), StringArgumentType.getString(ctx, "password")))));
+
+			dispatcher.register(Commands.literal("register").requires(src -> src.getPlayer() != null)
+					.then(Commands.argument("password", StringArgumentType.string())
+							.then(Commands.argument("confirm", StringArgumentType.string())
+									.executes(ctx -> runRegister(ctx.getSource(),
+											StringArgumentType.getString(ctx, "password"),
+											StringArgumentType.getString(ctx, "confirm"))))));
+
+			dispatcher.register(Commands.literal("pass").requires(src -> src.getPlayer() != null)
+					.then(Commands.argument("old", StringArgumentType.string())
+							.then(Commands.argument("new", StringArgumentType.string())
+									.executes(ctx -> runPass(ctx.getSource(),
+											StringArgumentType.getString(ctx, "old"),
+											StringArgumentType.getString(ctx, "new"))))));
 
 			dispatcher.register(Commands.literal("bal").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runBal(ctx.getSource())));
@@ -67,23 +82,24 @@ public final class ClaimCommands {
 		});
 	}
 
-	private int runPass(CommandSourceStack src, String password) {
+	private int runLogin(CommandSourceStack src, String password) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		String uuid = player.getUUID().toString();
-		String name = player.getGameProfile().name();
-		// Whitelist check first so a name outside `players` can never set a password.
-		// (The /pass takeover hole itself is closed in phase 3 with AuthGate.)
-		if (!config.isAllowed(name)) {
-			player.sendSystemMessage(Component.literal("ชื่อนี้ไม่อยู่ในรายชื่อผู้เล่น"));
-			return 0;
-		}
-		if (!accounts.setPassword(uuid, name, password)) {
-			player.sendSystemMessage(Component.literal("Invalid password: use 4-64 characters and not include spaces."));
-			return 1;
-		}
-		player.sendSystemMessage(Component.literal("Password set for " + name
-				+ ". Log in on the claim map web page with this name + password."));
+		authGate.handleLogin(player, password);
+		return 1;
+	}
+
+	private int runRegister(CommandSourceStack src, String password, String confirm) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		authGate.handleRegister(player, password, confirm);
+		return 1;
+	}
+
+	private int runPass(CommandSourceStack src, String oldPassword, String newPassword) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		authGate.handleChangePassword(player, oldPassword, newPassword);
 		return 1;
 	}
 

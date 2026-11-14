@@ -111,6 +111,13 @@ public final class LinkManager {
 		return s;
 	}
 
+	/** Drops every web session of an account (password change, admin reset). */
+	public void revokeAllForUuid(String uuid) {
+		if (uuid == null) return;
+		boolean changed = sessions.entrySet().removeIf(e -> uuid.equals(e.getValue().uuid()));
+		if (changed) save();
+	}
+
 	public Session resolve(String token) {
 		purge();
 		if (token == null) return null;

@@ -176,3 +176,45 @@
 **ข้อจำกัด/ค้าง**
 - `/bal` และ `/pay` ในเกมไม่ได้ทดสอบกับไคลเอนต์จริง (ทดสอบเฉพาะผ่าน API + unit test ของ `EconomyManager`)
 - ยังไม่ผูก auth กับเกม (เฟส 3) — ห้ามใช้เงินจริงก่อนเฟส 3 ตามสเปก
+
+---
+
+### เฟส 3 — AuthGate + PBKDF2 (2026-11-14)
+
+**ผล spike dialog (3.1) — สรุป: ใช้ทางสำรอง (คำสั่งแชท)**
+- ตรวจซอร์ส 26.3 และ 26.2 (`genSources`) พบว่ามีระบบ dialog จริง: `net.minecraft.server.dialog.{Dialog,MultiActionDialog,SimpleDialog,ActionButton}`, `input.TextInput`, `DialogAction.WAIT_FOR_RESPONSE`, แพ็กเก็ต `ClientboundShowDialogPacket`, `ServerboundCustomClickActionPacket`, และ `ServerPlayer.openDialog(Holder<Dialog>)` (26.3 บรรทัด 1363 · 26.2 บรรทัด 1309)
+- ค่าจากช่องพิมพ์ถูกส่งกลับผ่าน `dynamic/custom` action → `ClickEvent.Custom` → `ServerboundCustomClickActionPacket` → `MinecraftServer.handleCustomClickAction(...)` ซึ่งเป็น **no-op** (26.3 บรรทัด 2043) และ **ไม่มี Fabric event** ให้ดัก (ตรวจ jar ทุกตัวแล้ว) → ต้องเขียน mixin เพิ่ม
+- ❗ ทดสอบกับไคลเอนต์จริงไม่ได้ในสภาพแวดล้อมนี้ (ไม่มีจอ/ไคลเอนต์เกม) → ตาม A3 เลือก **ทางสำรอง** `/login` `/register` และบันทึกว่า dialog ยังเป็นงานที่ทำต่อได้ในอนาคต
+- ข้อสังเกตเพิ่ม: `TextInput` ไม่มีตัวเลือก mask รหัสผ่าน (`TextInput.java` มีแค่ width/label/initial/maxLength/multiline) → ข้อดีด้านความปลอดภัยของ dialog จึงมีจำกัด (แต่รหัสจะไม่ไปอยู่ใน chat log)
+
+**ไฟล์ที่เพิ่ม**
+- `PasswordHasher.java` — `PBKDF2WithHmacSHA256`, 210000 รอบ (config), salt 16 ไบต์, เก็บ `pbkdf2$<iter>$<saltB64>$<hashB64>`, `MessageDigest.isEqual`, รองรับ SHA-256 เดิม
+- `AuthGate.java` — state machine (`NEED_LOGIN`/`NEED_REGISTER`/`AUTHED`), ผิด 3 ครั้ง/เงียบ 60 วิ → kick, ตรึงตำแหน่ง, บล็อกทุกการกระทำ, ตรวจรหัสบน worker thread แล้วกลับมา `server.execute`
+- `mixin/CommandsMixin.java` — บล็อกทุกคำสั่งก่อนล็อกอิน ยกเว้น `/login` `/register`
+- `mixin/ServerPlayerDropMixin.java` — บล็อกการดรอปของ
+- `src/main/resources/claimmap.mixins.json`
+- `src/test/java/.../{PasswordHasherTest,AuthGateTest}.java` (10 เทสต์)
+
+**ไฟล์ที่แก้**
+- `ClaimMapConfig.java` — `pbkdf2Iterations` (ค่าเริ่ม 210000, validate 10000–2000000)
+- `AccountManager.java` — `setPassword` ใช้ PBKDF2 + กติกา 6–64 ตัวและไม่ซ้ำชื่อ, เพิ่ม `setPasswordHash` (รับ hash ที่คำนวณแล้ว), `verify` รองรับของเก่าและ **rehash เป็น PBKDF2 อัตโนมัติเมื่อล็อกอินสำเร็จ**
+- `LinkManager.java` — `revokeAllForUuid` (ใช้ตอนเปลี่ยนรหัส)
+- `ClaimCommands.java` — `/login <รหัส>`, `/register <รหัส> <ยืนยัน>`, `/pass <รหัสเดิม> <รหัสใหม่>`
+- `ClaimMap.java` — สร้าง/ผูก `AuthGate`, register hooks, `authGate()` accessor
+- `fabric.mod.json` — เพิ่ม `"mixins": ["claimmap.mixins.json"]`
+
+**การตัดสินใจ**
+- เพิ่ม mixin 2 ตัวเล็ก ๆ แม้ไม่อยู่ในรายการไฟล์ของเฟส เพราะ Fabric ไม่มี hook สำหรับบล็อกคำสั่ง/ดรอปของ และ 3.3 อนุญาตให้ใช้ mixin ขนาดเล็ก
+- ไม่บล็อกการ "ล็อกเป้าโดย mob" แยก เพราะ `ALLOW_DAMAGE` กันดาเมจได้แล้ว — บันทึกเป็นข้อจำกัด
+- เงินเริ่มต้น/แจ้งยอดทำตอนผ่านรหัส (`finishAuth`) ตาม 3.2
+
+**ผลทดสอบ (ทำได้จริงในเครื่องนี้)**
+- [x] `./gradlew test` 34 เทสต์ผ่าน (PBKDF2 round-trip/legacy, state machine, กติการหัส)
+- [x] เปิดเซิร์ฟเวอร์ 26.3 → mixin subsystem โหลด `claimmap.mixins.json` ไม่มี injection error (defaultRequire=1 จะล้มทันทีถ้า inject ไม่ได้) `ServerPlayer`/`Commands` ถูกโหลดตอนสตาร์ท
+- [x] ตรวจลายเซ็น 26.2: `performPrefixedCommand`, `drop(boolean)`, `teleportTo(double,double,double)`, `openDialog` มีเหมือน 26.3 → mixin ใช้ได้ทั้งสองเวอร์ชัน
+- [x] บัญชีเก่า (SHA-256) ล็อกอินเว็บสำเร็จ → `accounts.json` เปลี่ยนเป็น `pbkdf2$210000$...` และ `salt=""`; ล็อกอินซ้ำได้ 200; รหัสผิดได้ 401
+- [x] build 26.3 ✅ · 26.2 ✅
+
+**⚠️ Gate 3 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
+ข้อที่ต้องมีไคลเอนต์ Minecraft จึงจะยืนยันได้: ผู้เล่นใหม่เห็นคำสั่งตั้งรหัส, ผู้เล่นเดิมเห็นคำสั่งใส่รหัส, kick ชื่อนอก whitelist, การ 블็อกขยับ/ทุบ/วาง/ดรอป/เปิดหีบ/แชท/ตี/โดนทำร้าย/คำสั่งอื่น, kick เมื่อผิด 3 ครั้งหรือเงียบ 60 วิ, `/pass` ของผู้ไม่ผ่านรหัส, รหัสเดียวใช้ได้ทั้งเกมและเว็บ
+→ โค้ดและ unit test พร้อมแล้ว แต่ **ห้ามถือว่า Gate 3 ผ่าน** จนกว่าจะรันกับไคลเอนต์จริง (เฟส 9)

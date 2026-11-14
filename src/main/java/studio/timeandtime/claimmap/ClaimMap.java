@@ -31,6 +31,11 @@ public class ClaimMap implements ModInitializer {
 		return INSTANCE == null ? null : INSTANCE.server;
 	}
 
+	/** Login gate, used by the command mixin to decide whether a command is allowed. */
+	public AuthGate authGate() {
+		return authGate;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
@@ -39,6 +44,7 @@ public class ClaimMap implements ModInitializer {
 	private LinkManager links;
 	private AccountManager accounts;
 	private EconomyManager economy;
+	private AuthGate authGate;
 	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
 
@@ -57,6 +63,7 @@ public class ClaimMap implements ModInitializer {
 		accounts.load();
 		economy = new EconomyManager(config.dataDir(), config, System::currentTimeMillis);
 		economy.load();
+		authGate = new AuthGate(config, accounts, links, economy);
 		protection = new Protection(regions);
 		web = new WebServer(config, regions, maps, links, accounts, economy);
 
@@ -67,8 +74,9 @@ public class ClaimMap implements ModInitializer {
 		});
 		economy.startBackups(backupExecutor, BACKUP_INTERVAL_MS);
 
-		new ClaimCommands(regions, links, accounts, config, economy).register();
+		new ClaimCommands(regions, links, accounts, config, economy, authGate).register();
 		protection.register();
+		authGate.registerHooks();
 
 		// Draw a map of exactly the chunks that are actually loaded / explored.
 		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, generated) -> maps.onChunkLoaded(level, chunk));

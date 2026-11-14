@@ -42,9 +42,11 @@ public final class AccountManager {
 	private final Path file;
 	private final Map<String, Account> accounts = new LinkedHashMap<>(); // keyed by uuid
 	private final Object lock = new Object();
+	private final int pbkdf2Iterations;
 
 	public AccountManager(ClaimMapConfig config) {
 		this.file = config.accountsFile();
+		this.pbkdf2Iterations = config.pbkdf2Iterations;
 	}
 
 	public void load() {
@@ -84,9 +86,19 @@ public final class AccountManager {
 		}
 	}
 
-	/** Set (or change) the password for a player. Returns false if too short/long. */
+	/**
+	 * Sets a password using PBKDF2. Callers that must stay off the server thread
+	 * should hash on a worker and use {@link #setPasswordHash(String, String, String)}.
+	 */
 	public boolean setPassword(String uuid, String name, String plain) {
-		if (plain == null || plain.length() < 4 || plain.length() > 64) return false;
+		if (uuid == null || name == null || plain == null || plain.length() < 6 || plain.length() > 64) return false;
+		if (plain.equalsIgnoreCase(name)) return false;
+		return setPasswordHash(uuid, name, PasswordHasher.hash(plain, pbkdf2Iterations));
+	}
+
+	/** Stores an already-computed PBKDF2 hash (never plain text). */
+	public boolean setPasswordHash(String uuid, String name, String passwordHash) {
+		if (uuid == null || name == null || passwordHash == null) return false;
 		synchronized (lock) {
 			Account a = accounts.get(uuid);
 			if (a == null) {
@@ -96,8 +108,8 @@ public final class AccountManager {
 				accounts.put(uuid, a);
 			}
 			a.name = name;
-			a.salt = ClaimMapConfig.randomHex(8);
-			a.hash = sha256(a.salt + plain);
+			a.salt = "";
+			a.hash = passwordHash;
 			a.updatedAt = System.currentTimeMillis();
 			save();
 			return true;
@@ -138,14 +150,25 @@ public final class AccountManager {
 		}
 	}
 
-	/** Verify by display name (case-insensitive). Returns the account or null. */
+	/**
+	 * Verify by display name (case-insensitive). Returns the account or null.
+	 * A legacy salted SHA-256 hash is upgraded to PBKDF2 on a successful login.
+	 */
 	public Account verify(String name, String plain) {
 		if (name == null || plain == null) return null;
 		synchronized (lock) {
 			String n = name.trim();
 			for (Account a : accounts.values()) {
 				if (a.name != null && a.name.equalsIgnoreCase(n) && a.hash != null) {
-					if (constantTimeEquals(sha256(a.salt + plain), a.hash)) return a;
+					if (!PasswordHasher.verify(a.hash, a.salt, plain)) return null;
+					if (!PasswordHasher.isModern(a.hash)) {
+						a.hash = PasswordHasher.hash(plain, pbkdf2Iterations);
+						a.salt = "";
+						a.updatedAt = System.currentTimeMillis();
+						save();
+						ClaimMap.LOGGER.info("[claimmap] Upgraded stored password hash for {}", a.name);
+					}
+					return a;
 				}
 			}
 			return null;
