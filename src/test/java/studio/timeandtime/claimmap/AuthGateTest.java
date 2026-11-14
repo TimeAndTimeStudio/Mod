@@ -1,5 +1,13 @@
 package studio.timeandtime.claimmap;
 
+import io.netty.buffer.Unpooled;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.SharedConstants;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.server.dialog.Dialog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,6 +81,30 @@ class AuthGateTest {
 		gate.clear(uuid);
 		assertNull(gate.phase(uuid));
 		assertFalse(gate.isAuthed(uuid));
+	}
+
+	@Test
+	void bothDialogsEncodeWithTheContextFreeCodec() {
+		SharedConstants.tryDetectVersion();
+		Bootstrap.bootStrap();
+		for (Dialog dialog : new Dialog[]{AuthGate.loginDialog(null), AuthGate.registerDialog(null),
+				AuthGate.loginDialog("รหัสผ่านไม่ถูกต้อง")}) {
+			FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+			Dialog.CONTEXT_FREE_STREAM_CODEC.encode(buffer, dialog);
+			assertTrue(buffer.readableBytes() > 0, "dialog must serialize for the configuration phase");
+		}
+	}
+
+	@Test
+	void onlyStringPayloadFieldsAreAccepted() {
+		CompoundTag tag = new CompoundTag();
+		tag.put("password", StringTag.valueOf("secret1"));
+		tag.put("confirm", StringTag.valueOf("secret1"));
+		tag.put("amount", IntTag.valueOf(10));
+		assertEquals("secret1", AuthGate.string(tag, "password"));
+		assertEquals("secret1", AuthGate.string(tag, "confirm"));
+		assertNull(AuthGate.string(tag, "missing"));
+		assertNull(AuthGate.string(tag, "amount"), "non-string values are ignored");
 	}
 
 	@Test

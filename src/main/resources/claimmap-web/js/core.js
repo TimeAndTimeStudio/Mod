@@ -259,7 +259,7 @@ function renderLogin(container) {
   const box = el('div', { class: 'login-wrap' },
     el('div', { class: 'card' },
       el('h1', { text: 'Claim Map' }),
-      el('p', { class: 'hint', text: 'ใช้ชื่อและรหัสเดียวกับที่ตั้งในเกม (/register หรือ /pass)' }),
+      el('p', { class: 'hint', text: 'ใช้ชื่อและรหัสเดียวกับที่ตั้งไว้ในหน้าต่างตอนเข้าเกม' }),
       form,
       el('p', { class: 'hint', text: '⚠️ ระบบนี้ใช้ HTTP ธรรมดา อย่าใช้รหัสซ้ำกับบริการอื่น' })
     ));

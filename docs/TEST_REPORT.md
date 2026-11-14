@@ -68,3 +68,31 @@
 2. หมุนคีย์ JSONBin เป็น read-only ใหม่ และเก็บเฉพาะใน config
 3. ทดสอบวงจรในเกมจริงตามรายการข้อ 6 (อย่างน้อย: เข้าเกม → ตั้ง/ใส่รหัส → ซื้อ → ขาย → `/ah sell` → bid → ปิดประมูล)
 4. คัดลอก `config/claimmap/backups/` ไปเก็บนอกเครื่องเป็นระยะ
+
+---
+
+## 8. รอบข้อกำหนดเพิ่มเติม: migration + AuthGate แผน A
+
+วันที่ 2026-11-14 · สถานะ: ผ่านสิ่งที่รันได้ในเครื่องนี้
+
+| สิ่งที่ทดสอบ | คำสั่ง/วิธี | ผล |
+|---|---|---|
+| unit test ทั้งหมด | `./gradlew test` | PASS 92 เทสต์ |
+| build 26.3 | `./gradlew build` | PASS |
+| build 26.2 | `./gradlew build -Pminecraft_version=26.2 -Pfabric_api_version=0.161.0+26.2` | PASS |
+| dialog serialize ได้จริง | encode ด้วย `Dialog.CONTEXT_FREE_STREAM_CODEC` (login/register/error) | PASS |
+| accounts.json รูปแบบเก่า SHA-256 | โหลด + verify + rehash | PASS |
+| accounts.json ไม่มี uuid | โหลดได้ + `bindUuid` ตอนเข้าเกม | PASS |
+| accounts.json คีย์ด้วยชื่อ | โหลดได้ + pending อยู่รอดหลัง save | PASS |
+| backup pre-upgrade | เขียนไฟล์เก่า → `DataMigration.backupBeforeUpgrade` | PASS คัดลอกครบและทำครั้งเดียว |
+| properties เดิม | `bindAddress=127.0.0.1` และค่าอื่นไม่ถูกเขียนทับ | PASS |
+| เปิดเซิร์ฟเวอร์จริง | mixin + backup อัตโนมัติ | PASS ไม่มี injection error |
+
+### ยังไม่ได้ทดสอบ (ต้องมีไคลเอนต์ Minecraft)
+
+- หน้าต่างล็อกอิน/ตั้งรหัสขึ้นก่อนเข้าโลกจริง
+- กด Esc / ปิดเกมกลางคัน / ส่งแพ็กเก็ตตอบปลอม
+- ผิดรหัส 3 ครั้ง และเงียบ 60 วินาที แล้วถูก disconnect
+- `/pass` ในเกมจริง
+
+โค้ดฝั่งเซิร์ฟเวอร์กันครบ (ConfigurationFinishMixin + ConfigurationClickMixin) แต่ไม่มีไคลเอนต์ในสภาพแวดล้อมนี้จึงยืนยันพฤติกรรมจริงไม่ได้

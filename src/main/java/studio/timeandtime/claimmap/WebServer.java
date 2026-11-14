@@ -1114,7 +1114,7 @@ public final class WebServer {
 			if (r != AdminService.Result.OK) throw adminError(r);
 			JsonObject out = new JsonObject();
 			out.addProperty("ok", true);
-			out.addProperty("message", "ลบรหัสผ่านแล้ว ผู้เล่นต้องเข้าเกมและ /register ใหม่ทันที");
+			out.addProperty("message", "ลบรหัสผ่านแล้ว ผู้เล่นต้องเข้าเกมและตั้งรหัสในหน้าต่างที่ขึ้นให้ทันที");
 			Json.send(ex, 200, out);
 			return;
 		}

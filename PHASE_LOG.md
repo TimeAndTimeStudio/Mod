@@ -433,3 +433,38 @@
 
 **สรุปโปรเจกต์**
 - เฟส 0–8 เสร็จและ commit แล้ว · เฟส 9 ส่งมอบเครื่องมือ + เอกสาร + ผลทดสอบเท่าที่สภาพแวดล้อมทำได้
+
+---
+
+### ข้อกำหนดเพิ่มเติม (ทับ PHASES.md) — migration ข้อมูลเก่า + AuthGate แผน A (2026-11-14)
+
+**ก. ข้อมูลเก่า (ไม่ให้เจ้าของแก้เอง)**
+- `DataMigration.java` — คัดลอกไฟล์เดิมทุกไฟล์ไป `backups/pre-upgrade-<เวลา>/` ก่อนเขียนครั้งแรกของรุ่นใหม่, ใช้ marker `.pre-upgrade-done` ไม่ทำซ้ำ
+- `ClaimMapConfig.load()` — เรียก backup ก่อนอ่าน/เติมคีย์; ค่าเดิมของเจ้าของ (รวม `bindAddress=127.0.0.1`) ไม่ถูกเขียนทับ
+- `AccountManager` — อ่าน `accounts.json` ได้ทั้ง `{accounts:[...]}`, map ที่คีย์ด้วย uuid และ map ที่คีย์ด้วยชื่อ; ระเบียนที่ไม่มี `uuid` ถูกเก็บเป็น pending และผูก UUID ตอนเข้าเกมครั้งแรก (`bindUuid`) · การบันทึกยังเก็บ pending ไว้ไม่ให้หาย
+- รหัส SHA-256 เดิมยังใช้ได้ และ rehash เป็น PBKDF2 เมื่อล็อกอินสำเร็จ (ทั้งเกมและเว็บ)
+- `sessions.json` / `regions.json` ไม่ถูกแตะ; `ensureAccount` ทำงานตอนเข้าสู่เกมครั้งแรกหลังอัปเดต
+
+**ข. AuthGate แผน A (configuration dialog เท่านั้น)**
+- ตรวจซอร์สทั้ง 26.2 และ 26.3 พบเส้นทางที่ใช้ได้จริง:
+  - `ClientboundShowDialogPacket` ถูกประกาศใน `ConfigurationProtocols` (context-free codec)
+  - `ServerboundCustomClickActionPacket` มีใน configuration protocol
+  - `ServerConfigurationPacketListenerImpl.handleConfigurationFinished` คือจุดเปลี่ยนเข้าโลก
+  - `ServerConfigurationConnectionEvents.BEFORE_CONFIGURE` / `DISCONNECT` (Fabric API)
+  - `ServerConfigurationNetworking.isReconfiguring` สำหรับการ reload ระหว่างเล่น
+- `AuthGate` เขียนใหม่: แสดง dialog ล็อกอิน/ตั้งรหัสครั้งแรก + ปุ่มเข้าเกม/ออกจากเกม, ผิด 3 ครั้งหรือเกิน 60 วินาที = disconnect, PBKDF2 บน worker thread
+- mixin ใหม่: `ConfigurationFinishMixin` (บล็อก finish-configuration จนกว่าจะผ่าน), `ConfigurationClickMixin` (รับ action จาก dialog), `PlayerProfileAccessor` (อ่าน GameProfile ของ connection)
+- ลบ `/login` และ `/register` ออกทั้งหมด — ไม่มีทางสำรองแบบคำสั่งแชทหรือ dialog หลังเข้าโลก
+- `/pass` ยังอยู่ ใช้ได้เฉพาะผู้ที่ผ่านการล็อกอินแล้วและต้องใส่รหัสเดิม
+
+**ผลทดสอบ**
+- [x] `./gradlew test` ผ่าน 92 เทสต์ (เพิ่ม migration, legacy accounts และ dialog encoding)
+- [x] ทดสอบ encode dialog ด้วย `Dialog.CONTEXT_FREE_STREAM_CODEC` ผ่านทั้ง login/register/error
+- [x] build 26.3 ✅ · 26.2 ✅
+- [x] เปิดเซิร์ฟเวอร์จริง: mixin ไม่มี injection error, สร้าง `backups/pre-upgrade-20261114-182839-478/` อัตโนมัติจากข้อมูลเดิม และเซิร์ฟเวอร์ทำงานปกติ
+- [x] รัน `./gradlew test` กับโมดูลที่ bootstrap แล้ว (SharedConstants + Bootstrap) ไม่มี error
+- [ ] ทดสอบกับไคลเอนต์จริง: หน้าต่างขึ้นก่อนเข้าโลก, กด Esc, ปิดเกมกลางคัน, ส่งแพ็กเก็ตปลอม, ผิด 3 ครั้ง/60 วินาที — เครื่องนี้ไม่มีไคลเอนต์ Minecraft จึงยังยืนยันไม่ได้ (โค้ดฝั่งเซิร์ฟเวอร์กันครบตาม mixin ข้างต้น)
+
+**⚠️ ต้องแจ้งเจ้าของ**
+- `TextInput` ของ Minecraft ไม่มีโหมดซ่อนรหัส → ช่องกรอกรหัสจะแสดงข้อความที่พิมพ์ ผมไม่ได้เปลี่ยนวิธีล็อกอินเองตามข้อกำหนด
+- หลัง `reset-password` ผู้เล่นต้องเข้าเกมและตั้งรหัสในหน้าต่างให้ทันที

@@ -275,8 +275,7 @@ export function render(container) {
             confirmText: 'รีเซ็ต',
             danger: true,
             lines: [
-              { label: 'ผู้เล่น', value: p.name },
-              { label: 'ผลลัพธ์', value: 'ต้องเข้าเกมและ /register ใหม่ทันที' },
+              { label: 'ผู้เล่น', value: p.name },				{ label: 'ผลลัพธ์', value: 'ต้องเข้าเกมและตั้งรหัสในหน้าต่างให้ทันที' },
               { label: 'คำเตือน', value: 'ระหว่างนี้ใครสวมชื่ออาจตั้งรหัสได้' }
             ]
           });

@@ -1,5 +1,6 @@
 package studio.timeandtime.claimmap;
 
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -8,11 +9,34 @@ import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.common.ClientboundClearDialogPacket;
+import net.minecraft.network.protocol.common.ClientboundShowDialogPacket;
+import net.minecraft.network.protocol.configuration.ClientboundFinishConfigurationPacket;
+import net.minecraft.network.protocol.configuration.ServerboundFinishConfigurationPacket;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.dialog.ActionButton;
+import net.minecraft.server.dialog.CommonButtonData;
+import net.minecraft.server.dialog.CommonDialogData;
+import net.minecraft.server.dialog.Dialog;
+import net.minecraft.server.dialog.DialogAction;
+import net.minecraft.server.dialog.Input;
+import net.minecraft.server.dialog.MultiActionDialog;
+import net.minecraft.server.dialog.action.CustomAll;
+import net.minecraft.server.dialog.body.DialogBody;
+import net.minecraft.server.dialog.body.PlainMessage;
+import net.minecraft.server.dialog.input.TextInput;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
@@ -23,8 +47,11 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
+import studio.timeandtime.claimmap.mixin.PlayerProfileAccessor;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,29 +59,52 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Login gate for players entering the game (PHASES.md phase 3).
+ * Password gate for players entering the game.
  *
- * <p>Until a player authenticates with the same password as the web account,
- * they cannot move, break/place blocks, use items, attack, drop items, chat or
- * run commands (only {@code /login} and {@code /register}).
+ * <p>Plan A (additional requirements section B): a vanilla Minecraft dialog is
+ * shown during the <em>configuration</em> phase, before the player is placed in
+ * the world. The connection is held in configuration until the password is
+ * correct; no client-side mod is needed. The mod never asks for the password in
+ * chat and has no post-join login path.
  *
- * <p>Verification runs on a small worker thread because PBKDF2 is deliberately
- * slow; results are applied back on the server thread via {@code server.execute}.
+ * <p>PBKDF2 is deliberately slow, so verification and hashing run on a small
+ * worker thread and the result is applied back on the server thread.
  */
 public final class AuthGate {
 	public enum Phase { NEED_LOGIN, NEED_REGISTER, AUTHED }
 
 	static final int MAX_FAILS = 3;
 	static final long TIMEOUT_MS = 60_000L;
-	private static final long REMIND_EVERY_MS = 15_000L;
 
+	private static final Identifier LOGIN_ACTION = Identifier.fromNamespaceAndPath("claimmap", "auth/login");
+	private static final Identifier REGISTER_ACTION = Identifier.fromNamespaceAndPath("claimmap", "auth/register");
+	private static final Identifier QUIT_ACTION = Identifier.fromNamespaceAndPath("claimmap", "auth/quit");
+
+	/** Play-phase state, used by command/item hooks. */
 	static final class State {
 		Phase phase;
 		int fails;
 		long joinedAtMs;
-		double x;
-		double y;
-		double z;
+	}
+
+	/** Configuration-phase state, one per connecting player. */
+	private static final class ConfigState {
+		final ServerConfigurationPacketListenerImpl listener;
+		final String name;
+		final UUID uuid;
+		Phase phase;
+		int fails;
+		final long startedAtMs;
+		boolean finishSeen;
+		boolean pending;
+
+		ConfigState(ServerConfigurationPacketListenerImpl listener, String name, UUID uuid, Phase phase, long startedAtMs) {
+			this.listener = listener;
+			this.name = name;
+			this.uuid = uuid;
+			this.phase = phase;
+			this.startedAtMs = startedAtMs;
+		}
 	}
 
 	private final ClaimMapConfig config;
@@ -62,7 +112,7 @@ public final class AuthGate {
 	private final LinkManager links;
 	private final EconomyManager economy;
 	private final Map<UUID, State> states = new ConcurrentHashMap<>();
-	private final Set<UUID> pending = ConcurrentHashMap.newKeySet();
+	private final Map<UUID, ConfigState> configStates = new ConcurrentHashMap<>();
 	private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "claimmap-auth");
 		t.setDaemon(true);
@@ -82,9 +132,6 @@ public final class AuthGate {
 		State s = new State();
 		s.phase = hasPassword ? Phase.NEED_LOGIN : Phase.NEED_REGISTER;
 		s.joinedAtMs = now;
-		s.x = x;
-		s.y = y;
-		s.z = z;
 		states.put(uuid, s);
 		return s;
 	}
@@ -99,7 +146,6 @@ public final class AuthGate {
 		return s == null ? null : s.phase;
 	}
 
-	/** Records a failed attempt, returning the new consecutive failure count. */
 	int fail(UUID uuid) {
 		State s = states.get(uuid);
 		if (s == null) return 0;
@@ -123,10 +169,8 @@ public final class AuthGate {
 
 	void clear(UUID uuid) {
 		states.remove(uuid);
-		pending.remove(uuid);
 	}
 
-	/** Username in the allowed state list. */
 	public boolean allowed(ServerPlayer player) {
 		return config.isAllowed(player.getGameProfile().name());
 	}
@@ -134,9 +178,12 @@ public final class AuthGate {
 	// ---- hooks --------------------------------------------------------------
 
 	public void registerHooks() {
+		ServerConfigurationConnectionEvents.BEFORE_CONFIGURE.register((listener, server) -> beginConfiguration(listener));
+		ServerConfigurationConnectionEvents.DISCONNECT.register((listener, server) -> clearConfiguration(listener));
+
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> onJoin(handler.getPlayer()));
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> clear(handler.getPlayer().getUUID()));
-		ServerPlayerEvents.LEAVE.register(this::clearPlayer);
+		ServerPlayerEvents.LEAVE.register(player -> clear(player.getUUID()));
 
 		ServerTickEvents.END_SERVER_TICK.register(this::tick);
 
@@ -152,57 +199,285 @@ public final class AuthGate {
 		});
 	}
 
-	private void clearPlayer(ServerPlayer player) {
-		clear(player.getUUID());
+	private static GameProfile profileOf(ServerConfigurationPacketListenerImpl listener) {
+		try {
+			return ((PlayerProfileAccessor) listener).claimmap$profile();
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+
+	private void beginConfiguration(ServerConfigurationPacketListenerImpl listener) {
+		GameProfile profile = profileOf(listener);
+		if (profile == null || profile.id() == null) {
+			listener.disconnect(Component.literal("ไม่สามารถอ่านข้อมูลผู้เล่นได้"));
+			return;
+		}
+		// A play -> configuration -> play transition (data pack reload) must not
+		// ask for the password again.
+		if (ServerConfigurationNetworking.isReconfiguring(listener)) {
+			configStates.put(profile.id(), new ConfigState(listener, profile.name(), profile.id(), Phase.AUTHED,
+					System.currentTimeMillis()));
+			return;
+		}
+		if (!config.isAllowed(profile.name())) {
+			listener.disconnect(Component.literal("ชื่อนี้ไม่อยู่ในรายชื่อผู้เล่น"));
+			return;
+		}
+		// Fill a missing uuid in an old accounts.json before looking the account up.
+		accounts.bindUuid(profile.name(), profile.id());
+		boolean hasPassword = accounts.hasPassword(profile.id().toString());
+		ConfigState state = new ConfigState(listener, profile.name(), profile.id(),
+				hasPassword ? Phase.NEED_LOGIN : Phase.NEED_REGISTER, System.currentTimeMillis());
+		configStates.put(profile.id(), state);
+		sendDialog(state, null);
+	}
+
+	private void clearConfiguration(ServerConfigurationPacketListenerImpl listener) {
+		GameProfile profile = profileOf(listener);
+		if (profile != null && profile.id() != null) {
+			configStates.remove(profile.id());
+		}
+	}
+
+	private void tick(MinecraftServer server) {
+		long now = System.currentTimeMillis();
+		for (ConfigState state : configStates.values()) {
+			if (state.phase == Phase.AUTHED) continue;
+			if (now - state.startedAtMs >= TIMEOUT_MS) {
+				disconnect(state, "หมดเวลากรอกรหัส (60 วินาที) กรุณาเข้าใหม่");
+			}
+		}
 	}
 
 	private void onJoin(ServerPlayer player) {
 		UUID uuid = player.getUUID();
 		String name = player.getGameProfile().name();
 		if (!config.isAllowed(name)) {
-			kick(player, "ชื่อนี้ไม่อยู่ในรายชื่อผู้เล่น");
+			player.connection.disconnect(Component.literal("ชื่อนี้ไม่อยู่ในรายชื่อผู้เล่น"));
 			return;
 		}
-		boolean hasPassword = accounts.hasPassword(uuid.toString());
-		begin(uuid, hasPassword, System.currentTimeMillis(),
-				player.getX(), player.getY(), player.getZ());
-		if (hasPassword) {
-			msg(player, "=== ยินดีต้อนรับกลับ " + name + " ===");
-			msg(player, "พิมพ์ /login <รหัสผ่าน> เพื่อเข้าเล่น");
-			msg(player, "ใช้รหัสเดียวกับที่ล็อกอินเว็บ (อย่าใช้รหัสซ้ำกับที่อื่น)");
+		ConfigState configState = configStates.get(uuid);
+		if (configState == null || configState.phase != Phase.AUTHED) {
+			player.connection.disconnect(Component.literal("ต้องเข้าสู่ระบบก่อนเข้าเกม"));
+			return;
+		}
+		configStates.remove(uuid);
+		State state = new State();
+		state.phase = Phase.AUTHED;
+		states.put(uuid, state);
+		economy.ensureAccount(uuid);
+		player.sendSystemMessage(Component.literal("เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ!"));
+		player.sendSystemMessage(Component.literal("ยอดเงิน: " + economy.balance(uuid) + " " + config.currencyName));
+	}
+
+	// ---- dialog -------------------------------------------------------------
+
+	private void sendDialog(ConfigState state, String error) {
+		if (state.phase == Phase.AUTHED) return;
+		Dialog dialog = state.phase == Phase.NEED_LOGIN ? loginDialog(error) : registerDialog(error);
+		state.listener.send(new ClientboundShowDialogPacket(Holder.direct(dialog)));
+	}
+
+	static Dialog loginDialog(String error) {
+		Input password = new Input("password", new TextInput(200,
+				Component.literal("รหัสผ่าน"), true, "", 64, Optional.empty()));
+		ActionButton enter = button("เข้าสู่เกม", LOGIN_ACTION);
+		return dialog("เข้าสู่ระบบ Claim Map", error, List.of(password), enter);
+	}
+
+	static Dialog registerDialog(String error) {
+		Input password = new Input("password", new TextInput(200,
+				Component.literal("รหัสผ่านใหม่"), true, "", 64, Optional.empty()));
+		Input confirm = new Input("confirm", new TextInput(200,
+				Component.literal("ยืนยันรหัสผ่าน"), true, "", 64, Optional.empty()));
+		ActionButton enter = button("ตั้งรหัสและเข้าเกม", REGISTER_ACTION);
+		return dialog("ตั้งรหัสผ่านครั้งแรก", error, List.of(password, confirm), enter);
+	}
+
+	private static Dialog dialog(String title, String error, List<Input> inputs, ActionButton enter) {
+		List<DialogBody> body = error == null
+				? List.<DialogBody>of(new PlainMessage(Component.literal(
+						"รหัสผ่านใช้ร่วมกับเว็บ Claim Map · ช่องกรอกยังไม่มีโหมดซ่อนรหัส"), 260))
+				: List.<DialogBody>of(new PlainMessage(Component.literal(error), 260));
+		CommonDialogData common = new CommonDialogData(
+				Component.literal(title),
+				Optional.empty(),
+				false,                 // Esc must not close the gate
+				true,
+				DialogAction.CLOSE,
+				body,
+				inputs);
+		ActionButton quit = button("ออกจากเกม", QUIT_ACTION);
+		return new MultiActionDialog(common, List.of(enter), Optional.of(quit), 1);
+	}
+
+	private static ActionButton button(String label, Identifier action) {
+		return new ActionButton(new CommonButtonData(Component.literal(label), 180),
+				Optional.of(new CustomAll(action, Optional.empty())));
+	}
+
+	// ---- packets from the configuration phase ------------------------------
+
+	/** Called by the ServerConfigurationPacketListenerImpl mixin. False = cancel. */
+	public static boolean allowConfigurationFinished(ServerConfigurationPacketListenerImpl listener) {
+		ClaimMap mod = ClaimMap.instance();
+		AuthGate gate = mod == null ? null : mod.authGate();
+		return gate == null || gate.onConfigurationFinished(listener);
+	}
+
+	private boolean onConfigurationFinished(ServerConfigurationPacketListenerImpl listener) {
+		GameProfile profile = profileOf(listener);
+		if (profile == null || profile.id() == null) return false;
+		ConfigState state = configStates.get(profile.id());
+		if (state != null && state.phase == Phase.AUTHED) return true;
+		if (state == null) {
+			beginConfiguration(listener);
+			state = configStates.get(profile.id());
+		}
+		if (state != null) {
+			state.finishSeen = true;
+			sendDialog(state, null);
+		}
+		return false;
+	}
+
+	/** Called by the ServerCommonPacketListenerImpl mixin (server thread). */
+	public static void configurationClick(ServerConfigurationPacketListenerImpl listener, Identifier id,
+			Optional<Tag> payload) {
+		ClaimMap mod = ClaimMap.instance();
+		AuthGate gate = mod == null ? null : mod.authGate();
+		if (gate != null) gate.onConfigurationClick(listener, id, payload);
+	}
+
+	private void onConfigurationClick(ServerConfigurationPacketListenerImpl listener, Identifier id,
+			Optional<Tag> payload) {
+		GameProfile profile = profileOf(listener);
+		if (profile == null || profile.id() == null) {
+			listener.disconnect(Component.literal("ไม่สามารถอ่านข้อมูลผู้เล่นได้"));
+			return;
+		}
+		ConfigState state = configStates.get(profile.id());
+		if (state == null || state.listener != listener) {
+			listener.disconnect(Component.literal("กรุณาเชื่อมต่อใหม่"));
+			return;
+		}
+		if (QUIT_ACTION.equals(id)) {
+			disconnect(state, "ออกจากเกมตามคำขอ");
+			return;
+		}
+		if (state.phase == Phase.AUTHED || state.pending) return;
+		if (state.phase == Phase.NEED_LOGIN && !LOGIN_ACTION.equals(id)) {
+			sendDialog(state, "บัญชีนี้มีรหัสแล้ว กรุณาใส่รหัสผ่าน");
+			return;
+		}
+		if (state.phase == Phase.NEED_REGISTER && !REGISTER_ACTION.equals(id)) {
+			sendDialog(state, "ยังไม่มีรหัสผ่าน กรุณาตั้งรหัสก่อนเข้าเกม");
+			return;
+		}
+
+		Optional<CompoundTag> tag = payload.filter(t -> t instanceof CompoundTag).map(t -> (CompoundTag) t);
+		if (tag.isEmpty()) {
+			failed(state, "ข้อมูลจากหน้าต่างไม่ถูกต้อง");
+			return;
+		}
+		String password = string(tag.get(), "password");
+		if (password == null) {
+			failed(state, "กรุณากรอกรหัสผ่าน");
+			return;
+		}
+
+		if (state.phase == Phase.NEED_REGISTER) {
+			String confirm = string(tag.get(), "confirm");
+			String problem = passwordProblem(password, confirm, state.name);
+			if (problem != null) {
+				failed(state, problem);
+				return;
+			}
+			state.pending = true;
+			worker.submit(() -> {
+				String hash = PasswordHasher.hash(password, config.pbkdf2Iterations);
+				MinecraftServer server = ClaimMap.getServer();
+				if (server != null) server.execute(() -> completeRegister(state, hash, password, confirm));
+			});
+			return;
+		}
+
+		state.pending = true;
+		worker.submit(() -> {
+			boolean ok;
+			try {
+				ok = accounts.verify(state.name, password) != null;
+			} catch (RuntimeException e) {
+				ok = false;
+			}
+			final boolean success = ok;
+			MinecraftServer server = ClaimMap.getServer();
+			if (server != null) server.execute(() -> completeLogin(state, success));
+		});
+	}
+
+	static String string(CompoundTag tag, String key) {
+		Tag value = tag.get(key);
+		return value instanceof StringTag s ? s.value() : null;
+	}
+
+	private void completeLogin(ConfigState state, boolean success) {
+		ConfigState current = configStates.get(state.uuid);
+		if (current != state || state.phase == Phase.AUTHED) return;
+		state.pending = false;
+		if (!success) {
+			failed(state, null);
+			return;
+		}
+		authenticated(state);
+	}
+
+	private void completeRegister(ConfigState state, String hash, String password, String confirm) {
+		ConfigState current = configStates.get(state.uuid);
+		if (current != state || state.phase != Phase.NEED_REGISTER) return;
+		state.pending = false;
+		String problem = passwordProblem(password, confirm, state.name);
+		if (problem != null || !accounts.setPasswordHash(state.uuid.toString(), state.name, hash)) {
+			failed(state, "บันทึกรหัสผ่านไม่สำเร็จ กรุณาลองใหม่");
+			return;
+		}
+		authenticated(state);
+	}
+
+	private void authenticated(ConfigState state) {
+		state.phase = Phase.AUTHED;
+		state.fails = 0;
+		economy.ensureAccount(state.uuid);
+		state.listener.send(ClientboundClearDialogPacket.INSTANCE);
+		if (state.finishSeen) {
+			// The client already asked to enter the world; continue immediately.
+			state.listener.handleConfigurationFinished(ServerboundFinishConfigurationPacket.INSTANCE);
 		} else {
-			msg(player, "=== ยินดีต้อนรับ " + name + " ===");
-			msg(player, "ตั้งรหัสผ่านก่อนเล่น: /register <รหัสใหม่> <ยืนยันรหัส>");
-			msg(player, "รหัสต้องยาว 6-64 ตัวอักษร และใช้ได้ทั้งเกมและเว็บ (อย่าใช้รหัสซ้ำกับที่อื่น)");
+			state.listener.send(ClientboundFinishConfigurationPacket.INSTANCE);
 		}
 	}
 
-	private void tick(MinecraftServer server) {
-		long now = System.currentTimeMillis();
-		long tick = server.getTickCount();
-		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-			UUID uuid = player.getUUID();
-			State s = states.get(uuid);
-			if (s == null || s.phase == Phase.AUTHED) continue;
-			if (timedOut(uuid, now)) {
-				kick(player, "หมดเวลากรอกรหัส (60 วินาที) กรุณาเข้าใหม่");
-				continue;
-			}
-			// freeze movement: pull the player back to where they joined
-			double dx = player.getX() - s.x;
-			double dy = player.getY() - s.y;
-			double dz = player.getZ() - s.z;
-			if (dx * dx + dy * dy + dz * dz > 0.04) {
-				player.teleportTo(s.x, s.y, s.z);
-			}
-			if (tick % 300 == 0) {
-				if (s.phase == Phase.NEED_LOGIN) msg(player, "ยังไม่ได้เข้าสู่ระบบ: /login <รหัสผ่าน>");
-				else msg(player, "ยังไม่ได้ตั้งรหัส: /register <รหัสใหม่> <ยืนยันรหัส>");
-			}
+	private void failed(ConfigState state, String message) {
+		state.fails++;
+		if (state.fails >= MAX_FAILS) {
+			disconnect(state, "ใส่รหัสผิด " + MAX_FAILS + " ครั้ง กรุณาเข้าใหม่");
+			return;
+		}
+		String text = message == null ? "รหัสผ่านไม่ถูกต้อง" : message;
+		sendDialog(state, text + " (เหลือ " + (MAX_FAILS - state.fails) + " ครั้ง)");
+	}
+
+	private void disconnect(ConfigState state, String reason) {
+		configStates.remove(state.uuid);
+		try {
+			state.listener.disconnect(Component.literal(reason));
+		} catch (RuntimeException e) {
+			ClaimMap.LOGGER.warn("[claimmap] Could not disconnect {} during configuration", state.name, e);
 		}
 	}
 
-	// ---- action blocking ----------------------------------------------------
+	// ---- action blocking (defence in depth) ---------------------------------
 
 	private boolean onBreak(Level level, Player player, BlockPos pos, BlockState state, BlockEntity entity) {
 		return !(player instanceof ServerPlayer sp) || isAuthed(sp.getUUID());
@@ -228,110 +503,18 @@ public final class AuthGate {
 		return InteractionResult.PASS;
 	}
 
-	// ---- login / register ---------------------------------------------------
-
-	public void handleLogin(ServerPlayer player, String password) {
-		UUID uuid = player.getUUID();
-		State s = states.get(uuid);
-		if (s == null) return;
-		if (s.phase == Phase.AUTHED) {
-			msg(player, "เข้าสู่ระบบแล้ว");
-			return;
-		}
-		if (s.phase == Phase.NEED_REGISTER) {
-			msg(player, "ยังไม่มีรหัสผ่าน ใช้ /register <รหัสใหม่> <ยืนยันรหัส>");
-			return;
-		}
-		String name = player.getGameProfile().name();
-		if (!pending.add(uuid)) {
-			msg(player, "กำลังตรวจสอบรหัส กรุณารอสักครู่");
-			return;
-		}
-		worker.submit(() -> {
-			boolean ok;
-			try {
-				ok = accounts.verify(name, password) != null;
-			} catch (RuntimeException e) {
-				ok = false;
-			}
-			final boolean success = ok;
-			MinecraftServer server = ClaimMap.getServer();
-			if (server != null) server.execute(() -> completeLogin(uuid, success));
-		});
-	}
-
-	private void completeLogin(UUID uuid, boolean success) {
-		pending.remove(uuid);
-		MinecraftServer server = ClaimMap.getServer();
-		if (server == null) return;
-		ServerPlayer player = server.getPlayerList().getPlayer(uuid);
-		if (player == null) return;
-		State s = states.get(uuid);
-		if (s == null || s.phase == Phase.AUTHED) return;
-		if (success) {
-			finishAuth(player);
-			return;
-		}
-		int fails = fail(uuid);
-		if (fails >= MAX_FAILS) {
-			kick(player, "ใส่รหัสผิด " + MAX_FAILS + " ครั้ง กรุณาเข้าใหม่");
-		} else {
-			msg(player, "รหัสผ่านไม่ถูกต้อง (เหลือ " + (MAX_FAILS - fails) + " ครั้ง)");
-		}
-	}
-
-	public void handleRegister(ServerPlayer player, String password, String confirm) {
-		UUID uuid = player.getUUID();
-		State s = states.get(uuid);
-		if (s == null) return;
-		if (s.phase == Phase.AUTHED) {
-			msg(player, "เข้าสู่ระบบแล้ว หากต้องการเปลี่ยนรหัสใช้ /pass <รหัสเดิม> <รหัสใหม่>");
-			return;
-		}
-		if (s.phase == Phase.NEED_LOGIN) {
-			msg(player, "บัญชีนี้มีรหัสแล้ว ใช้ /login <รหัสผ่าน>");
-			return;
-		}
-		String name = player.getGameProfile().name();
-		String problem = passwordProblem(password, confirm, name);
-		if (problem != null) {
-			msg(player, problem);
-			return;
-		}
-		if (!pending.add(uuid)) {
-			msg(player, "กำลังดำเนินการ กรุณารอสักครู่");
-			return;
-		}
-		worker.submit(() -> {
-			String hash = PasswordHasher.hash(password, config.pbkdf2Iterations);
-			MinecraftServer server = ClaimMap.getServer();
-			if (server != null) server.execute(() -> {
-				pending.remove(uuid);
-				MinecraftServer srv = ClaimMap.getServer();
-				ServerPlayer online = srv == null ? null : srv.getPlayerList().getPlayer(uuid);
-				State st = states.get(uuid);
-				if (online == null || st == null || st.phase != Phase.NEED_REGISTER) return;
-				accounts.setPasswordHash(uuid.toString(), name, hash);
-				finishAuth(online);
-			});
-		});
-	}
+	// ---- /pass (only for an already authenticated player) -------------------
 
 	public void handleChangePassword(ServerPlayer player, String oldPassword, String newPassword) {
 		UUID uuid = player.getUUID();
-		State s = states.get(uuid);
-		if (s == null || s.phase != Phase.AUTHED) {
-			msg(player, "ต้องเข้าสู่ระบบก่อน");
+		if (!isAuthed(uuid)) {
+			player.sendSystemMessage(Component.literal("ต้องเข้าสู่ระบบก่อน"));
 			return;
 		}
 		String name = player.getGameProfile().name();
 		String problem = passwordProblem(newPassword, newPassword, name);
 		if (problem != null) {
-			msg(player, problem);
-			return;
-		}
-		if (!pending.add(uuid)) {
-			msg(player, "กำลังดำเนินการ กรุณารอสักครู่");
+			player.sendSystemMessage(Component.literal(problem));
 			return;
 		}
 		worker.submit(() -> {
@@ -344,23 +527,21 @@ public final class AuthGate {
 			if (!ok) {
 				MinecraftServer server = ClaimMap.getServer();
 				if (server != null) server.execute(() -> {
-					pending.remove(uuid);
 					MinecraftServer srv = ClaimMap.getServer();
 					ServerPlayer online = srv == null ? null : srv.getPlayerList().getPlayer(uuid);
-					if (online != null) msg(online, "รหัสเดิมไม่ถูกต้อง");
+					if (online != null) online.sendSystemMessage(Component.literal("รหัสเดิมไม่ถูกต้อง"));
 				});
 				return;
 			}
 			String hash = PasswordHasher.hash(newPassword, config.pbkdf2Iterations);
 			MinecraftServer server = ClaimMap.getServer();
 			if (server != null) server.execute(() -> {
-				pending.remove(uuid);
 				accounts.setPasswordHash(uuid.toString(), name, hash);
 				links.revokeAllForUuid(uuid.toString());
 				MinecraftServer srv = ClaimMap.getServer();
 				ServerPlayer online = srv == null ? null : srv.getPlayerList().getPlayer(uuid);
 				if (online != null) {
-					msg(online, "เปลี่ยนรหัสผ่านแล้ว — เซสชันเว็บเดิมถูกยกเลิกทั้งหมด");
+					online.sendSystemMessage(Component.literal("เปลี่ยนรหัสผ่านแล้ว — เซสชันเว็บเดิมถูกยกเลิกทั้งหมด"));
 				}
 			});
 		});
@@ -374,31 +555,5 @@ public final class AuthGate {
 		if (!password.equals(confirm)) return "รหัสยืนยันไม่ตรงกัน";
 		if (name != null && password.equalsIgnoreCase(name)) return "รหัสผ่านต้องไม่ซ้ำกับชื่อผู้เล่น";
 		return null;
-	}
-
-	private void finishAuth(ServerPlayer player) {
-		UUID uuid = player.getUUID();
-		markAuthed(uuid);
-		State s = states.get(uuid);
-		if (s != null) {
-			s.fails = 0;
-			s.joinedAtMs = 0;
-		}
-		economy.ensureAccount(uuid);
-		msg(player, "เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ!");
-		msg(player, "ยอดเงิน: " + economy.balance(uuid) + " " + config.currencyName);
-	}
-
-	private void kick(ServerPlayer player, String reason) {
-		clear(player.getUUID());
-		try {
-			player.connection.disconnect(Component.literal(reason));
-		} catch (RuntimeException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not disconnect {}", player.getGameProfile().name(), e);
-		}
-	}
-
-	private void msg(ServerPlayer player, String text) {
-		player.sendSystemMessage(Component.literal(text));
 	}
 }

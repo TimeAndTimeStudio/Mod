@@ -86,6 +86,8 @@ public final class ClaimMapConfig {
 	}
 
 	public void load() {
+		// Back up existing data before the first write of an upgraded install.
+		DataMigration.backupBeforeUpgrade(file.getParent());
 		if (Files.exists(file)) {
 			try (InputStream in = Files.newInputStream(file)) {
 				props.load(in);

@@ -71,17 +71,6 @@ public final class ClaimCommands {
 	}
 
 	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
-			dispatcher.register(Commands.literal("login").requires(src -> src.getPlayer() != null)
-					.then(Commands.argument("password", StringArgumentType.string())
-							.executes(ctx -> runLogin(ctx.getSource(), StringArgumentType.getString(ctx, "password")))));
-
-			dispatcher.register(Commands.literal("register").requires(src -> src.getPlayer() != null)
-					.then(Commands.argument("password", StringArgumentType.string())
-							.then(Commands.argument("confirm", StringArgumentType.string())
-									.executes(ctx -> runRegister(ctx.getSource(),
-											StringArgumentType.getString(ctx, "password"),
-											StringArgumentType.getString(ctx, "confirm"))))));
-
 			dispatcher.register(Commands.literal("pass").requires(src -> src.getPlayer() != null)
 					.then(Commands.argument("old", StringArgumentType.string())
 							.then(Commands.argument("new", StringArgumentType.string())
@@ -158,20 +147,6 @@ public final class ClaimCommands {
 					.then(Commands.literal("reload").requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
 							.executes(ctx -> runReload(ctx.getSource()))));
 		});
-	}
-
-	private int runLogin(CommandSourceStack src, String password) {
-		ServerPlayer player = src.getPlayer();
-		if (player == null) return 0;
-		authGate.handleLogin(player, password);
-		return 1;
-	}
-
-	private int runRegister(CommandSourceStack src, String password, String confirm) {
-		ServerPlayer player = src.getPlayer();
-		if (player == null) return 0;
-		authGate.handleRegister(player, password, confirm);
-		return 1;
 	}
 
 	private int runPass(CommandSourceStack src, String oldPassword, String newPassword) {
@@ -567,7 +542,7 @@ public final class ClaimCommands {
 	private int runEco(CommandSourceStack src, String op, String playerName, String amountText, String reason) {
 		ServerPlayer player = src.getPlayer();
 		if (player != null && !authGate.isAuthed(player.getUUID())) {
-			src.sendFailure(Component.literal("ต้องเข้าสู่ระบบก่อนใช้คำสั่งนี้ (/login)"));
+			src.sendFailure(Component.literal("ต้องเข้าสู่ระบบก่อนใช้คำสั่งนี้"));
 			return 0;
 		}
 		long amount;

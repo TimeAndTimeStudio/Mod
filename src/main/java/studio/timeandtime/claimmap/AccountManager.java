@@ -2,6 +2,10 @@ package studio.timeandtime.claimmap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +17,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +46,8 @@ public final class AccountManager {
 	private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	private final Path file;
 	private final Map<String, Account> accounts = new LinkedHashMap<>(); // keyed by uuid
+	/** Legacy records without a uuid, keyed by lower-case name; bound on next join. */
+	private final Map<String, Account> pendingByName = new LinkedHashMap<>();
 	private final Object lock = new Object();
 	private final int pbkdf2Iterations;
 
@@ -52,20 +59,85 @@ public final class AccountManager {
 	public void load() {
 		synchronized (lock) {
 			accounts.clear();
+			pendingByName.clear();
 			if (file == null || !Files.exists(file)) return;
 			try {
 				String json = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-				Wrapper w = gson.fromJson(json, Wrapper.class);
-				if (w != null && w.accounts != null) {
-					for (Account a : w.accounts) {
-						if (a != null && a.uuid != null && a.hash != null) {
-							accounts.put(a.uuid, a);
+				JsonElement parsed = JsonParser.parseString(json);
+				if (!parsed.isJsonObject()) {
+					throw new IllegalStateException("accounts.json root is not an object");
+				}
+				JsonObject root = parsed.getAsJsonObject();
+				if (root.has("accounts")) {
+					JsonElement list = root.get("accounts");
+					if (list.isJsonArray()) {
+						for (JsonElement e : list.getAsJsonArray()) {
+							addLoaded(e.isJsonObject() ? gson.fromJson(e, Account.class) : null);
 						}
+					} else if (list.isJsonObject()) {
+						loadMap(list.getAsJsonObject());
 					}
+				} else {
+					// Very old file: a plain object keyed by uuid or by player name.
+					loadMap(root);
 				}
 			} catch (Exception e) {
 				ClaimMap.LOGGER.error("[claimmap] Could not load accounts.json", e);
 			}
+		}
+	}
+
+	private void loadMap(JsonObject map) {
+		for (Map.Entry<String, JsonElement> entry : map.entrySet()) {
+			if (!entry.getValue().isJsonObject()) continue;
+			Account a = gson.fromJson(entry.getValue(), Account.class);
+			if (a != null && (a.uuid == null || a.uuid.isBlank()) && looksLikeUuid(entry.getKey())) {
+				a.uuid = entry.getKey();
+			}
+			if (a != null && (a.name == null || a.name.isBlank()) && !looksLikeUuid(entry.getKey())) {
+				a.name = entry.getKey();
+			}
+			addLoaded(a);
+		}
+	}
+
+	private void addLoaded(Account a) {
+		if (a == null || a.name == null || a.name.isBlank()) return;
+		if (a.uuid != null && !a.uuid.isBlank()) {
+			accounts.put(a.uuid, a);
+		} else {
+			pendingByName.put(a.name.toLowerCase(Locale.ROOT), a);
+		}
+	}
+
+	private static boolean looksLikeUuid(String value) {
+		if (value == null) return false;
+		try {
+			UUID.fromString(value);
+			return true;
+		} catch (RuntimeException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Fills the missing uuid of a legacy account when that player joins the game
+	 * for the first time after the update (additional requirements A4).
+	 * Returns true when an account was bound.
+	 */
+	public boolean bindUuid(String name, UUID uuid) {
+		if (name == null || name.isBlank() || uuid == null) return false;
+		synchronized (lock) {
+			if (accounts.containsKey(uuid.toString())) return false;
+			Account a = pendingByName.remove(name.toLowerCase(Locale.ROOT));
+			if (a == null) return false;
+			a.uuid = uuid.toString();
+			a.name = name;
+			a.updatedAt = System.currentTimeMillis();
+			accounts.put(a.uuid, a);
+			save();
+			ClaimMap.LOGGER.info("[claimmap] Bound legacy account {} to uuid {}", name, uuid);
+			return true;
 		}
 	}
 
@@ -76,6 +148,8 @@ public final class AccountManager {
 				if (parent != null) Files.createDirectories(parent);
 				Wrapper w = new Wrapper();
 				w.accounts = new ArrayList<>(accounts.values());
+				// Keep legacy records that have not been bound to a UUID yet.
+				w.accounts.addAll(pendingByName.values());
 				String json = gson.toJson(w);
 				Path tmp = file.resolveSibling("accounts.json.tmp");
 				Files.write(tmp, json.getBytes(StandardCharsets.UTF_8));
@@ -107,6 +181,7 @@ public final class AccountManager {
 				a.createdAt = System.currentTimeMillis();
 				accounts.put(uuid, a);
 			}
+			pendingByName.remove(name.toLowerCase(Locale.ROOT));
 			a.name = name;
 			a.salt = "";
 			a.hash = passwordHash;
@@ -184,7 +259,7 @@ public final class AccountManager {
 
 	/**
 	 * Forgets the password of one account (admin reset, PHASES.md 7.3).
-	 * The name is kept so the player is told to {@code /register} again.
+	 * The name is kept so the next join shows the first-time password dialog.
 	 */
 	public boolean resetPassword(String uuid) {
 		if (uuid == null) return false;

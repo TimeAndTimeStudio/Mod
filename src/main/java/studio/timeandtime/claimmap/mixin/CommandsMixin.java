@@ -11,11 +11,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import studio.timeandtime.claimmap.AuthGate;
 import studio.timeandtime.claimmap.ClaimMap;
 
-import java.util.Locale;
-
 /**
- * Blocks every command for players that have not passed the login gate, except
- * {@code /login} and {@code /register} (PHASES.md 3.3).
+ * Blocks every command for players that have not passed the login gate. The
+ * gate itself runs in the configuration phase, so this is defence in depth.
  */
 @Mixin(Commands.class)
 public abstract class CommandsMixin {
@@ -28,14 +26,7 @@ public abstract class CommandsMixin {
 		AuthGate gate = mod == null ? null : mod.authGate();
 		if (gate == null || gate.isAuthed(player.getUUID())) return;
 
-		String head = command == null ? "" : command.trim();
-		if (head.startsWith("/")) head = head.substring(1);
-		int space = head.indexOf(' ');
-		String name = (space < 0 ? head : head.substring(0, space)).toLowerCase(Locale.ROOT);
-		if (name.equals("login") || name.equals("register")) return;
-
-		player.sendSystemMessage(Component.literal(
-				"กรุณาเข้าสู่ระบบก่อน: /login <รหัสผ่าน> หรือ /register <รหัสใหม่> <ยืนยันรหัส>"));
+		player.sendSystemMessage(Component.literal("กรุณาเข้าสู่ระบบก่อน"));
 		ci.cancel();
 	}
 }
