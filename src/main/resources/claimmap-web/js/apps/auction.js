@@ -1,4 +1,5 @@
-import { el, clear, api, state, money, timeLeft, confirmModal, showError, toast, refreshStatus } from '../core.js';
+import { icon } from '../icons.js';
+import { el, clear, api, state, money, timeLeft, confirmModal, showError, toast, refreshStatus, navigate } from '../core.js';
 
 export function render(container) {
   let disposed = false;
@@ -6,8 +7,18 @@ export function render(container) {
   let data = null;
   const timers = [];
 
-  container.append(el('h1', { text: 'ประมูล' }));
-  container.append(el('p', { class: 'hint', text: 'ลงขายด้วยคำสั่ง /ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง] ในเกม · ระบบจะรีเฟรชรายการทุก 4 วินาที' }));
+  container.append(
+    el('div', { class: 'page-head' },
+      el('div', null,
+        el('h1', { text: 'ตลาดประมูล' }),
+        el('p', { class: 'hint', text: 'เสนอราคาแข่งกันแบบสด หรือตั้งซื้อทันที · ลงขายได้จากหน้า “ลงขาย” หรือพิมพ์ /ah sell ในเกม' })),
+      el('button', { class: 'primary', type: 'button', onClick: () => navigate('sell') },
+        icon('plus', 16),
+        el('span', { text: 'ลงขาย' })
+      )
+    )
+  );
+
   const activeList = el('div', { class: 'list' });
   const mineList = el('div', { class: 'list' });
   container.append(el('h2', { text: 'กำลังประมูล' }), activeList, el('h2', { text: 'รายการของฉัน (7 วัน)' }), mineList);
@@ -171,7 +182,6 @@ export function render(container) {
 
   timers.push(setInterval(() => {
     if (disposed || document.visibilityState !== 'visible' || !data) return;
-    // Only the countdown text is touched every second; inputs stay intact.
     for (const card of activeList.children) {
       const id = card.dataset.auctionId;
       if (!id) continue;

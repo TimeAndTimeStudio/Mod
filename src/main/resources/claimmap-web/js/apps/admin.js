@@ -14,7 +14,12 @@ export function render(container) {
   let tab = 'overview';
   let overview = null;
 
-  container.append(el('h1', { text: 'แอดมิน' }));
+  container.append(
+    el('div', { class: 'page-head' },
+      el('div', null,
+        el('h1', { text: 'แผงควบคุมระบบแอดมิน' }),
+        el('p', { class: 'hint', text: 'เครื่องมือจัดการระบบเศรษฐกิจ ราคากลาง การประมูล และบัญชีผู้เล่น' })))
+  );
   const tabsBar = el('div', { class: 'tabs' });
   const body = el('div');
   container.append(tabsBar, body);

@@ -1,3 +1,4 @@
+import { icon, hydrateIcons } from './icons.js';
 // Shared session, API, router and small UI helpers for the mobile web app.
 // Everything that comes from the server is written with textContent, never
 // innerHTML (PHASES.md 8.3).
@@ -258,23 +259,22 @@ function renderLogin(container) {
 
   const box = el('div', { class: 'login-wrap' },
     el('div', { class: 'card' },
-      el('h1', { text: 'Claim Map' }),
+      el('div', { class: 'login-brand' }, el('span', { class: 'brand-mark' }, 'CM'), el('div', null, el('strong', null, 'CLAIM MAP'), el('span', null, 'MARKET'))),
+      el('h1', { text: 'เข้าสู่ระบบ' }),
       el('p', { class: 'hint', text: 'ใช้ชื่อและรหัสเดียวกับที่ตั้งไว้ในหน้าต่างตอนเข้าเกม' }),
       form,
-      el('p', { class: 'hint', text: '⚠️ ระบบนี้ใช้ HTTP ธรรมดา อย่าใช้รหัสซ้ำกับบริการอื่น' })
+      el('p', { class: 'notice' }, icon('warn', 16), 'ระบบนี้ใช้ HTTP ธรรมดา อย่าใช้รหัสซ้ำกับบริการอื่น')
     ));
   container.append(box);
   name.focus();
 }
 
-const TAB_ROUTES = { home: 'btn-home', map: 'btn-map', buy: 'btn-buy', sell: 'btn-sell', trade: 'btn-trade', mailbox: 'btn-mailbox' };
-
 function paintTabs() {
   const active = currentRoute();
-  for (const [route, id] of Object.entries(TAB_ROUTES)) {
-    const button = document.getElementById(id);
-    if (button) button.classList.toggle('active', route === active);
+  for (const button of document.querySelectorAll('[data-route]')) {
+    button.classList.toggle('active', button.getAttribute('data-route') === active);
   }
+  document.body.classList.toggle('logged-out', !state.session);
 }
 
 export async function renderRoute() {
@@ -321,10 +321,12 @@ export function startRouter() {
     renderRoute();
   });
   window.addEventListener('hashchange', renderRoute);
-  for (const [route, id] of Object.entries(TAB_ROUTES)) {
-    const button = document.getElementById(id);
-    if (button) button.addEventListener('click', () => navigate(route));
+  hydrateIcons();
+  for (const button of document.querySelectorAll('[data-route]')) {
+    button.addEventListener('click', () => navigate(button.getAttribute('data-route')));
   }
+  const logout = document.getElementById('btn-logout');
+  if (logout) logout.addEventListener('click', () => { notifyUnauthorized(); paintStatus(); });
 }
 
 // ---- status bar -----------------------------------------------------------
@@ -343,7 +345,14 @@ function paintStatus() {
   if (role) role.textContent = state.admin ? 'แอดมิน' : (state.me ? 'ผู้เล่น' : '');
   if (balance) balance.textContent = money(state.balance);
   if (currency) currency.textContent = state.currency || CURRENCY_FALLBACK;
-  if (box) box.textContent = '📦 ' + (state.mailboxCount || 0);
+  if (box) box.textContent = String(state.mailboxCount || 0);
+  for (const badge of document.querySelectorAll('[data-mailbox-count]')) {
+    badge.textContent = String(state.mailboxCount || 0);
+    badge.hidden = !state.mailboxCount;
+  }
+  for (const node of document.querySelectorAll('[data-admin-only]')) node.hidden = !state.admin;
+  const logout = document.getElementById('btn-logout');
+  if (logout) logout.hidden = !state.session;
 }
 
 export async function refreshStatus() {

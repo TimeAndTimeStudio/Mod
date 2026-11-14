@@ -1,3 +1,4 @@
+import { icon } from '../icons.js';
 import { el, clear, api, state, money, confirmModal, showError, toast, refreshStatus, navigate } from '../core.js';
 
 export function render(container) {
@@ -9,7 +10,10 @@ export function render(container) {
 		el('div', null,
 			el('h1', { text: 'ซื้อ' }),
 			el('p', { class: 'hint', text: 'ของจากร้านและของผู้เล่นจะเข้ากล่องของก่อน' })),
-		el('button', { class: 'primary', type: 'button', text: '＋ ลงขาย', onClick: () => navigate('sell') })));
+		el('button', { class: 'primary', type: 'button', onClick: () => navigate('sell') },
+			icon('plus', 16),
+			el('span', { text: 'ลงขาย' })
+		)));
 	const note = el('p', { class: 'hint', text: 'ของที่ซื้อจะเข้ากล่องของก่อน แล้วเข้าเกมพิมพ์ /mail claim เพื่อรับ' });
   const search = el('input', { type: 'search', placeholder: 'ค้นหาไอเท็ม' });
   const list = el('div', { class: 'list' });
@@ -119,7 +123,7 @@ export function render(container) {
 			shop = await api('GET', '/api/shop');
 			clear(stale);
 			if (shop.stale) {
-				stale.append(el('p', { class: 'hint', text: '⚠️ ราคาที่แสดงเป็นข้อมูลเก่า ระบบจะอัปเดตเมื่อเชื่อมต่อได้' }));
+				stale.append(el('p', { class: 'notice' }, icon('warn', 16), 'ราคาที่แสดงเป็นข้อมูลเก่า ระบบจะอัปเดตเมื่อเชื่อมต่อได้'));
 			}
 			if (typeof shop.mailboxCount === 'number') state.mailboxCount = shop.mailboxCount;
 			renderList();

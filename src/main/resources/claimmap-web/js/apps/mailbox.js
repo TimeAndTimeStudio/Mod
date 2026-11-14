@@ -1,3 +1,4 @@
+import { icon } from '../icons.js';
 import { el, clear, api, state, money, dateTime, confirmModal, showError, toast, refreshStatus } from '../core.js';
 
 export function render(container) {
@@ -5,11 +6,23 @@ export function render(container) {
   let busy = false;
   let data = null;
 
-  container.append(el('h1', { text: 'กล่องของ' }));
-  const summary = el('p', { class: 'hint', text: 'ของที่ซื้อ/ได้จากประมูลจะรออยู่ที่นี่' });
-  const claimButton = el('button', { class: 'primary', type: 'button', text: 'รับของทั้งหมด' });
+  const claimButton = el('button', { class: 'primary', type: 'button' },
+    icon('mailbox', 16),
+    el('span', { text: 'รับของทั้งหมดเข้าตัว' })
+  );
+
+  container.append(
+    el('div', { class: 'page-head' },
+      el('div', null,
+        el('h1', { text: 'กล่องรับของ' }),
+        el('p', { class: 'hint', text: 'ของที่ซื้อจากร้าน หรือได้จากประมูล/เทรดจะรออยู่ที่นี่ · ต้องออนไลน์ในเกมก่อนกดรับ' })),
+      claimButton
+    )
+  );
+
+  const summary = el('p', { class: 'hint', text: 'กำลังโหลดข้อมูล…' });
   const list = el('div', { class: 'list' });
-  container.append(summary, el('div', { class: 'row' }, claimButton), list);
+  container.append(summary, list);
 
   claimButton.addEventListener('click', async () => {
     if (busy) return;
@@ -48,11 +61,13 @@ export function render(container) {
       return;
     }
     const entries = data.entries || [];
-    summary.textContent = entries.length ? 'มีของรอรับ ' + money(entries.length) + ' รายการ' : 'ไม่มีของรอรับ';
+    summary.textContent = entries.length ? 'มีของรอรับ ' + money(entries.length) + ' รายการ' : 'ไม่มีของรอรับในกล่องขณะนี้';
     if (!entries.length) {
-      list.append(el('div', { class: 'empty', text: 'กล่องว่าง' }));
+      list.append(el('div', { class: 'empty', text: 'กล่องของว่างเปล่า' }));
+      claimButton.disabled = true;
       return;
     }
+    claimButton.disabled = false;
     for (const entry of entries) {
       list.append(el('div', { class: 'item' },
         el('div', { class: 'main' },

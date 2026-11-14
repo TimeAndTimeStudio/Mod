@@ -3,33 +3,103 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0f766e">
-<title>Claim Map Market</title>
+<meta name="theme-color" content="#ff7a00">
+<title>Claim Map // Market Terminal</title>
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 <header id="statusbar">
   <div class="brand">
-    <span class="brand-mark">CM</span>
-    <div class="who"><span id="who-name">ยังไม่ได้เข้าสู่ระบบ</span><span id="who-role"></span></div>
+    <div class="brand-box" data-route="home" role="button" tabindex="0">
+      <span class="brand-mark">CM</span>
+      <div class="brand-text">
+        <span class="brand-title">CLAIM MAP</span>
+        <span class="brand-sub">MARKET // TERMINAL</span>
+      </div>
+    </div>
+    <div class="system-status">
+      <span class="status-dot"></span>
+      <span class="status-text">ONLINE</span>
+    </div>
   </div>
-  <div class="money">
-    <span id="balance" title="ยอดเงิน">0</span>
-    <span id="currency">เหรียญ</span>
-    <span id="mailbox" title="ของในกล่อง">📦 0</span>
+  <div class="user-deck">
+    <div class="user-pill" title="สถานะบัญชี">
+      <span class="pill-ico" data-icon="user" data-icon-size="14"></span>
+      <span id="who-name">ยังไม่ได้เข้าสู่ระบบ</span>
+      <span id="who-role" class="badge"></span>
+    </div>
+    <button id="btn-balance" class="metric-pill" type="button" data-route="wallet" title="คลิกเพื่อดูกระเป๋าเงิน">
+      <span class="pill-ico" data-icon="coin" data-icon-size="14"></span>
+      <span id="balance">0</span>
+      <span id="currency">เหรียญ</span>
+    </button>
+    <button id="btn-mailbox-badge" class="metric-pill mailbox-pill" type="button" data-route="mailbox" title="คลิกเพื่อดูกล่องของ">
+      <span class="pill-ico" data-icon="mailbox" data-icon-size="14"></span>
+      <span class="mailbox-label">กล่อง</span>
+      <span id="mailbox" class="badge count-badge" data-mailbox-count>0</span>
+    </button>
+    <button id="btn-logout" class="icon-btn logout-btn" type="button" title="ออกจากระบบ" hidden>
+      <span data-icon="logout" data-icon-size="14"></span>
+      <span class="btn-text">ออก</span>
+    </button>
   </div>
 </header>
-<div id="offline-banner" hidden>เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — กำลังลองใหม่</div>
-<main id="app" aria-live="polite"></main>
-<nav id="tabbar" aria-label="เมนูหลัก">
-  <button id="btn-home" type="button"><span class="nav-ico">🏠</span>หน้าแรก</button>
-  <button id="btn-map" type="button"><span class="nav-ico">🗺</span>แผนที่</button>
-  <button id="btn-buy" type="button"><span class="nav-ico">🛒</span>ซื้อ</button>
-  <button id="btn-sell" type="button"><span class="nav-ico">🏷</span>ลงขาย</button>
-  <button id="btn-trade" type="button"><span class="nav-ico">🤝</span>เทรด</button>
-  <button id="btn-mailbox" type="button"><span class="nav-ico">📦</span>กล่อง</button>
+
+<div id="offline-banner" hidden>
+  <span class="banner-ico" data-icon="warn" data-icon-size="16"></span>
+  <span class="banner-text">ขาดการเชื่อมต่อกับเซิร์ฟเวอร์ — กำลังลองใหม่...</span>
+</div>
+
+<nav id="nav-deck" aria-label="เมนูหลัก">
+  <div class="nav-scroller">
+    <button class="nav-btn" type="button" data-route="home">
+      <span class="nav-ico" data-icon="home" data-icon-size="16"></span>
+      <span class="nav-label">หน้าแรก</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="map">
+      <span class="nav-ico" data-icon="map" data-icon-size="16"></span>
+      <span class="nav-label">แผนที่</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="buy">
+      <span class="nav-ico" data-icon="buy" data-icon-size="16"></span>
+      <span class="nav-label">ซื้อ</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="sell">
+      <span class="nav-ico" data-icon="sell" data-icon-size="16"></span>
+      <span class="nav-label">ลงขาย</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="auction">
+      <span class="nav-ico" data-icon="auction" data-icon-size="16"></span>
+      <span class="nav-label">ประมูล</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="trade">
+      <span class="nav-ico" data-icon="trade" data-icon-size="16"></span>
+      <span class="nav-label">เทรด</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="wallet">
+      <span class="nav-ico" data-icon="wallet" data-icon-size="16"></span>
+      <span class="nav-label">กระเป๋า</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="mailbox">
+      <span class="nav-ico" data-icon="mailbox" data-icon-size="16"></span>
+      <span class="nav-label">กล่องของ</span>
+      <span class="nav-badge" data-mailbox-count hidden>0</span>
+    </button>
+    <button class="nav-btn" type="button" data-route="prices">
+      <span class="nav-ico" data-icon="prices" data-icon-size="16"></span>
+      <span class="nav-label">ราคากลาง</span>
+    </button>
+    <button class="nav-btn admin-btn" type="button" data-route="admin" data-admin-only hidden>
+      <span class="nav-ico" data-icon="admin" data-icon-size="16"></span>
+      <span class="nav-label">แอดมิน</span>
+    </button>
+  </div>
 </nav>
+
+<main id="app" aria-live="polite"></main>
+
 <div id="toast" role="status" aria-live="polite"></div>
+
 <script type="module" src="/js/main.js"></script>
 </body>
 </html>

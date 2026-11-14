@@ -1,20 +1,26 @@
+import { icon } from '../icons.js';
 import { el, state, authHeaders, api, notifyUnauthorized, showError, toast } from '../core.js';
 
 const CELL = 500;
 const STALE_MS = 30000;
 
 export function render(container) {
-  container.append(el('h1', { text: 'แผนที่' }));
+  container.append(
+    el('div', { class: 'page-head' },
+      el('div', null,
+        el('h1', { text: 'แผนที่ดินแดน' }),
+        el('p', { class: 'hint', text: 'สำรวจพื้นที่จอง chunk 500×500 บล็อก · สีส้ม = ของคุณ, สีแดง = ของคนอื่น' })))
+  );
 
   const xInput = el('input', { type: 'number', value: '0', min: -30000000, max: 30000000 });
   const zInput = el('input', { type: 'number', value: '0', min: -30000000, max: 30000000 });
-  const goButton = el('button', { class: 'secondary', type: 'button', text: 'ไป' });
-  const zoomIn = el('button', { class: 'secondary', type: 'button', text: '+', title: 'ขยาย' });
-  const zoomOut = el('button', { class: 'secondary', type: 'button', text: '−', title: 'ย่อ' });
+  const goButton = el('button', { class: 'secondary', type: 'button', text: 'ไปยังพิกัด' });
+  const zoomIn = el('button', { class: 'secondary', type: 'button', title: 'ขยาย' }, icon('plus', 14));
+  const zoomOut = el('button', { class: 'secondary', type: 'button', title: 'ย่อ' }, icon('close', 14));
   const claimButton = el('button', { class: 'primary', type: 'button', text: 'จองช่องนี้', disabled: true });
   const toolbar = el('div', { class: 'map-toolbar' },
-    el('div', { class: 'field' }, el('label', { text: 'X' }), xInput),
-    el('div', { class: 'field' }, el('label', { text: 'Z' }), zInput),
+    el('div', { class: 'field' }, el('label', { text: 'พิกัด X' }), xInput),
+    el('div', { class: 'field' }, el('label', { text: 'พิกัด Z' }), zInput),
     goButton, zoomIn, zoomOut, claimButton);
   const canvas = el('canvas', { id: 'map-canvas' });
   const info = el('div', { class: 'map-info', text: 'ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง · สีส้ม = ของคุณ สีแดง = ของคนอื่น' });

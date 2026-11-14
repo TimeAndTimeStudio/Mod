@@ -1,3 +1,4 @@
+import { icon } from '../icons.js';
 import { el, clear, api, state, money, confirmModal, showError, toast, refreshStatus } from '../core.js';
 import { fetchSources, sourceLabel } from '../sources.js';
 
@@ -38,7 +39,10 @@ export function render(container) {
   function renderMarket() {
     const note = el('p', { class: 'hint', text: 'ของจะถูกย้ายออกจากช่องที่เลือกทันทีที่ลงขาย ถ้ายกเลิกหรือหมดอายุ ของจะเข้ากล่องของ' });
     const select = el('select', { 'aria-label': 'เลือกไอเท็มที่จะลงขาย' });
-    const refresh = el('button', { class: 'secondary', type: 'button', text: '↻ รีเฟรชของ' });
+    const refresh = el('button', { class: 'secondary', type: 'button' },
+      icon('refresh', 16),
+      el('span', { text: 'รีเฟรชของ' })
+    );
     const qty = el('input', { type: 'number', value: '1', min: 1, max: 2304, inputMode: 'numeric' });
     const start = el('input', { type: 'number', value: '100', min: 1, inputMode: 'numeric' });
     const buyout = el('input', { type: 'number', min: 0, placeholder: 'ไม่บังคับ', inputMode: 'numeric' });

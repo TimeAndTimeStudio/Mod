@@ -1,10 +1,16 @@
+import { icon } from '../icons.js';
 import { el, clear, api, state, money, dateTime } from '../core.js';
 
 export function render(container) {
   let disposed = false;
   let data = null;
 
-  container.append(el('h1', { text: 'ราคากลาง' }));
+  container.append(
+    el('div', { class: 'page-head' },
+      el('div', null,
+        el('h1', { text: 'ดัชนีราคากลาง' }),
+        el('p', { class: 'hint', text: 'ตารางราคารับซื้อและขายออกของร้านค้าเซิร์ฟเวอร์' })))
+  );
   const stale = el('div');
   const search = el('input', { type: 'search', placeholder: 'ค้นหาไอเท็ม' });
   const updated = el('p', { class: 'hint', text: '' });
@@ -47,7 +53,7 @@ export function render(container) {
       data = await api('GET', '/api/prices');
       clear(stale);
       if (data.stale) {
-        stale.append(el('p', { class: 'hint', text: '⚠️ ราคายังเป็นข้อมูลเก่า ระบบกำลังพยายามอัปเดต' }));
+        stale.append(el('p', { class: 'notice' }, icon('warn', 16), 'ราคายังเป็นข้อมูลเก่า ระบบกำลังพยายามอัปเดต'));
       }
       updated.textContent = data.updatedAt ? 'อัปเดตล่าสุด ' + dateTime(data.updatedAt) : 'ยังไม่มีเวลาอัปเดต';
       renderTable();

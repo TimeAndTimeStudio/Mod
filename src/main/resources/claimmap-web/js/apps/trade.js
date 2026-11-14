@@ -1,3 +1,4 @@
+import { icon } from '../icons.js';
 import { el, clear, api, state, money, timeLeft, confirmModal, showError, toast, refreshStatus } from '../core.js';
 import { fetchSources, sourceLabel, sourceOptions } from '../sources.js';
 
@@ -7,18 +8,23 @@ export function render(container) {
   let sources = null;
   let data = null;
 
+  const refresh = el('button', { class: 'secondary', type: 'button' },
+    icon('refresh', 16),
+    el('span', { text: 'รีเฟรช' })
+  );
+
   container.append(el('div', { class: 'page-head' },
     el('div', null,
-      el('h1', { text: 'เทรด' }),
-      el('p', { class: 'hint', text: 'แลกไอเท็มกับผู้เล่นคนอื่น ของทั้งสองฝ่ายเข้าทางกล่องของ' }))));
+      el('h1', { text: 'ระบบเทรดแลกเปลี่ยน' }),
+      el('p', { class: 'hint', text: 'แลกไอเท็มกับผู้เล่นคนอื่นแบบของต่อของ ทั้งสองฝ่ายได้รับของทางกล่องพัสดุ' })),
+    refresh));
 
-  const refresh = el('button', { class: 'secondary', type: 'button', text: '↻ รีเฟรช' });
   const createCard = el('div', { class: 'card stack' });
   const offersTitle = el('h2', { text: 'ข้อเสนอที่เปิดอยู่' });
   const offers = el('div', { class: 'list' });
   const mineTitle = el('h2', { text: 'ของฉัน' });
   const mine = el('div', { class: 'list' });
-  container.append(refresh, createCard, offersTitle, offers, mineTitle, mine);
+  container.append(createCard, offersTitle, offers, mineTitle, mine);
 
   // ---- create -------------------------------------------------------------
 
