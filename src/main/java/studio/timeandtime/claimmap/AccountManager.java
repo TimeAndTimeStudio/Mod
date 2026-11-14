@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Player accounts for the web UI login. A player sets their own password
@@ -99,6 +101,33 @@ public final class AccountManager {
 			a.updatedAt = System.currentTimeMillis();
 			save();
 			return true;
+		}
+	}
+
+	/** UUID of the account with this display name, if it has a password. */
+	public Optional<UUID> uuidOf(String name) {
+		if (name == null || name.isBlank()) return Optional.empty();
+		String n = name.trim();
+		synchronized (lock) {
+			for (Account a : accounts.values()) {
+				if (a.name != null && a.name.equalsIgnoreCase(n) && a.hash != null) {
+					try {
+						return Optional.of(UUID.fromString(a.uuid));
+					} catch (RuntimeException e) {
+						return Optional.empty();
+					}
+				}
+			}
+		}
+		return Optional.empty();
+	}
+
+	/** Current display name for a UUID, if the account exists. */
+	public Optional<String> nameOf(UUID uuid) {
+		if (uuid == null) return Optional.empty();
+		synchronized (lock) {
+			Account a = accounts.get(uuid.toString());
+			return a == null || a.name == null ? Optional.empty() : Optional.of(a.name);
 		}
 	}
 

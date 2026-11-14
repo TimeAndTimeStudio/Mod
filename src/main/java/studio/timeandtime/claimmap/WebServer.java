@@ -1,5 +1,6 @@
 package studio.timeandtime.claimmap;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
@@ -12,6 +13,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 
 /**
@@ -28,16 +32,23 @@ public final class WebServer {
 	private final MapRenderer maps;
 	private final LinkManager links;
 	private final AccountManager accounts;
+	private final EconomyManager economy;
 	private final LoginThrottle throttle = new LoginThrottle();
+	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
 	private byte[] webPage;
 
-	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links, AccountManager accounts) {
+	private record Cached(JsonObject body, long expiresAt) {
+	}
+
+	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
+			AccountManager accounts, EconomyManager economy) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
 		this.links = links;
 		this.accounts = accounts;
+		this.economy = economy;
 	}
 
 	public void start() {
@@ -109,6 +120,14 @@ public final class WebServer {
 			case "/api/cells" -> {
 				requireMethod(ex, method, "GET");
 				handleCells(ex);
+			}
+			case "/api/wallet" -> {
+				requireMethod(ex, method, "GET");
+				handleWallet(ex);
+			}
+			case "/api/pay" -> {
+				requireMethod(ex, method, "POST");
+				handlePay(ex);
 			}
 			default -> {
 				if (path.startsWith("/api/map/")) {
@@ -376,6 +395,120 @@ public final class WebServer {
 				Json.send(ex, 200, true);
 			}
 		}
+	}
+
+	// ---- economy ------------------------------------------------------------
+
+	/** GET /api/wallet -> balance + currency + the 50 newest movements. */
+	private void handleWallet(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requireMarketEnabled();
+		UUID uuid = sessionUuid(a);
+		economy.ensureAccount(uuid);
+
+		JsonObject out = new JsonObject();
+		out.addProperty("balance", economy.balance(uuid));
+		out.addProperty("currency", config.currencyName);
+		JsonArray history = new JsonArray();
+		for (EconomyManager.TxView v : economy.history(uuid, EconomyManager.HISTORY_PER_PLAYER)) {
+			JsonObject o = new JsonObject();
+			o.addProperty("id", v.id());
+			o.addProperty("t", v.t());
+			o.addProperty("dir", v.dir());
+			o.addProperty("other", otherName(v.other()));
+			o.addProperty("amount", v.amount());
+			o.addProperty("reason", v.reason());
+			history.add(o);
+		}
+		out.add("history", history);
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/pay {"to","amount"} — server decides everything (R1). */
+	private void handlePay(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requireMarketEnabled();
+		JsonObject body = Json.readObject(ex);
+
+		Long amount = Json.integer(body, "amount");
+		if (amount == null || amount < 1 || amount > EconomyManager.MAX_MONEY) {
+			throw new Json.ApiError(400, "invalid_amount", "จำนวนเงินไม่ถูกต้อง");
+		}
+		String to = Json.str(body, "to");
+		if (to == null || to.isBlank() || to.trim().length() > 32) {
+			throw new Json.ApiError(400, "bad_request", "ชื่อผู้รับไม่ถูกต้อง");
+		}
+		to = to.trim();
+		UUID sender = sessionUuid(a);
+
+		if (!config.isAllowed(to)) throw new Json.ApiError(404, "not_found", "ไม่พบผู้เล่นชื่อนี้");
+		Optional<UUID> target = accounts.uuidOf(to);
+		if (target.isEmpty() || target.get().equals(sender)) {
+			if (target.isPresent()) throw new Json.ApiError(400, "bad_request", "โอนให้ตัวเองไม่ได้");
+			throw new Json.ApiError(404, "not_found", "ไม่พบผู้เล่นชื่อนี้ (ผู้เล่นยังไม่เคยเข้าเกม)");
+		}
+
+		String requestId = ex.getRequestHeaders().getFirst("X-Request-Id");
+		if (requestId != null) {
+			requestId = requestId.trim();
+			if (requestId.isEmpty()) {
+				requestId = null;
+			} else if (requestId.length() > 64) {
+				throw new Json.ApiError(400, "bad_request", "X-Request-Id ยาวเกิน 64 ตัวอักษร");
+			}
+		}
+		long now = System.currentTimeMillis();
+		idempotent.values().removeIf(c -> c.expiresAt() <= now);
+		String cacheKey = sender + "|" + requestId;
+		if (requestId != null) {
+			Cached cached = idempotent.get(cacheKey);
+			if (cached != null) {
+				Json.send(ex, 200, cached.body());
+				return;
+			}
+		}
+
+		economy.ensureAccount(sender);
+		TxResult r = economy.transfer(sender, target.get(), amount, "pay", "");
+		switch (r) {
+			case OK -> {
+			}
+			case INSUFFICIENT -> throw new Json.ApiError(409, "insufficient_funds", "ยอดเงินไม่พอ");
+			case FROZEN -> throw new Json.ApiError(409, "account_frozen", "บัญชีนี้ถูกระงับการโอน");
+			case NO_ACCOUNT -> throw new Json.ApiError(404, "not_found", "ผู้รับยังไม่เคยเข้าเกม");
+			case SAME_ACCOUNT -> throw new Json.ApiError(400, "bad_request", "โอนให้ตัวเองไม่ได้");
+			case INVALID_AMOUNT, OVERFLOW -> throw new Json.ApiError(400, "invalid_amount", "จำนวนเงินไม่ถูกต้อง");
+			default -> throw new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
+		}
+
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("balance", economy.balance(sender));
+		if (requestId != null) {
+			idempotent.put(cacheKey, new Cached(out.deepCopy(), now + 10 * 60_000L));
+		}
+		Json.send(ex, 200, out);
+	}
+
+	private void requireMarketEnabled() {
+		if (economy.isDisabled()) {
+			throw new Json.ApiError(503, "market_disabled", "ระบบเงินถูกปิดชั่วคราวเพราะไฟล์ข้อมูลเสีย กรุณาแจ้งแอดมิน");
+		}
+	}
+
+	private UUID sessionUuid(Auth a) {
+		try {
+			return UUID.fromString(a.uuid());
+		} catch (RuntimeException e) {
+			throw new Json.ApiError(401, "unauthorized", "เซสชันไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่");
+		}
+	}
+
+	private String otherName(Acct other) {
+		if (other == null) return "ระบบ";
+		if (other.isSystem()) return "ระบบ";
+		if (other.isEscrow()) return "ประมูล";
+		return accounts.nameOf(other.uuid()).orElse("ผู้เล่น");
 	}
 
 	// ---- helpers ------------------------------------------------------------

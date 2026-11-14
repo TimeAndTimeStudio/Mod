@@ -46,6 +46,10 @@ public final class ClaimMapConfig {
 	public int linkCodeMinutes = 5;
 	/** Validity of a web session token. */
 	public int sessionHours = 24;
+	/** Display name of the currency. */
+	public String currencyName = "เหรียญ";
+	/** Money granted to a brand new player account. */
+	public long startingBalance = 1000L;
 
 	public ClaimMapConfig() {
 		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
@@ -78,6 +82,9 @@ public final class ClaimMapConfig {
 		saveDelayMs = getLong("saveDelayMs", saveDelayMs, 1000L, 3600000L);
 		linkCodeMinutes = getInt("linkCodeMinutes", linkCodeMinutes, 1, 1440);
 		sessionHours = getInt("sessionHours", sessionHours, 1, 8760);
+		currencyName = props.getProperty("currencyName", currencyName).trim();
+		if (currencyName.isEmpty()) currencyName = "เหรียญ";
+		startingBalance = getLong("startingBalance", startingBalance, 0L, 1_000_000_000_000_000L);
 
 		boolean changed = false;
 		if (token.isEmpty()) {
@@ -87,11 +94,13 @@ public final class ClaimMapConfig {
 			ClaimMap.LOGGER.info("[claimmap] Generated new master token. Keep it secret! (script-only, never embedded in the web page)");
 		}
 		// Surface the new keys in the owner's file so they can edit them.
-		for (String key : new String[]{"players", "admins", "bindAddress"}) {
+		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
 					case "admins" -> admins;
+					case "currencyName" -> currencyName;
+					case "startingBalance" -> Long.toString(startingBalance);
 					default -> bindAddress;
 				});
 				changed = true;
@@ -118,6 +127,8 @@ public final class ClaimMapConfig {
 		props.setProperty("saveDelayMs", Long.toString(saveDelayMs));
 		props.setProperty("linkCodeMinutes", Integer.toString(linkCodeMinutes));
 		props.setProperty("sessionHours", Integer.toString(sessionHours));
+		props.setProperty("currencyName", currencyName);
+		props.setProperty("startingBalance", Long.toString(startingBalance));
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);
@@ -184,6 +195,11 @@ public final class ClaimMapConfig {
 
 	public Path accountsFile() {
 		return dir().resolve("accounts.json");
+	}
+
+	/** Directory that holds every data file ({@code config/claimmap}). */
+	public Path dataDir() {
+		return dir();
 	}
 
 	private Path dir() {

@@ -7,6 +7,9 @@ import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+
 /**
  * Claim Map: server-only Fabric mod that divides the world into 500x500 cells
  * which players can claim from a web page, renders an up-to-date map of only
@@ -15,6 +18,8 @@ import org.slf4j.LoggerFactory;
 public class ClaimMap implements ModInitializer {
 	public static final String MOD_ID = "claimmap";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+	/** Data backup cadence (PHASES.md 2.7). */
+	private static final long BACKUP_INTERVAL_MS = 60L * 60_000L;
 
 	private static ClaimMap INSTANCE;
 
@@ -33,7 +38,9 @@ public class ClaimMap implements ModInitializer {
 	private Protection protection;
 	private LinkManager links;
 	private AccountManager accounts;
+	private EconomyManager economy;
 	private WebServer web;
+	private ScheduledExecutorService backupExecutor;
 
 	@Override
 	public void onInitialize() {
@@ -48,10 +55,19 @@ public class ClaimMap implements ModInitializer {
 		links.load();
 		accounts = new AccountManager(config);
 		accounts.load();
+		economy = new EconomyManager(config.dataDir(), config, System::currentTimeMillis);
+		economy.load();
 		protection = new Protection(regions);
-		web = new WebServer(config, regions, maps, links, accounts);
+		web = new WebServer(config, regions, maps, links, accounts, economy);
 
-		new ClaimCommands(regions, links, accounts, config).register();
+		backupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+			Thread t = new Thread(r, "claimmap-backup");
+			t.setDaemon(true);
+			return t;
+		});
+		economy.startBackups(backupExecutor, BACKUP_INTERVAL_MS);
+
+		new ClaimCommands(regions, links, accounts, config, economy).register();
 		protection.register();
 
 		// Draw a map of exactly the chunks that are actually loaded / explored.
@@ -70,6 +86,8 @@ public class ClaimMap implements ModInitializer {
 			maps.flush();
 			maps.stop();
 			regions.save();
+			economy.backupNow();
+			if (backupExecutor != null) backupExecutor.shutdownNow();
 			this.server = null;
 		});
 	}

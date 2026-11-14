@@ -137,3 +137,42 @@
 
 **ปัญหาค้าง**
 - ไม่มี (ช่องโหว่ `/pass` takeover ยังอยู่ตามแผน — ปิดในเฟส 3 และห้ามใช้เงินจริงก่อนเฟส 3)
+
+---
+
+### เฟส 2 — ระบบเงิน EconomyManager (2026-11-14)
+
+**ไฟล์ที่เพิ่ม**
+- `Market.java` (`Market.LOCK`), `Acct.java`, `Move.java`, `TxResult.java`, `EconomyManager.java`, `GameBridge.java`
+- `src/test/java/studio/timeandtime/claimmap/EconomyManagerTest.java` (12 เทสต์)
+- `tools/CheckLedger.java` (ตรวจ ledger/snapshot/invariant/escrew, ไม่มี dependency)
+- `tools/StressPay.java` (ยิง `/api/pay` พร้อมกัน 100 ครั้ง ตรวจผลรวม)
+
+**ไฟล์ที่แก้**
+- `ClaimMapConfig.java` — เพิ่ม `currencyName`, `startingBalance`, `dataDir()`; เขียนคีย์ใหม่ลงไฟล์เมื่อยังไม่มี; validate ช่วงค่า
+- `AccountManager.java` — เพิ่ม `uuidOf(name)` / `nameOf(uuid)` (คีย์ยังเป็น UUID ตามเดิม)
+- `ClaimCommands.java` — เพิ่ม `/bal`, `/pay <ผู้เล่น> <จำนวน>` (ข้อความไทยตามผล `TxResult`)
+- `WebServer.java` — เพิ่ม `GET /api/wallet`, `POST /api/pay` (ตรวจทุกอย่างฝั่งเซิร์ฟเวอร์, ปฏิเสธทศนิยม/สตริง/0/ติดลบ, `X-Request-Id` idempotent 10 นาที, 503 `market_disabled`)
+- `ClaimMap.java` — สร้าง/โหลด `EconomyManager`, scheduler สำรองรายชั่วโมง (daemon), backup ตอนปิดเซิร์ฟเวอร์
+
+**การตัดสินใจ**
+- `economy.json` เป็นเพียง snapshot; `ledger.jsonl` คือความจริง — replay เฉพาะบรรทัดที่ `seq > lastSeq`; ประวัติ 50 รายการต่อคนสร้างใหม่จาก ledger ตอน `load()`
+- บรรทัด ledger สุดท้ายที่ JSON ไม่ครบ → ข้าม + WARN; บรรทัดกลางที่เสีย/ไฟล์ snapshot เสีย → เปลี่ยนชื่อเป็น `.corrupt-<ms>` + ปิดตลาด (ไม่สร้างไฟล์ว่างทับ)
+- `deposit`/SYSTEM→ผู้เล่น ยังทำได้แม้ผู้รับถูก freeze (เป็นการกระทำของระบบ) แต่ player→player และการถอนถูกบล็อก
+- `/api/wallet` และ `/api/pay` เรียก `ensureAccount` (idempotent) — ก่อนเฟส 3 ที่จะย้ายการสร้างบัญชีไปตอนเข้าเกม
+- ใช้ `server.submit(...)` ใน `GameBridge` (ยืนยันจากซอร์ส) พร้อม timeout 5 วิ
+
+**ผลทดสอบ Gate 2**
+- [x] `./gradlew test` ผ่าน 24 เทสต์ (12 ของ `EconomyManagerTest`: concurrency 100 เธรด, amount ผิด, batch atomic, replay จาก snapshot เก่า, ledger ท้ายตัดครึ่ง, ไฟล์เสีย, ensureAccount ซ้ำ, freeze, backup)
+- [x] `java tools/StressPay.java ... 100` → `ok=100 failed=0`, Alice 943→843, Bob 1057→1157, ผลรวมคงที่, ไม่มียอดติดลบ
+- [x] `pay` ยอดไม่พอ → 409 `insufficient_funds`; โอนตัวเอง → 400; 0/-5/1.5/"10" → 400 `invalid_amount`; ผู้รับไม่มี → 404
+- [x] `X-Request-Id: test-abc-1` ส่งซ้ำ → ได้ผลเดิม ยอดไม่ถูกหักซ้ำ (ledger มี 1 บรรทัด)
+- [x] `java tools/CheckLedger.java run/config/claimmap` → PASS (accounts=2, lastSeq=104, systemNet=-2000, invariant=0) ทั้งก่อนและหลังรีสตาร์ท
+- [x] รีสตาร์ทเซิร์ฟเวอร์ → Alice 843 / Bob 1157 เท่าเดิม
+- [x] backup: เขียนตอนปิดเซิร์ฟเวอร์ (`backups/20261114-140611/` มี economy.json, ledger.jsonl, accounts.json) + เทสต์ JUnit ของ `backupNow`
+- [x] จำลองไฟล์เสีย: `economy.json` เป็นขยะ → log SEVERE, ย้ายเป็น `economy.json.corrupt-<ms>`, `/api/wallet` และ `/api/pay` → 503 `market_disabled`, ไม่มี `economy.json` ใหม่ถูกสร้าง
+- [x] build 26.3 ✅ · 26.2 ✅
+
+**ข้อจำกัด/ค้าง**
+- `/bal` และ `/pay` ในเกมไม่ได้ทดสอบกับไคลเอนต์จริง (ทดสอบเฉพาะผ่าน API + unit test ของ `EconomyManager`)
+- ยังไม่ผูก auth กับเกม (เฟส 3) — ห้ามใช้เงินจริงก่อนเฟส 3 ตามสเปก
