@@ -1,4 +1,4 @@
-import { icon } from '../icons.js';
+import { icon, itemSlot } from '../icons.js';
 import { el, clear, api, state, money, confirmModal, showError, toast, refreshStatus } from '../core.js';
 import { fetchSources, sourceLabel } from '../sources.js';
 
@@ -192,6 +192,7 @@ export function render(container) {
           } finally { busy = false; await load(); }
         });
         list.append(el('div', { class: 'item' },
+          itemSlot(id, 1, 36),
           el('div', { class: 'main' },
             el('div', { class: 'title', text: String(info.label || id) }),
             el('div', { class: 'sub', text: id + ' · ขายได้ ' + money(info.sell) + ' ต่อชิ้น' })),

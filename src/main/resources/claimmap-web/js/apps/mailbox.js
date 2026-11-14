@@ -40,12 +40,17 @@ export function render(container) {
     claimButton.disabled = true;
     try {
       const out = await api('POST', '/api/mailbox/claim', {});
-      toast('รับแล้ว ' + money(out.claimed) + ' ชิ้น' + (out.remaining ? ' เหลือ ' + money(out.remaining) + ' ในกล่อง' : ''), 'ok');
+      if (out.inventoryFull) {
+        toast('รับได้ ' + money(out.claimed) + ' ชิ้น แต่กระเป๋าเต็มแล้ว! เหลือ ' + money(out.remaining) + ' ในกล่อง', 'warn');
+      } else {
+        toast('รับแล้ว ' + money(out.claimed) + ' ชิ้น' + (out.remaining ? ' เหลือ ' + money(out.remaining) + ' ในกล่อง' : ''), 'ok');
+      }
       state.mailboxCount = out.remaining || 0;
       refreshStatus();
       await load();
     } catch (e) {
       if (e.status === 409 && e.code === 'player_offline') toast('ต้องเข้าเกมก่อนจึงรับของได้', 'error');
+      else if (e.status === 409 && e.code === 'inventory_full') toast(e.message || 'ช่องเก็บของในตัวไม่พอ กรุณาเคลียร์ช่องว่างในกระเป๋าก่อน', 'error');
       else showError(e);
     } finally {
       busy = false;

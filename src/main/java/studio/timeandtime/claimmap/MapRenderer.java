@@ -63,6 +63,37 @@ public final class MapRenderer {
 
 	/** Called from the server thread for every newly loaded chunk. */
 	public void onChunkLoaded(ServerLevel level, LevelChunk chunk) {
+		// Only render chunks that are near an actual online player.
+		// Ignore pre-generated or spawn chunks loaded without players!
+		int chunkX = chunk.getPos().x();
+		int chunkZ = chunk.getPos().z();
+		boolean nearPlayer = false;
+		for (var player : level.players()) {
+			int px = player.getBlockX() >> 4;
+			int pz = player.getBlockZ() >> 4;
+			if (Math.abs(px - chunkX) <= 8 && Math.abs(pz - chunkZ) <= 8) {
+				nearPlayer = true;
+				break;
+			}
+		}
+		if (!nearPlayer) return;
+		renderChunk(level, chunk);
+	}
+
+	public void onPlayerPosition(ServerLevel level, int blockX, int blockZ) {
+		int chunkX = blockX >> 4;
+		int chunkZ = blockZ >> 4;
+		for (int dx = -2; dx <= 2; dx++) {
+			for (int dz = -2; dz <= 2; dz++) {
+				LevelChunk chunk = level.getChunkSource().getChunkNow(chunkX + dx, chunkZ + dz);
+				if (chunk != null) {
+					renderChunk(level, chunk);
+				}
+			}
+		}
+	}
+
+	private void renderChunk(ServerLevel level, LevelChunk chunk) {
 		int chunkX = chunk.getPos().x();
 		int chunkZ = chunk.getPos().z();
 		int step = Math.max(1, config.renderScale);
@@ -70,10 +101,6 @@ public final class MapRenderer {
 			for (int dz = 0; dz < 16; dz += step) {
 				int x = chunkX * 16 + dx;
 				int z = chunkZ * 16 + dz;
-				// NOTE: do NOT call level.getHeight(WorldSurface,x,z) in a chunk event:
-				// it block-fetches chunks and deadlocks the server thread while chunks load.
-				// Read the height from the chunk's own heightmap instead (non-blocking;
-				// the method masks to chunk-local coordinates and is safe on a loaded chunk).
 				int topY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
 				BlockState state = chunk.getBlockState(new BlockPos(x, topY, z));
 				draw(x, z, classify(state));

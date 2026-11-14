@@ -4,8 +4,7 @@ import { icon } from '../icons.js';
 const PRIMARY = [
   { key: 'buy', icon: 'buy', name: 'ซื้อของ', code: 'MARKET.BUY', desc: 'ซื้อจากร้านค้าเซิร์ฟเวอร์และตลาดผู้เล่น' },
   { key: 'sell', icon: 'sell', name: 'ลงขาย', code: 'MARKET.SELL', desc: 'ดึงของจากกระเป๋า, Ender Chest และกล่องในพื้นที่' },
-  { key: 'auction', icon: 'auction', name: 'ประมูล', code: 'MARKET.AUCTION', desc: 'เสนอราคาแข่งกันแบบสด หรือตั้งซื้อทันที' },
-  { key: 'trade', icon: 'trade', name: 'เทรด', code: 'MARKET.TRADE', desc: 'ระบบแลกเปลี่ยนไอเท็มของต่อของผ่านกล่องพัสดุ' }
+  { key: 'auction', icon: 'auction', name: 'ประมูล', code: 'MARKET.AUCTION', desc: 'เสนอราคาแข่งกันแบบสด หรือตั้งซื้อทันที' }
 ];
 
 const SECONDARY = [
@@ -23,7 +22,7 @@ export function render(container) {
         el('span', { class: 'sys-tag', text: '// SYSTEM DECK' }),
         el('span', { class: 'sys-code', text: 'NODE: 0.0.0.0:8085' })
       ),
-      el('h1', { text: state.me ? 'ยินดีต้อนรับ, ' + state.me : 'CLAIM MAP // INDUSTRIAL MARKET' }),
+      el('h1', { text: state.me ? 'ยินดีต้อนรับ, ' + state.me : 'TIME SMP // SURVIVAL MARKET' }),
       el('p', { class: 'hint', text: 'ระบบศูนย์กลางเศรษฐกิจ การค้าเสรี แลกเปลี่ยนไอเท็ม และการจัดการกรรมสิทธิ์ที่ดิน' })
     ),
     el('div', { class: 'hero-stats' },

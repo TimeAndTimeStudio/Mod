@@ -188,6 +188,19 @@ public final class RegionManager {
 		}
 	}
 
+	public boolean transfer(String id, String actorUuid, String newOwnerUuid, String newOwnerName, boolean admin) {
+		synchronized (lock) {
+			CellData c = cells.get(id);
+			if (c == null) return false;
+			if (!admin && !c.isOwner(actorUuid)) return false;
+			c.ownerUuid = newOwnerUuid;
+			c.ownerName = newOwnerName;
+			if (c.members != null) c.members.remove(newOwnerUuid);
+			save();
+			return true;
+		}
+	}
+
 	public boolean addMember(String id, String uuid, String memberUuid, String memberName) {
 		synchronized (lock) {
 			CellData c = cells.get(id);

@@ -41,7 +41,6 @@ public final class WebServer {
 	private final MailboxManager mailbox;
 	private final ShopManager shop;
 	private final AuctionManager auctions;
-	private final TradeManager trades;
 	private final AdminService admin;
 	private static final Pattern STATIC_PATH =
 			Pattern.compile("^/(css|js|icons)/[A-Za-z0-9_./-]+$");
@@ -55,7 +54,7 @@ public final class WebServer {
 
 	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
 			AccountManager accounts, EconomyManager economy, PriceService prices, MailboxManager mailbox,
-			ShopManager shop, AuctionManager auctions, TradeManager trades, AdminService admin) {
+			ShopManager shop, AuctionManager auctions, AdminService admin) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
@@ -66,7 +65,6 @@ public final class WebServer {
 		this.mailbox = mailbox;
 		this.shop = shop;
 		this.auctions = auctions;
-		this.trades = trades;
 		this.admin = admin;
 	}
 
@@ -183,13 +181,6 @@ public final class WebServer {
 				requireMethod(ex, method, "GET");
 				handleSources(ex);
 			}
-			case "/api/trades" -> {
-				if (method.equals("POST")) handleCreateTrade(ex);
-				else {
-					requireMethod(ex, method, "GET");
-					handleTrades(ex);
-				}
-			}
 			case "/api/admin/overview" -> {
 				requireMethod(ex, method, "GET");
 				handleAdminOverview(ex);
@@ -230,8 +221,6 @@ public final class WebServer {
 					handleAdminDynamic(ex, method, path);
 				} else if (path.startsWith("/api/auctions/")) {
 					handleAuctionAction(ex, method, path);
-				} else if (path.startsWith("/api/trades/")) {
-					handleTradeAction(ex, method, path);
 				} else if (path.startsWith("/api/map/")) {
 					requireMethod(ex, method, "GET");
 					handleMap(ex, path);
@@ -408,12 +397,35 @@ public final class WebServer {
 		Json.send(ex, 200, out);
 	}
 
-	/** GET /api/me -> {"name","admin"} */
+	/** GET /api/me -> {"name","admin","x","z","hasPos"} */
 	private void handleMe(HttpExchange ex) throws IOException {
 		Auth a = requireAuth(ex);
 		JsonObject out = new JsonObject();
 		out.addProperty("name", a.name());
 		out.addProperty("admin", a.admin());
+		try {
+			UUID uuid = sessionUuid(a);
+			if (uuid != null) {
+				var s = ClaimMap.getServer();
+				if (s != null) {
+					var sp = s.getPlayerList().getPlayer(uuid);
+					if (sp != null) {
+						out.addProperty("x", sp.getBlockX());
+						out.addProperty("z", sp.getBlockZ());
+						out.addProperty("hasPos", true);
+					}
+				}
+				if (!out.has("hasPos")) {
+					net.minecraft.core.BlockPos p = PlayerPositions.get(uuid);
+					if (p != null) {
+						out.addProperty("x", p.getX());
+						out.addProperty("z", p.getZ());
+						out.addProperty("hasPos", true);
+					}
+				}
+			}
+		} catch (Exception ignored) {
+		}
 		Json.send(ex, 200, out);
 	}
 
@@ -503,6 +515,9 @@ public final class WebServer {
 		} else if (rest.endsWith("/members")) {
 			id = rest.substring(0, rest.length() - "/members".length());
 			action = "members";
+		} else if (rest.endsWith("/transfer")) {
+			id = rest.substring(0, rest.length() - "/transfer".length());
+			action = "transfer";
 		} else {
 			id = rest;
 		}
@@ -535,6 +550,42 @@ public final class WebServer {
 				boolean ok = regions.addMember(id, a.uuid(), mUuid, mName == null ? "" : mName);
 				if (!ok) throw new Json.ApiError(403, "forbidden", "คุณไม่ใช่เจ้าของช่องนี้");
 				Json.send(ex, 200, true);
+			}
+			case "transfer" -> {
+				requireMethod(ex, method, "POST");
+				Auth a = requireAuth(ex);
+				boolean admin = a.master() || a.admin();
+				JsonObject body = Json.readObject(ex);
+				String to = Json.str(body, "to");
+				if (to == null || to.isBlank() || to.trim().length() > 32) {
+					throw new Json.ApiError(400, "bad_request", "ต้องระบุชื่อผู้รับโอน");
+				}
+				to = to.trim();
+				UUID targetUuid = accounts.uuidOf(to).orElse(null);
+				String targetName = to;
+				if (targetUuid == null) {
+					var s = ClaimMap.getServer();
+					if (s != null) {
+						var sp = s.getPlayerList().getPlayerByName(to);
+						if (sp != null) {
+							targetUuid = sp.getUUID();
+							targetName = sp.getGameProfile().name();
+						}
+					}
+				}
+				if (targetUuid == null) {
+					throw new Json.ApiError(404, "not_found", "ไม่พบผู้เล่นปลายทาง (ต้องเคยเข้าเกมหรือออนไลน์)");
+				}
+				String actorUuid = a.master() ? "admin" : a.uuid();
+				boolean ok = regions.transfer(id, actorUuid, targetUuid.toString(), targetName, admin);
+				if (!ok) {
+					throw new Json.ApiError(403, "forbidden", "คุณไม่ใช่เจ้าของช่องนี้หรือไม่สามารถโอนได้");
+				}
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("id", id);
+				out.addProperty("ownerName", targetName);
+				Json.send(ex, 200, out);
 			}
 			default -> {
 				requireMethod(ex, method, "DELETE");
@@ -786,10 +837,14 @@ public final class WebServer {
 			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
 		}
 		if (outcome == null) throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงรับของได้");
+		if (outcome.claimed() == 0 && outcome.remaining() > 0) {
+			throw new Json.ApiError(409, "inventory_full", "ช่องเก็บของในตัวไม่พอ กรุณาเคลียร์ช่องในกระเป๋าก่อนรับของ");
+		}
 		JsonObject out = new JsonObject();
 		out.addProperty("claimed", outcome.claimed());
 		out.addProperty("remaining", outcome.remaining());
 		out.addProperty("skipped", outcome.skipped());
+		out.addProperty("inventoryFull", outcome.inventoryFull());
 		Json.send(ex, 200, out);
 	}
 
@@ -995,152 +1050,6 @@ public final class WebServer {
 		out.addProperty("ok", true);
 		out.addProperty("id", result[1]);
 		Json.send(ex, 200, out);
-	}
-
-	/** GET /api/trades — active barter offers plus the caller's history. */
-	private void handleTrades(HttpExchange ex) throws IOException {
-		Auth a = requireSession(ex);
-		UUID uuid = sessionUuid(a);
-		JsonArray active = new JsonArray();
-		for (TradeManager.Offer o : trades.active()) active.add(tradeView(o, uuid));
-		JsonArray mine = new JsonArray();
-		for (TradeManager.Offer o : trades.recentFor(uuid.toString())) mine.add(tradeView(o, uuid));
-		JsonObject out = new JsonObject();
-		out.add("offers", active);
-		out.add("mine", mine);
-		Json.send(ex, 200, out);
-	}
-
-	private JsonObject tradeView(TradeManager.Offer o, UUID viewer) {
-		JsonObject p = new JsonObject();
-		p.addProperty("id", o.id);
-		p.addProperty("ownerName", o.ownerName);
-		p.addProperty("giveItemId", o.giveItemId);
-		p.addProperty("giveCount", o.giveCount);
-		p.addProperty("giveLabel", o.giveLabel);
-		p.addProperty("wantItemId", o.wantItemId);
-		p.addProperty("wantCount", o.wantCount);
-		p.addProperty("wantLabel", o.wantLabel);
-		p.addProperty("endsAt", o.endsAt);
-		p.addProperty("status", o.status);
-		p.addProperty("mine", o.owner.equals(viewer.toString()));
-		p.addProperty("canAccept", o.isActive() && !o.owner.equals(viewer.toString()));
-		p.addProperty("canCancel", TradeManager.ACTIVE.equals(o.status) && o.owner.equals(viewer.toString()));
-		return p;
-	}
-
-	/** POST /api/trades {ref,giveCount,wantItem,wantCount} */
-	private void handleCreateTrade(HttpExchange ex) throws IOException {
-		Auth a = requireSession(ex);
-		UUID uuid = sessionUuid(a);
-		JsonObject body = Json.readObject(ex);
-		String ref = Json.str(body, "ref");
-		Long giveValue = Json.integer(body, "giveCount");
-		String wantItem = Json.str(body, "wantItem");
-		Long wantValue = Json.integer(body, "wantCount");
-		if (ref == null || ref.isBlank()) throw new Json.ApiError(400, "invalid_source", "ต้องเลือกไอเท็มที่จะให้");
-		if (giveValue == null || giveValue < 1 || giveValue > 2304) throw new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง");
-		if (wantItem == null || wantItem.isBlank() || wantItem.length() > 128) {
-			throw new Json.ApiError(400, "invalid_item", "ระบุไอเท็มที่ต้องการ");
-		}
-		if (wantValue == null || wantValue < 1 || wantValue > 2304) throw new Json.ApiError(400, "invalid_quantity", "จำนวนที่ต้องการไม่ถูกต้อง");
-		final String want = wantItem.trim().toLowerCase();
-		if (!ItemRegistryAdapter.exists(want)) throw new Json.ApiError(400, "invalid_item", "ไม่พบไอเท็มที่ต้องการ");
-
-		var server = ClaimMap.getServer();
-		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
-		if (server.getPlayerList().getPlayer(uuid) == null) throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงจะตั้งเทรดได้");
-		String wantLabel = ItemRegistryAdapter.label(want);
-		String[] result;
-		try {
-			result = GameBridge.call(server, () -> {
-				var player = server.getPlayerList().getPlayer(uuid);
-				if (player == null) return new String[]{"player_offline", null};
-				ItemSources.Taken taken = ItemSources.take(player, regions, ref, null, giveValue.intValue());
-				if (taken == null) return new String[]{"invalid_source", null};
-				String json = ItemCodecs.encode(taken.stack(), server.registryAccess());
-				String itemId = ItemCodecs.idOf(taken.stack());
-				TradeManager.Result r = trades.create(uuid.toString(), a.name(), json, itemId, taken.stack().getCount(),
-						ItemRegistryAdapter.label(itemId), want, wantValue.intValue(), wantLabel);
-				if (r != TradeManager.Result.OK) taken.restore().run();
-				return new String[]{r == TradeManager.Result.OK ? null : r.name(), null};
-			}, GameBridge.DEFAULT_TIMEOUT_MS);
-		} catch (GameBridge.GameUnavailableException e) {
-			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
-		}
-		if (result[0] != null) throw tradeError(result[0]);
-		JsonObject out = new JsonObject();
-		out.addProperty("ok", true);
-		Json.send(ex, 200, out);
-	}
-
-	/** POST /api/trades/{id}/{accept|cancel} */
-	private void handleTradeAction(HttpExchange ex, String method, String path) throws IOException {
-		requireMethod(ex, method, "POST");
-		Auth a = requireSession(ex);
-		UUID uuid = sessionUuid(a);
-		String rest = path.substring("/api/trades/".length());
-		int slash = rest.indexOf('/');
-		if (slash <= 0) throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
-		String id = rest.substring(0, slash);
-		String action = rest.substring(slash + 1);
-		TradeManager.Offer offer = trades.find(id);
-		if (offer == null) throw new Json.ApiError(404, "not_found", "ไม่พบข้อเสนอเทรดนี้");
-		switch (action) {
-			case "cancel" -> {
-				Json.readObject(ex);
-				TradeManager.Result r = trades.cancel(id, uuid.toString(), a.admin(), mailbox);
-				if (r != TradeManager.Result.OK) throw tradeError(r.name());
-				JsonObject out = new JsonObject();
-				out.addProperty("ok", true);
-				out.addProperty("mailboxCount", mailbox.count(uuid));
-				Json.send(ex, 200, out);
-			}
-			case "accept" -> {
-				JsonObject body = Json.readObject(ex);
-				String ref = Json.str(body, "ref");
-				if (ref == null || ref.isBlank()) throw new Json.ApiError(400, "invalid_source", "เลือกช่องของที่จะใช้เทรด");
-				var server = ClaimMap.getServer();
-				if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
-				if (server.getPlayerList().getPlayer(uuid) == null) throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงจะรับเทรดได้");
-				String[] result;
-				try {
-					result = GameBridge.call(server, () -> {
-						var player = server.getPlayerList().getPlayer(uuid);
-						if (player == null) return new String[]{"player_offline"};
-						ItemSources.Taken taken = ItemSources.take(player, regions, ref, offer.wantItemId, offer.wantCount);
-						if (taken == null) return new String[]{"invalid_source"};
-						String json = ItemCodecs.encode(taken.stack(), server.registryAccess());
-						TradeManager.Result r = trades.accept(id, uuid.toString(), a.name(), json,
-								offer.wantItemId, offer.wantCount, offer.wantLabel, mailbox);
-						if (r != TradeManager.Result.OK) taken.restore().run();
-						return new String[]{r == TradeManager.Result.OK ? null : r.name()};
-					}, GameBridge.DEFAULT_TIMEOUT_MS);
-				} catch (GameBridge.GameUnavailableException e) {
-					throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
-				}
-				if (result[0] != null) throw tradeError(result[0]);
-				JsonObject out = new JsonObject();
-				out.addProperty("ok", true);
-				out.addProperty("mailboxCount", mailbox.count(uuid));
-				Json.send(ex, 200, out);
-			}
-			default -> throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
-		}
-	}
-
-	private Json.ApiError tradeError(String code) {
-		return switch (code) {
-			case "NOT_FOUND" -> new Json.ApiError(404, "not_found", "ไม่พบข้อเสนอเทรดนี้");
-			case "OWN_OFFER" -> new Json.ApiError(409, "own_offer", "รับเทรดของตัวเองไม่ได้");
-			case "CLOSED" -> new Json.ApiError(409, "trade_closed", "ข้อเสนอนี้ปิดแล้ว");
-			case "LIMIT_REACHED" -> new Json.ApiError(409, "limit_reached", "มีข้อเสนอเทรดสูงสุดแล้ว");
-			case "MAILBOX_FULL" -> new Json.ApiError(409, "mailbox_full", "กล่องของเต็ม กรุณารับของก่อน");
-			case "invalid_source" -> new Json.ApiError(409, "invalid_source", "ไอเท็มในช่องนั้นเปลี่ยนแล้ว กรุณารีเฟรช");
-			case "player_offline" -> new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อน");
-			case "BAD_REQUEST" -> new Json.ApiError(400, "bad_request", "ข้อมูลไม่ถูกต้อง");
-			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
-		};
 	}
 
 	private void requireAuctionEnabled() {

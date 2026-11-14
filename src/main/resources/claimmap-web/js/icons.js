@@ -51,3 +51,39 @@ export function hydrateIcons(root = document) {
     node.append(icon(name, size, cls));
   }
 }
+
+export function craftyIcon(itemId, size = 40) {
+  const rawId = (itemId || '').replace(/^minecraft:/, '').toLowerCase();
+  const img = document.createElement('img');
+  img.className = 'inv-ico';
+  img.alt = rawId;
+  img.title = rawId;
+  img.width = size;
+  img.height = size;
+  img.loading = 'lazy';
+  img.src = `https://crafty.gg/icons-mc/${rawId}.png`;
+  img.onerror = () => {
+    img.style.display = 'none';
+    const parent = img.parentNode;
+    if (parent && !parent.querySelector('.inv-ph')) {
+      const ph = document.createElement('div');
+      ph.className = 'inv-ph';
+      ph.textContent = rawId.slice(0, 2).toUpperCase();
+      parent.appendChild(ph);
+    }
+  };
+  return img;
+}
+
+export function itemSlot(itemId, count = 1, size = 40) {
+  const box = document.createElement('div');
+  box.className = 'inv-slot-box';
+  box.appendChild(craftyIcon(itemId, size));
+  if (count > 1) {
+    const badge = document.createElement('span');
+    badge.className = 'inv-count-badge';
+    badge.textContent = String(count);
+    box.appendChild(badge);
+  }
+  return box;
+}

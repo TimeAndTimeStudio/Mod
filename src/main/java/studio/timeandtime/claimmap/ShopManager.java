@@ -52,7 +52,10 @@ public final class ShopManager {
 	public record SellOutcome(Result result, int sold, long earned, long balance) {
 	}
 
-	public record ClaimOutcome(int claimed, int remaining, int skipped) {
+	public record ClaimOutcome(int claimed, int remaining, int skipped, boolean inventoryFull) {
+		public ClaimOutcome(int claimed, int remaining, int skipped) {
+			this(claimed, remaining, skipped, false);
+		}
 	}
 
 	private static final Gson GSON = new GsonBuilder().create();
@@ -305,6 +308,7 @@ public final class ShopManager {
 		RegistryAccess access = player.level().registryAccess();
 		int claimed = 0;
 		int skipped = 0;
+		boolean inventoryFull = false;
 		synchronized (Market.LOCK) {
 			for (MailboxManager.MailEntry entry : mailbox.list(uuid)) {
 				var decoded = ItemCodecs.decode(entry.itemJson(), access);
@@ -322,6 +326,7 @@ public final class ShopManager {
 				claimed += moved;
 				if (stack.getCount() > 0) {
 					// Inventory is full: keep the remainder as one smaller entry.
+					inventoryFull = true;
 					stack.setCount(stack.getCount());
 					String json = ItemCodecs.encode(stack, access);
 					if (json == null) {
@@ -336,7 +341,11 @@ public final class ShopManager {
 				mailbox.remove(uuid, entry.id());
 			}
 		}
-		return new ClaimOutcome(claimed, mailbox.count(uuid), skipped);
+		int remaining = mailbox.count(uuid);
+		if (remaining > 0 && player.getInventory().getFreeSlot() == -1) {
+			inventoryFull = true;
+		}
+		return new ClaimOutcome(claimed, remaining, skipped, inventoryFull);
 	}
 
 	// ---- daily quota --------------------------------------------------------

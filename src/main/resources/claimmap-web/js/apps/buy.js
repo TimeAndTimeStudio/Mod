@@ -1,4 +1,4 @@
-import { icon } from '../icons.js';
+import { icon, itemSlot } from '../icons.js';
 import { el, clear, api, state, money, confirmModal, showError, toast, refreshStatus, navigate } from '../core.js';
 
 export function render(container) {
@@ -75,6 +75,7 @@ export function render(container) {
         }
       });
       list.append(el('div', { class: 'item' },
+        itemSlot(id, 1, 36),
         el('div', { class: 'main' },
           el('div', { class: 'title', text: String(info.label || id) }),
           el('div', { class: 'sub', text: id + ' · ซื้อ ' + money(info.buy) + ' ' + (shop.currency || state.currency) + ' ต่อชิ้น' })),
@@ -110,6 +111,7 @@ export function render(container) {
 				actions.append(el('button', { class: 'secondary', type: 'button', text: 'ดูการประมูล', onClick: () => navigate('auction') }));
 			}
 			playersList.append(el('div', { class: 'item' },
+				itemSlot(a.itemId, a.count, 36),
 				el('div', { class: 'main' },
 					el('div', { class: 'title', text: a.label + ' × ' + money(a.count) }),
 					el('div', { class: 'sub', text: 'ผู้ขาย ' + a.sellerName + ' · เริ่ม ' + money(a.startPrice) + (a.highBid ? ' · สูงสุด ' + money(a.highBid) : '') })),

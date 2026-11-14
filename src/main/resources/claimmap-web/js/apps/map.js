@@ -18,17 +18,19 @@ export function render(container) {
   const zoomIn = el('button', { class: 'secondary', type: 'button', title: 'ขยาย' }, icon('plus', 14));
   const zoomOut = el('button', { class: 'secondary', type: 'button', title: 'ย่อ' }, icon('close', 14));
   const claimButton = el('button', { class: 'primary', type: 'button', text: 'จองช่องนี้', disabled: true });
+  const transferButton = el('button', { class: 'secondary', type: 'button', text: 'โอนกรรมสิทธิ์', hidden: true });
+  const unclaimButton = el('button', { class: 'secondary', type: 'button', text: 'ยกเลิกการจอง', hidden: true });
   const toolbar = el('div', { class: 'map-toolbar' },
     el('div', { class: 'field' }, el('label', { text: 'พิกัด X' }), xInput),
     el('div', { class: 'field' }, el('label', { text: 'พิกัด Z' }), zInput),
-    goButton, zoomIn, zoomOut, claimButton);
+    goButton, zoomIn, zoomOut, claimButton, transferButton, unclaimButton);
   const canvas = el('canvas', { id: 'map-canvas' });
   const info = el('div', { class: 'map-info', text: 'ลากเพื่อเลื่อน · แตะเพื่อเลือกช่อง · สีส้ม = ของคุณ สีแดง = ของคนอื่น' });
   container.append(toolbar, canvas, info);
 
   const g = canvas.getContext('2d');
-  let cx = 0;
-  let cz = 0;
+  let cx = typeof state.lastX === 'number' ? state.lastX : 0;
+  let cz = typeof state.lastZ === 'number' ? state.lastZ : 0;
   let scale = 0.25;
   let owned = {};
   let me = state.me;
@@ -177,13 +179,17 @@ export function render(container) {
     sel = null;
     peek = null;
     claimButton.disabled = true;
-    if (owned[id] && owned[id] !== me) {
+    transferButton.hidden = true;
+    unclaimButton.hidden = true;
+    if (owned[id]) {
       peek = id;
-      info.textContent = 'ช่อง ' + id + ' | X ' + (tx * CELL) + '…' + (tx * CELL + CELL - 1)
-        + '  Z ' + (tz * CELL) + '…' + (tz * CELL + CELL - 1) + ' | เจ้าของ: ' + owned[id] + ' (เลือกไม่ได้)';
-    } else if (owned[id]) {
-      peek = id;
-      info.textContent = 'ช่อง ' + id + ' | ช่องของคุณ';
+      const isOwner = owned[id] === me;
+      const canManage = isOwner || state.admin;
+      if (canManage) {
+        transferButton.hidden = false;
+        unclaimButton.hidden = false;
+      }
+      info.textContent = 'ช่อง ' + id + ' | เจ้าของ: ' + owned[id] + (isOwner ? ' (ช่องของคุณ)' : (state.admin ? ' (แอดมินจัดการได้)' : ''));
     } else {
       sel = id;
       claimButton.disabled = false;
@@ -221,9 +227,55 @@ export function render(container) {
     }
   });
 
+  transferButton.addEventListener('click', async () => {
+    if (!peek || !owned[peek]) return;
+    const to = window.prompt('โอนสิทธิ์เขต ' + peek + ' ให้แก่ผู้เล่น (ใส่ชื่อผู้เล่น):');
+    if (!to || !to.trim()) return;
+    try {
+      await api('POST', '/api/cells/' + peek + '/transfer', { to: to.trim() });
+      toast('โอนกรรมสิทธิ์เขต ' + peek + ' ให้แก่ ' + to.trim() + ' สำเร็จ', 'ok');
+      await loadOwned();
+      transferButton.hidden = true;
+      unclaimButton.hidden = true;
+      peek = null;
+      draw();
+    } catch (e) {
+      showError(e);
+    }
+  });
+
+  unclaimButton.addEventListener('click', async () => {
+    if (!peek || !owned[peek]) return;
+    if (!window.confirm('คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการจองเขต ' + peek + ' ?')) return;
+    try {
+      await api('DELETE', '/api/cells/' + peek);
+      toast('ยกเลิกการจองเขต ' + peek + ' แล้ว', 'ok');
+      await loadOwned();
+      transferButton.hidden = true;
+      unclaimButton.hidden = true;
+      peek = null;
+      draw();
+    } catch (e) {
+      showError(e);
+    }
+  });
+
   const observer = new ResizeObserver(() => resize());
   observer.observe(canvas);
   const refresh = setInterval(() => { if (document.visibilityState === 'visible') draw(); }, STALE_MS);
+
+  if (state.session && typeof state.lastX !== 'number') {
+    api('GET', '/api/me').then(meData => {
+      if (meData && meData.hasPos && !disposed) {
+        cx = meData.x;
+        cz = meData.z;
+        state.lastX = meData.x;
+        state.lastZ = meData.z;
+        state.hasPos = true;
+        draw();
+      }
+    }).catch(() => {});
+  }
 
   resize();
   loadOwned().then(draw);

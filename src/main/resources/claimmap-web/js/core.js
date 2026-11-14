@@ -259,7 +259,7 @@ function renderLogin(container) {
 
   const box = el('div', { class: 'login-wrap' },
     el('div', { class: 'card' },
-      el('div', { class: 'login-brand' }, el('span', { class: 'brand-mark' }, 'CM'), el('div', null, el('strong', null, 'CLAIM MAP'), el('span', null, 'MARKET'))),
+      el('div', { class: 'login-brand' }, el('span', { class: 'brand-mark' }, 'TS'), el('div', null, el('strong', null, 'TIME SMP'), el('span', null, 'MARKET // TERMINAL'))),
       el('h1', { text: 'เข้าสู่ระบบ' }),
       el('p', { class: 'hint', text: 'ใช้ชื่อและรหัสเดียวกับที่ตั้งไว้ในหน้าต่างตอนเข้าเกม' }),
       form,
@@ -356,25 +356,34 @@ function paintStatus() {
 }
 
 export async function refreshStatus() {
-  if (!state.session) { paintStatus(); return; }
+  const banner = document.getElementById('offline-banner');
   try {
+    if (!state.session) {
+      await api('GET', '/api/health');
+      statusFailures = 0;
+      statusDelay = 5000;
+      if (banner) banner.hidden = true;
+      paintStatus();
+      return;
+    }
     const data = await api('GET', '/api/wallet');
     state.balance = data.balance || 0;
     state.currency = data.currency || CURRENCY_FALLBACK;
     if (typeof data.mailboxCount === 'number') state.mailboxCount = data.mailboxCount;
     statusFailures = 0;
     statusDelay = 5000;
-    const banner = document.getElementById('offline-banner');
     if (banner) banner.hidden = true;
     paintStatus();
   } catch (e) {
-    if (e.status === 401 || e.status === 403) return;
-    statusFailures++;
-    if (statusFailures >= 3) {
-      const banner = document.getElementById('offline-banner');
-      if (banner) banner.hidden = false;
-      statusDelay = Math.min(30000, statusDelay * 2);
+    if (e.status === 401 || e.status === 403) {
+      if (banner) banner.hidden = true;
+      return;
     }
+    statusFailures++;
+    if (statusFailures >= 2) {
+      if (banner) banner.hidden = false;
+    }
+    statusDelay = 2500;
   }
 }
 
@@ -396,12 +405,19 @@ export function startStatus() {
 }
 
 export async function boot() {
+  const banner = document.getElementById('offline-banner');
+  if (banner) banner.hidden = true;
   startRouter();
   if (state.session) {
     try {
       const me = await api('GET', '/api/me');
       state.me = me.name;
       state.admin = !!me.admin;
+      if (me.hasPos) {
+        state.lastX = me.x;
+        state.lastZ = me.z;
+        state.hasPos = true;
+      }
     } catch (e) {
       if (e.status !== 401) toast('ตรวจสอบเซสชันไม่สำเร็จ', 'error');
     }

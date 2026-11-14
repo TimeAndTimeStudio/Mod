@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"id": "claimmap",
 	"version": "${version}",
-	"name": "Claim Map",
-	"description": "Fabric server-only claim mod + web map (500x500 cells). Supports Minecraft 26.2 and 26.3.",
+	"name": "Time SMP",
+	"description": "Time SMP - Fabric server-only claim mod + web market (500x500 cells). Supports Minecraft 26.2 and 26.3.",
 	"authors": [
 		"TimeAndTimeStudio"
 	],

@@ -52,9 +52,9 @@ public final class ClaimMapConfig {
 	public long startingBalance = 1000L;
 	/** PBKDF2 work factor for in-game / web passwords. */
 	public int pbkdf2Iterations = 210_000;
-	/** JSONBin endpoint + access key. Empty = use prices-cache.json only. */
-	public String pricesUrl = "";
-	public String pricesAccessKey = "";
+	/** JSONBin endpoint + access key. Default to TimeAndTimeStudio price system. */
+	public String pricesUrl = "https://api.jsonbin.io/v3/b/6adc9639ffd5d16053881c70/latest";
+	public String pricesAccessKey = "$2a$10$EXkHeIJC/q2Te/E8MoZHAe3H0Rgl5x/mDjTqhNpIY1eYgsnJLpw8W";
 	public int priceRefreshSeconds = 60;
 	/** Shop percentages of the base price (integers, PHASES.md 4.2). */
 	public int sellPercent = 70;

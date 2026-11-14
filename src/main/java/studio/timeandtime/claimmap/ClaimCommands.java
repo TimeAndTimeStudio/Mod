@@ -139,13 +139,25 @@ public final class ClaimCommands {
 					.then(Commands.literal("set").then(ecoArgs("set"))));
 
 			dispatcher.register(Commands.literal("claim").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runClaim(ctx.getSource())));
+					.executes(ctx -> runClaim(ctx.getSource()))
+					.then(Commands.literal("transfer")
+							.then(Commands.argument("player", StringArgumentType.word())
+									.executes(ctx -> runClaimTransferHere(ctx.getSource(),
+											StringArgumentType.getString(ctx, "player"))))));
 
 			dispatcher.register(Commands.literal("claimmap")
 					.then(Commands.literal("here").requires(src -> src.getPlayer() != null)
 							.executes(ctx -> runHere(ctx.getSource())))
 					.then(Commands.literal("reload").requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
-							.executes(ctx -> runReload(ctx.getSource()))));
+							.executes(ctx -> runReload(ctx.getSource())))
+					.then(Commands.literal("transfer").requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
+							.then(Commands.argument("cx", com.mojang.brigadier.arguments.IntegerArgumentType.integer())
+									.then(Commands.argument("cz", com.mojang.brigadier.arguments.IntegerArgumentType.integer())
+											.then(Commands.argument("player", StringArgumentType.word())
+													.executes(ctx -> runAdminTransfer(ctx.getSource(),
+															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cx"),
+															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cz"),
+															StringArgumentType.getString(ctx, "player"))))))));
 		});
 	}
 
@@ -361,6 +373,14 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		ShopManager.ClaimOutcome o = shop.claim(player);
+		if (o.claimed() == 0 && o.remaining() > 0) {
+			player.sendSystemMessage(Component.literal("§cช่องเก็บของในตัวไม่พอ กรุณาเคลียร์ช่องว่างในตัวก่อนรับของ (คงเหลือ " + o.remaining() + " รายการ)"));
+			return 1;
+		}
+		if (o.inventoryFull()) {
+			player.sendSystemMessage(Component.literal("§eรับของได้ " + o.claimed() + " ชิ้น แต่ช่องเก็บของเต็มแล้ว! คงเหลือในกล่อง " + o.remaining() + " รายการ"));
+			return 1;
+		}
 		player.sendSystemMessage(Component.literal("รับของ " + o.claimed() + " ชิ้น (คงเหลือในกล่อง "
 				+ o.remaining() + " รายการ" + (o.skipped() > 0 ? ", รับไม่ได้ " + o.skipped() + " รายการ" : "") + ")"));
 		return 1;
@@ -601,5 +621,65 @@ public final class ClaimCommands {
 		regions.load();
 		src.sendSuccess(() -> Component.literal("Reloaded claimmap config + regions."), false);
 		return 1;
+	}
+
+	private int runClaimTransferHere(CommandSourceStack src, String targetName) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		int bx = player.getBlockX();
+		int bz = player.getBlockZ();
+		int cx = Math.floorDiv(bx, config.cellSize);
+		int cz = Math.floorDiv(bz, config.cellSize);
+		String id = cx + "," + cz;
+		UUID targetUuid = accounts.uuidOf(targetName).orElse(null);
+		String resolvedName = targetName;
+		if (targetUuid == null) {
+			ServerPlayer tp = src.getServer().getPlayerList().getPlayerByName(targetName);
+			if (tp != null) {
+				targetUuid = tp.getUUID();
+				resolvedName = tp.getGameProfile().name();
+			}
+		}
+		if (targetUuid == null) {
+			player.sendSystemMessage(Component.literal("ไม่พบผู้เล่น " + targetName));
+			return 0;
+		}
+		if (targetUuid.equals(player.getUUID())) {
+			player.sendSystemMessage(Component.literal("ไม่สามารถโอนเขตให้ตัวเองได้"));
+			return 0;
+		}
+		boolean admin = src.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
+		boolean ok = regions.transfer(id, player.getUUID().toString(), targetUuid.toString(), resolvedName, admin);
+		if (ok) {
+			player.sendSystemMessage(Component.literal("โอนกรรมสิทธิ์เขต " + id + " ให้แก่ " + resolvedName + " เรียบร้อยแล้ว"));
+		} else {
+			player.sendSystemMessage(Component.literal("ไม่สามารถโอนเขตได้ (คุณไม่ใช่เจ้าของเขตนี้)"));
+		}
+		return ok ? 1 : 0;
+	}
+
+	private int runAdminTransfer(CommandSourceStack src, int cx, int cz, String targetName) {
+		String id = cx + "," + cz;
+		UUID targetUuid = accounts.uuidOf(targetName).orElse(null);
+		String resolvedName = targetName;
+		if (targetUuid == null) {
+			ServerPlayer tp = src.getServer().getPlayerList().getPlayerByName(targetName);
+			if (tp != null) {
+				targetUuid = tp.getUUID();
+				resolvedName = tp.getGameProfile().name();
+			}
+		}
+		if (targetUuid == null) {
+			src.sendFailure(Component.literal("ไม่พบผู้เล่น " + targetName));
+			return 0;
+		}
+		boolean ok = regions.transfer(id, "admin", targetUuid.toString(), resolvedName, true);
+		if (ok) {
+			final String finalName = resolvedName;
+			src.sendSuccess(() -> Component.literal("Admin: โอนเขต " + id + " ให้แก่ " + finalName + " สำเร็จ"), true);
+		} else {
+			src.sendFailure(Component.literal("ไม่พบเขต " + id + " หรือยังไม่มีการจอง"));
+		}
+		return ok ? 1 : 0;
 	}
 }
