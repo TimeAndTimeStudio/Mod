@@ -218,3 +218,38 @@
 **⚠️ Gate 3 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
 ข้อที่ต้องมีไคลเอนต์ Minecraft จึงจะยืนยันได้: ผู้เล่นใหม่เห็นคำสั่งตั้งรหัส, ผู้เล่นเดิมเห็นคำสั่งใส่รหัส, kick ชื่อนอก whitelist, การ 블็อกขยับ/ทุบ/วาง/ดรอป/เปิดหีบ/แชท/ตี/โดนทำร้าย/คำสั่งอื่น, kick เมื่อผิด 3 ครั้งหรือเงียบ 60 วิ, `/pass` ของผู้ไม่ผ่านรหัส, รหัสเดียวใช้ได้ทั้งเกมและเว็บ
 → โค้ดและ unit test พร้อมแล้ว แต่ **ห้ามถือว่า Gate 3 ผ่าน** จนกว่าจะรันกับไคลเอนต์จริง (เฟส 9)
+
+---
+
+### เฟส 4 — ราคา PriceService (2026-11-14)
+
+**ไฟล์ที่เพิ่ม**
+- `PriceMath.java` — `sellPrice = max(1, floor(base*sellPercent/100))`, `buyPrice = max(sell+1, ceil(base*buyPercent/100))`, `validPercents`
+- `PriceService.java` — ตารางราคาแบบ volatile ทั้งก้อน, cache/override/blocked, refresh จาก JSONBin ด้วย `java.net.http`, เขียนไฟล์อะตอมมิก
+- `ItemRegistryAdapter.java` — snapshot `BuiltInRegistries.ITEM.keySet()` ตอน `SERVER_STARTED`
+- `src/test/java/.../{PriceMathTest,PriceServiceTest}.java` (16 เทสต์)
+
+**ไฟล์ที่แก้**
+- `ClaimMapConfig.java` — `pricesUrl`, `pricesAccessKey`, `priceRefreshSeconds` (5–86400), `sellPercent`, `buyPercent`, `blockedItems`; ถ้าเปอร์เซ็นต์ไม่ผ่าน `PriceMath.validPercents` → WARN และใช้ 70/130
+- `ClaimMap.java` — สร้าง/โหลด cache, scheduler แยก (`claimmap-prices`, daemon), `ItemRegistryAdapter.init(server)` ก่อนเปิดเว็บ, หยุด scheduler ตอนปิด
+- `WebServer.java` — `GET /api/prices` (ต้องมี session) กรองไอเท็มที่ registry ไม่รู้จักและไอเท็มที่ถูกบล็อก ไม่ส่ง url/คีย์/base
+
+**การตัดสินใจ**
+- ใช้ `record.prices` ตามที่รู้จาก `prices.html` และรองรับ response ที่ห่อด้วย `record` เผื่อ `X-Bin-Meta` ไม่ทำงาน
+- ราคา cache และราคาสดใช้การปัดเดียวกัน (`BigDecimal` + `HALF_UP` เป็นจำนวนเต็ม) — แก้บั๊กที่เจอตอนทดสอบ (เดิม cache ตัดเศษทิ้ง)
+- ไฟล์ cache/override เสีย → log WARN แล้วใช้ตารางว่าง/ค่าเริ่มต้น **ไม่ปิดตลาด** (R6 ใช้กับไฟล์เงิน/ของเท่านั้น)
+- `stale` ใน `/api/prices` = ไม่มีข้อมูลสำเร็จเกิน 1 ชั่วโมง; `usingStaleCache()` = การดึงครั้งล่าสุดล้มเหลว
+
+**ผลทดสอบ Gate 4**
+- [x] `./gradlew test` ผ่าน 50 เทสต์ (เพิ่ม 5 PriceMath + 11 PriceService) — รวมกรณี base 1/2/3/10/99/1000/MAX_MONEY และสุ่ม 100,000 ค่า ไม่มี `buy <= sell`
+- [x] ใช้ราคาจำลองใน `prices-cache.json` (ไม่มีคีย์ JSONBin): diamond 10 → buy 13 / sell 7; emerald 2.6 → buy 4 / sell 2; gold_ingot override 8 → buy 11 / sell 5
+- [x] `blockedItems=bedrock,...` → `minecraft:bedrock` ไม่มีราคาและไม่ปรากฏใน `/api/prices`; ไอเท็มที่ registry ไม่รู้จัก (`fake:not_an_item`) ถูกกรองออก
+- [x] ตั้ง `pricesUrl` เป็นพอร์ตที่ปิด (`127.0.0.1:9`) → log WARN ครั้งเดียว, ตารางเดิมยังใช้ได้, `/api/prices` ยังตอบ 200 และ `stale:true` (cache เก่า 2 ชม.)
+- [x] `grep -i SUPERSECRET` ในหน้าเว็บ/`/api/prices`/log → ไม่พบ; `/api/prices` ไม่มี `pricesUrl`/`jsonbin`
+- [x] ไม่มี session → `/api/prices` = 401
+- [x] build 26.3 ✅ · 26.2 ✅
+
+**❓ ที่ยังค้าง (U6)**
+- ยังไม่มีคีย์/ตัวอย่าง response จริงของ JSONBin → parser อิงรูปแบบ `{"prices":{...}}` ตามที่ระบุในสเปก (ทดสอบด้วย fixture เท่านั้น)
+- เจ้าของต้องรัน `curl` กับ bin จริงแล้วส่งตัวอย่าง (ตัดคีย์) เพื่อยืนยัน; **ต้องหมุนคีย์ที่เคยอยู่ใน `prices.html` สาธารณะ**
+- ต้องยืนยันหน่วยราคา: สเปกตกลงว่า base = เหรียญเต็มต่อ 1 ชิ้น; ถ้าจริงเป็นสตางค์ต้องหยุดถาม

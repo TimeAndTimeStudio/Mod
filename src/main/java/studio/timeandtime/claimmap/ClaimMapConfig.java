@@ -52,6 +52,15 @@ public final class ClaimMapConfig {
 	public long startingBalance = 1000L;
 	/** PBKDF2 work factor for in-game / web passwords. */
 	public int pbkdf2Iterations = 210_000;
+	/** JSONBin endpoint + access key. Empty = use prices-cache.json only. */
+	public String pricesUrl = "";
+	public String pricesAccessKey = "";
+	public int priceRefreshSeconds = 60;
+	/** Shop percentages of the base price (integers, PHASES.md 4.2). */
+	public int sellPercent = 70;
+	public int buyPercent = 130;
+	/** Items that can never be bought, sold or auctioned. */
+	public String blockedItems = "bedrock,command_block,barrier";
 
 	public ClaimMapConfig() {
 		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
@@ -88,6 +97,21 @@ public final class ClaimMapConfig {
 		if (currencyName.isEmpty()) currencyName = "เหรียญ";
 		startingBalance = getLong("startingBalance", startingBalance, 0L, 1_000_000_000_000_000L);
 		pbkdf2Iterations = getInt("pbkdf2Iterations", pbkdf2Iterations, 10_000, 2_000_000);
+		pricesUrl = props.getProperty("pricesUrl", pricesUrl).trim();
+		pricesAccessKey = props.getProperty("pricesAccessKey", pricesAccessKey).trim();
+		priceRefreshSeconds = getInt("priceRefreshSeconds", priceRefreshSeconds, 5, 86_400);
+		blockedItems = props.getProperty("blockedItems", blockedItems).trim();
+
+		int sell = getInt("sellPercent", sellPercent, 1, 100);
+		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
+		if (!PriceMath.validPercents(sell, buy)) {
+			ClaimMap.LOGGER.warn("[claimmap] sellPercent={} buyPercent={} is invalid (need 1<=sell<=100, buy>=100, sell<buy); "
+					+ "falling back to 70/130", sell, buy);
+			sell = 70;
+			buy = 130;
+		}
+		sellPercent = sell;
+		buyPercent = buy;
 
 		boolean changed = false;
 		if (token.isEmpty()) {
@@ -98,7 +122,8 @@ public final class ClaimMapConfig {
 		}
 		// Surface the new keys in the owner's file so they can edit them.
 		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance",
-				"pbkdf2Iterations"}) {
+				"pbkdf2Iterations", "pricesUrl", "pricesAccessKey", "priceRefreshSeconds", "sellPercent",
+				"buyPercent", "blockedItems"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
@@ -106,6 +131,12 @@ public final class ClaimMapConfig {
 					case "currencyName" -> currencyName;
 					case "startingBalance" -> Long.toString(startingBalance);
 					case "pbkdf2Iterations" -> Integer.toString(pbkdf2Iterations);
+					case "pricesUrl" -> pricesUrl;
+					case "pricesAccessKey" -> pricesAccessKey;
+					case "priceRefreshSeconds" -> Integer.toString(priceRefreshSeconds);
+					case "sellPercent" -> Integer.toString(sellPercent);
+					case "buyPercent" -> Integer.toString(buyPercent);
+					case "blockedItems" -> blockedItems;
 					default -> bindAddress;
 				});
 				changed = true;
@@ -135,6 +166,12 @@ public final class ClaimMapConfig {
 		props.setProperty("currencyName", currencyName);
 		props.setProperty("startingBalance", Long.toString(startingBalance));
 		props.setProperty("pbkdf2Iterations", Integer.toString(pbkdf2Iterations));
+		props.setProperty("pricesUrl", pricesUrl);
+		props.setProperty("pricesAccessKey", pricesAccessKey);
+		props.setProperty("priceRefreshSeconds", Integer.toString(priceRefreshSeconds));
+		props.setProperty("sellPercent", Integer.toString(sellPercent));
+		props.setProperty("buyPercent", Integer.toString(buyPercent));
+		props.setProperty("blockedItems", blockedItems);
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);

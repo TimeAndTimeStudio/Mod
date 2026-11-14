@@ -33,6 +33,7 @@ public final class WebServer {
 	private final LinkManager links;
 	private final AccountManager accounts;
 	private final EconomyManager economy;
+	private final PriceService prices;
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
@@ -42,13 +43,14 @@ public final class WebServer {
 	}
 
 	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
-			AccountManager accounts, EconomyManager economy) {
+			AccountManager accounts, EconomyManager economy, PriceService prices) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
 		this.links = links;
 		this.accounts = accounts;
 		this.economy = economy;
+		this.prices = prices;
 	}
 
 	public void start() {
@@ -128,6 +130,10 @@ public final class WebServer {
 			case "/api/pay" -> {
 				requireMethod(ex, method, "POST");
 				handlePay(ex);
+			}
+			case "/api/prices" -> {
+				requireMethod(ex, method, "GET");
+				handlePrices(ex);
 			}
 			default -> {
 				if (path.startsWith("/api/map/")) {
@@ -487,6 +493,25 @@ public final class WebServer {
 		if (requestId != null) {
 			idempotent.put(cacheKey, new Cached(out.deepCopy(), now + 10 * 60_000L));
 		}
+		Json.send(ex, 200, out);
+	}
+
+	/** GET /api/prices — never exposes the URL, key or raw base prices. */
+	private void handlePrices(HttpExchange ex) throws IOException {
+		requireSession(ex);
+		JsonObject out = new JsonObject();
+		out.addProperty("currency", config.currencyName);
+		out.addProperty("stale", prices.staleForApi());
+		out.addProperty("updatedAt", prices.updatedAt());
+		JsonObject items = new JsonObject();
+		for (Map.Entry<String, PriceService.PricePair> e : prices.snapshot().entrySet()) {
+			if (!ItemRegistryAdapter.exists(e.getKey())) continue;   // unknown to this game version
+			JsonObject p = new JsonObject();
+			p.addProperty("buy", e.getValue().buy());
+			p.addProperty("sell", e.getValue().sell());
+			items.add(e.getKey(), p);
+		}
+		out.add("items", items);
 		Json.send(ex, 200, out);
 	}
 

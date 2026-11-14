@@ -44,9 +44,11 @@ public class ClaimMap implements ModInitializer {
 	private LinkManager links;
 	private AccountManager accounts;
 	private EconomyManager economy;
+	private PriceService prices;
 	private AuthGate authGate;
 	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
+	private ScheduledExecutorService priceExecutor;
 
 	@Override
 	public void onInitialize() {
@@ -64,8 +66,10 @@ public class ClaimMap implements ModInitializer {
 		economy = new EconomyManager(config.dataDir(), config, System::currentTimeMillis);
 		economy.load();
 		authGate = new AuthGate(config, accounts, links, economy);
+		prices = new PriceService(config.dataDir(), config, System::currentTimeMillis);
+		prices.loadCache();
 		protection = new Protection(regions);
-		web = new WebServer(config, regions, maps, links, accounts, economy);
+		web = new WebServer(config, regions, maps, links, accounts, economy, prices);
 
 		backupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
 			Thread t = new Thread(r, "claimmap-backup");
@@ -73,6 +77,12 @@ public class ClaimMap implements ModInitializer {
 			return t;
 		});
 		economy.startBackups(backupExecutor, BACKUP_INTERVAL_MS);
+		priceExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+			Thread t = new Thread(r, "claimmap-prices");
+			t.setDaemon(true);
+			return t;
+		});
+		prices.start(priceExecutor);
 
 		new ClaimCommands(regions, links, accounts, config, economy, authGate).register();
 		protection.register();
@@ -83,6 +93,7 @@ public class ClaimMap implements ModInitializer {
 
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			this.server = server;
+			ItemRegistryAdapter.init(server);
 			maps.start();
 			web.start();
 			LOGGER.info("[claimmap] Started. Web map/API on {}:{} (see config/claimmap/claimmap.properties)",
@@ -95,7 +106,9 @@ public class ClaimMap implements ModInitializer {
 			maps.stop();
 			regions.save();
 			economy.backupNow();
+			prices.stop();
 			if (backupExecutor != null) backupExecutor.shutdownNow();
+			if (priceExecutor != null) priceExecutor.shutdownNow();
 			this.server = null;
 		});
 	}
