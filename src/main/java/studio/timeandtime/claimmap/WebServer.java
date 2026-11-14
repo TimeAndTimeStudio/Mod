@@ -34,6 +34,8 @@ public final class WebServer {
 	private final AccountManager accounts;
 	private final EconomyManager economy;
 	private final PriceService prices;
+	private final MailboxManager mailbox;
+	private final ShopManager shop;
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
@@ -43,7 +45,8 @@ public final class WebServer {
 	}
 
 	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
-			AccountManager accounts, EconomyManager economy, PriceService prices) {
+			AccountManager accounts, EconomyManager economy, PriceService prices, MailboxManager mailbox,
+			ShopManager shop) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
@@ -51,6 +54,8 @@ public final class WebServer {
 		this.accounts = accounts;
 		this.economy = economy;
 		this.prices = prices;
+		this.mailbox = mailbox;
+		this.shop = shop;
 	}
 
 	public void start() {
@@ -134,6 +139,26 @@ public final class WebServer {
 			case "/api/prices" -> {
 				requireMethod(ex, method, "GET");
 				handlePrices(ex);
+			}
+			case "/api/shop" -> {
+				requireMethod(ex, method, "GET");
+				handleShop(ex);
+			}
+			case "/api/shop/buy" -> {
+				requireMethod(ex, method, "POST");
+				handleShopBuy(ex);
+			}
+			case "/api/shop/sell" -> {
+				requireMethod(ex, method, "POST");
+				handleShopSell(ex);
+			}
+			case "/api/mailbox" -> {
+				requireMethod(ex, method, "GET");
+				handleMailbox(ex);
+			}
+			case "/api/mailbox/claim" -> {
+				requireMethod(ex, method, "POST");
+				handleMailboxClaim(ex);
 			}
 			default -> {
 				if (path.startsWith("/api/map/")) {
@@ -494,6 +519,181 @@ public final class WebServer {
 			idempotent.put(cacheKey, new Cached(out.deepCopy(), now + 10 * 60_000L));
 		}
 		Json.send(ex, 200, out);
+	}
+
+	// ---- shop / mailbox -----------------------------------------------------
+
+	/** GET /api/shop -> prices + labels + mailbox count. */
+	private void handleShop(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requireShopEnabled();
+		UUID uuid = sessionUuid(a);
+		JsonObject out = new JsonObject();
+		out.addProperty("currency", config.currencyName);
+		out.addProperty("stale", prices.staleForApi());
+		JsonObject items = new JsonObject();
+		for (Map.Entry<String, PriceService.PricePair> e : prices.snapshot().entrySet()) {
+			if (!ItemRegistryAdapter.exists(e.getKey())) continue;
+			JsonObject o = new JsonObject();
+			o.addProperty("buy", e.getValue().buy());
+			o.addProperty("sell", e.getValue().sell());
+			o.addProperty("label", ItemRegistryAdapter.label(e.getKey()));
+			items.add(e.getKey(), o);
+		}
+		out.add("items", items);
+		out.addProperty("mailboxCount", mailbox.count(uuid));
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/shop/buy {item, qty} — items always go to the mailbox. */
+	private void handleShopBuy(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requireShopEnabled();
+		UUID uuid = sessionUuid(a);
+		JsonObject body = Json.readObject(ex);
+		String item = Json.str(body, "item");
+		Long qtyValue = Json.integer(body, "qty");
+		if (item == null || item.isBlank()) throw new Json.ApiError(400, "invalid_item", "ต้องระบุไอเท็ม");
+		if (qtyValue == null || qtyValue < 1 || qtyValue > config.shopMaxQtyPerTx) {
+			throw new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง (1-" + config.shopMaxQtyPerTx + ")");
+		}
+		int qty = qtyValue.intValue();
+		var server = ClaimMap.getServer();
+		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
+
+		String ref = "w" + Long.toString(System.currentTimeMillis(), 36) + "_" + Integer.toString(uuid.hashCode(), 36);
+		ShopManager.BuyPlan plan;
+		try {
+			plan = GameBridge.call(server, () -> shop.prepareBuy(uuid, item, qty, ref, server.registryAccess()),
+					GameBridge.DEFAULT_TIMEOUT_MS);
+		} catch (GameBridge.GameUnavailableException e) {
+			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
+		}
+		if (plan.result() != ShopManager.Result.OK) throw shopError(plan.result());
+
+		ShopManager.BuyOutcome outcome = shop.commitBuy(uuid, plan);
+		if (outcome.result() != ShopManager.Result.OK) throw shopError(outcome.result());
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("bought", outcome.bought());
+		out.addProperty("spent", outcome.spent());
+		out.addProperty("balance", outcome.balance());
+		out.addProperty("mailboxCount", outcome.mailboxCount());
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/shop/sell {item, qty} — requires the player to be online. */
+	private void handleShopSell(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requireShopEnabled();
+		UUID uuid = sessionUuid(a);
+		JsonObject body = Json.readObject(ex);
+		String item = Json.str(body, "item");
+		Long qtyValue = Json.integer(body, "qty");
+		if (item == null || item.isBlank()) throw new Json.ApiError(400, "invalid_item", "ต้องระบุไอเท็ม");
+		if (qtyValue == null || qtyValue < 1 || qtyValue > config.shopMaxQtyPerTx) {
+			throw new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง (1-" + config.shopMaxQtyPerTx + ")");
+		}
+		int qty = qtyValue.intValue();
+		var server = ClaimMap.getServer();
+		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
+		if (server.getPlayerList().getPlayer(uuid) == null) {
+			throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงจะขายของได้");
+		}
+
+		String ref = "w" + Long.toString(System.currentTimeMillis(), 36);
+		ShopManager.SellOutcome outcome;
+		try {
+			outcome = GameBridge.call(server, () -> {
+				var player = server.getPlayerList().getPlayer(uuid);
+				if (player == null) return new ShopManager.SellOutcome(ShopManager.Result.OFFLINE, 0, 0, 0);
+				return shop.sell(player, item, qty, ref);
+			}, GameBridge.DEFAULT_TIMEOUT_MS);
+		} catch (GameBridge.GameUnavailableException e) {
+			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
+		}
+		if (outcome.result() != ShopManager.Result.OK) throw shopError(outcome.result());
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("sold", outcome.sold());
+		out.addProperty("earned", outcome.earned());
+		out.addProperty("balance", outcome.balance());
+		Json.send(ex, 200, out);
+	}
+
+	/** GET /api/mailbox */
+	private void handleMailbox(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		if (mailbox.isDisabled()) {
+			throw new Json.ApiError(503, "market_disabled", "กล่องของถูกปิดชั่วคราวเพราะไฟล์ข้อมูลเสีย");
+		}
+		UUID uuid = sessionUuid(a);
+		JsonArray entries = new JsonArray();
+		for (MailboxManager.MailEntry entry : mailbox.list(uuid)) {
+			JsonObject o = new JsonObject();
+			o.addProperty("id", entry.id());
+			o.addProperty("itemId", entry.itemId());
+			o.addProperty("count", entry.count());
+			o.addProperty("label", entry.label());
+			o.addProperty("from", entry.from());
+			o.addProperty("t", entry.t());
+			entries.add(o);
+		}
+		JsonObject out = new JsonObject();
+		out.add("entries", entries);
+		out.addProperty("count", entries.size());
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/mailbox/claim — requires the player to be online. */
+	private void handleMailboxClaim(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requireShopEnabled();
+		UUID uuid = sessionUuid(a);
+		var server = ClaimMap.getServer();
+		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
+		if (server.getPlayerList().getPlayer(uuid) == null) {
+			throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงรับของได้");
+		}
+		ShopManager.ClaimOutcome outcome;
+		try {
+			outcome = GameBridge.call(server, () -> {
+				var player = server.getPlayerList().getPlayer(uuid);
+				return player == null ? null : shop.claim(player);
+			}, GameBridge.DEFAULT_TIMEOUT_MS);
+		} catch (GameBridge.GameUnavailableException e) {
+			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
+		}
+		if (outcome == null) throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงรับของได้");
+		JsonObject out = new JsonObject();
+		out.addProperty("claimed", outcome.claimed());
+		out.addProperty("remaining", outcome.remaining());
+		out.addProperty("skipped", outcome.skipped());
+		Json.send(ex, 200, out);
+	}
+
+	private void requireShopEnabled() {
+		if (shop.isDisabled()) {
+			throw new Json.ApiError(503, "market_disabled", "ระบบตลาดถูกปิดชั่วคราวเพราะไฟล์ข้อมูลเสีย กรุณาแจ้งแอดมิน");
+		}
+	}
+
+	private Json.ApiError shopError(ShopManager.Result r) {
+		return switch (r) {
+			case INVALID_ITEM -> new Json.ApiError(400, "invalid_item", "ไอเท็มไม่ถูกต้องหรือไม่มีในเกมนี้");
+			case INVALID_QTY -> new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง");
+			case NO_PRICE -> new Json.ApiError(409, "no_price", "ไอเท็มนี้ยังไม่มีราคา");
+			case BLOCKED -> new Json.ApiError(409, "item_blocked", "ไอเท็มนี้ถูกห้ามซื้อขาย");
+			case INSUFFICIENT -> new Json.ApiError(409, "insufficient_funds", "ยอดเงินไม่พอ");
+			case NOT_ENOUGH_ITEMS -> new Json.ApiError(409, "not_enough_items", "ของในกระเป๋าไม่พอ");
+			case LIMIT_REACHED -> new Json.ApiError(409, "limit_reached", "เกินจำนวนที่อนุญาต");
+			case MAILBOX_FULL -> new Json.ApiError(409, "limit_reached", "กล่องของเต็ม กรุณารับของก่อน");
+			case FROZEN -> new Json.ApiError(409, "account_frozen", "บัญชีนี้ถูกระงับการค้า");
+			case OFFLINE -> new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อน");
+			case OVERFLOW -> new Json.ApiError(400, "invalid_amount", "ยอดเงินเกินขอบเขต");
+			case DISABLED -> new Json.ApiError(503, "market_disabled", "ระบบตลาดถูกปิดชั่วคราว");
+			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
+		};
 	}
 
 	/** GET /api/prices — never exposes the URL, key or raw base prices. */

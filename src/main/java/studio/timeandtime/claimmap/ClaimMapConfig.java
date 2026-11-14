@@ -61,6 +61,12 @@ public final class ClaimMapConfig {
 	public int buyPercent = 130;
 	/** Items that can never be bought, sold or auctioned. */
 	public String blockedItems = "bedrock,command_block,barrier";
+	/** Maximum items per shop transaction (36 stacks x 64). */
+	public int shopMaxQtyPerTx = 2304;
+	/** Per-player, per-item daily buy quota. 0 = unlimited. */
+	public int shopDailyBuyQty = 0;
+	/** Maximum entries in one player's mailbox. */
+	public int mailboxMaxEntries = 500;
 
 	public ClaimMapConfig() {
 		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
@@ -101,6 +107,9 @@ public final class ClaimMapConfig {
 		pricesAccessKey = props.getProperty("pricesAccessKey", pricesAccessKey).trim();
 		priceRefreshSeconds = getInt("priceRefreshSeconds", priceRefreshSeconds, 5, 86_400);
 		blockedItems = props.getProperty("blockedItems", blockedItems).trim();
+		shopMaxQtyPerTx = getInt("shopMaxQtyPerTx", shopMaxQtyPerTx, 1, 1_000_000);
+		shopDailyBuyQty = getInt("shopDailyBuyQty", shopDailyBuyQty, 0, 1_000_000);
+		mailboxMaxEntries = getInt("mailboxMaxEntries", mailboxMaxEntries, 1, 100_000);
 
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
@@ -123,7 +132,7 @@ public final class ClaimMapConfig {
 		// Surface the new keys in the owner's file so they can edit them.
 		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance",
 				"pbkdf2Iterations", "pricesUrl", "pricesAccessKey", "priceRefreshSeconds", "sellPercent",
-				"buyPercent", "blockedItems"}) {
+				"buyPercent", "blockedItems", "shopMaxQtyPerTx", "shopDailyBuyQty", "mailboxMaxEntries"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
@@ -137,6 +146,9 @@ public final class ClaimMapConfig {
 					case "sellPercent" -> Integer.toString(sellPercent);
 					case "buyPercent" -> Integer.toString(buyPercent);
 					case "blockedItems" -> blockedItems;
+					case "shopMaxQtyPerTx" -> Integer.toString(shopMaxQtyPerTx);
+					case "shopDailyBuyQty" -> Integer.toString(shopDailyBuyQty);
+					case "mailboxMaxEntries" -> Integer.toString(mailboxMaxEntries);
 					default -> bindAddress;
 				});
 				changed = true;
@@ -172,6 +184,9 @@ public final class ClaimMapConfig {
 		props.setProperty("sellPercent", Integer.toString(sellPercent));
 		props.setProperty("buyPercent", Integer.toString(buyPercent));
 		props.setProperty("blockedItems", blockedItems);
+		props.setProperty("shopMaxQtyPerTx", Integer.toString(shopMaxQtyPerTx));
+		props.setProperty("shopDailyBuyQty", Integer.toString(shopDailyBuyQty));
+		props.setProperty("mailboxMaxEntries", Integer.toString(mailboxMaxEntries));
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);
@@ -243,6 +258,14 @@ public final class ClaimMapConfig {
 	/** Directory that holds every data file ({@code config/claimmap}). */
 	public Path dataDir() {
 		return dir();
+	}
+
+	public Path mailboxFile() {
+		return dir().resolve("mailbox.json");
+	}
+
+	public Path shopUsageFile() {
+		return dir().resolve("shop-usage.json");
 	}
 
 	private Path dir() {

@@ -253,3 +253,39 @@
 - ยังไม่มีคีย์/ตัวอย่าง response จริงของ JSONBin → parser อิงรูปแบบ `{"prices":{...}}` ตามที่ระบุในสเปก (ทดสอบด้วย fixture เท่านั้น)
 - เจ้าของต้องรัน `curl` กับ bin จริงแล้วส่งตัวอย่าง (ตัดคีย์) เพื่อยืนยัน; **ต้องหมุนคีย์ที่เคยอยู่ใน `prices.html` สาธารณะ**
 - ต้องยืนยันหน่วยราคา: สเปกตกลงว่า base = เหรียญเต็มต่อ 1 ชิ้น; ถ้าจริงเป็นสตางค์ต้องหยุดถาม
+
+---
+
+### เฟส 5 — กล่องของ + ร้านค้า (2026-11-14)
+
+**ไฟล์ที่เพิ่ม**
+- `ItemCodecs.java` — `ItemStack.CODEC` + `RegistryOps.create(JsonOps.INSTANCE, access)`; encode/decode เก็บ component ทั้งหมด, `isPlain` = `getComponentsPatch().isEmpty()`
+- `MailboxManager.java` — `mailbox.json`, id ซ้ำไม่เพิ่ม, capacity, replace/remove, ไฟล์เสีย → เปลี่ยนชื่อ + ปิดตลาด
+- `ShopManager.java` — buy (เตรียม entry แล้วหักเงิน → เติมกล่อง), sell (ลบของ → ฝากเงิน, คืนของถ้าฝากล้ม), claim, โควตารายวัน
+- `src/test/java/.../{MailboxManagerTest,ShopBuyTest}.java` (12 เทสต์)
+
+**ไฟล์ที่แก้**
+- `ClaimMapConfig.java` — `shopMaxQtyPerTx=2304`, `shopDailyBuyQty=0`, `mailboxMaxEntries=500`, `mailboxFile()`, `shopUsageFile()`
+- `ItemRegistryAdapter.java` — เพิ่มชื่อแสดงผลไอเท็ม (สร้าง `ItemStack` ตอน init บน server thread)
+- `ClaimMap.java` — สร้าง `MailboxManager` + `ShopManager`
+- `WebServer.java` — `GET /api/shop`, `POST /api/shop/buy`, `POST /api/shop/sell`, `GET /api/mailbox`, `POST /api/mailbox/claim`
+- `ClaimCommands.java` — `/sell hand`, `/sell all` (+`confirm` 30 วิ), `/buy <item> <qty>`, `/mail`, `/mail claim`
+
+**การตัดสินใจ**
+- ขาย/ซื้อผ่าน HTTP ใช้ `GameBridge` เรียกงานบน server thread (encode/แก้ inventory) — ไม่ถือ `Market.LOCK` ข้าม thread
+- ซื้อจ่ายเงินก่อนเติมกล่อง (R7) พร้อม rollback (ลบ entry ที่เพิ่งเพิ่ม + คืนเงิน) ถ้าเติมไม่สำเร็จ; retry ที่ entry มีอยู่แล้ว → ไม่หักเงินซ้ำ
+- entry กล่องของ id = `mb_shop_<ref>_<index>` (กำหนดได้, กันซ้ำ)
+- ขายรับเฉพาะของ `isPlain` ในกระเป๋าหลัก+แถบด่วน (36 ช่อง) ไม่รวมเกราะ/มือรอง
+- ไฟล์ `shop-usage.json` เก็บเฉพาะวันปัจจุบัน (คีย์ขึ้นต้นด้วยวันที่)
+
+**ผลทดสอบ**
+- [x] `./gradlew test` ผ่าน 62 เทสต์ (เพิ่ม 6 mailbox + 6 shop buy)
+- [x] รันเซิร์ฟเวอร์จริง 26.3: `GET /api/shop` แสดง diamond buy 13/sell 7 พร้อม label, mailboxCount
+- [x] `POST /api/shop/buy {"item":"diamond","qty":2}` → `bought:2 spent:26 balance:817 mailboxCount:1`; `/api/mailbox` มี entry count 2; `CheckLedger` PASS (lastSeq 105)
+- [x] blocked `bedrock` → 409 `item_blocked`; ไม่มีราคา `stone` → 409 `no_price`; ไอเท็มไม่มีจริง → 400 `invalid_item`; qty 1.5 → 400 `invalid_quantity`; qty 2304 (เงินไม่พอ) → 409 `insufficient_funds`
+- [x] ขาย/รับของตอนไม่มีผู้เล่นออนไลน์ → 409 `player_offline`
+- [x] build 26.3 ✅ · 26.2 ✅
+
+**⚠️ Gate 5 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
+ที่ยังยืนยันไม่ได้เพราะไม่มีไคลเอนต์: ขายของ 64 ชิ้นแล้วของหาย/เงินเพิ่มตรง, ปฏิเสธของมี enchant/ชื่อ/ความเสียหาย, `/sell all` สรุปตรงกับเงินจริง, ซื้อตอน inventory เต็มแล้วของเข้ากล่อง + `/mail claim` รับได้บางส่วน, arbitrage test ในเกม, freeze ในการซื้อขาย
+→ logic และ unit test พร้อม; การรับของ (`claim`) และการขายถูกทดสอบเฉพาะเส้นทาง error/offline

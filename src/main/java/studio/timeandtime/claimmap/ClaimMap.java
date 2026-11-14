@@ -45,6 +45,8 @@ public class ClaimMap implements ModInitializer {
 	private AccountManager accounts;
 	private EconomyManager economy;
 	private PriceService prices;
+	private MailboxManager mailbox;
+	private ShopManager shop;
 	private AuthGate authGate;
 	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
@@ -68,8 +70,11 @@ public class ClaimMap implements ModInitializer {
 		authGate = new AuthGate(config, accounts, links, economy);
 		prices = new PriceService(config.dataDir(), config, System::currentTimeMillis);
 		prices.loadCache();
+		mailbox = new MailboxManager(config.mailboxFile(), System::currentTimeMillis, config.mailboxMaxEntries);
+		mailbox.load();
+		shop = new ShopManager(config, economy, mailbox, prices, System::currentTimeMillis);
 		protection = new Protection(regions);
-		web = new WebServer(config, regions, maps, links, accounts, economy, prices);
+		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop);
 
 		backupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
 			Thread t = new Thread(r, "claimmap-backup");
@@ -84,7 +89,7 @@ public class ClaimMap implements ModInitializer {
 		});
 		prices.start(priceExecutor);
 
-		new ClaimCommands(regions, links, accounts, config, economy, authGate).register();
+		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox).register();
 		protection.register();
 		authGate.registerHooks();
 

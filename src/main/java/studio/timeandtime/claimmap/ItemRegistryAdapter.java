@@ -2,28 +2,41 @@ package studio.timeandtime.claimmap;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * Answers "does this item id exist in this game version?" without touching the
- * registry from the HTTP thread at random times. Initialised once on
- * {@code SERVER_STARTED}, after which reads are a plain set lookup.
+ * Answers "does this item id exist in this game version?" and holds display
+ * names, so the HTTP thread never touches the live registry. Initialised once
+ * on {@code SERVER_STARTED}, after which reads are plain map lookups.
  */
 public final class ItemRegistryAdapter {
 	private static volatile Set<String> ids;
+	private static volatile Map<String, String> labels = Map.of();
 
 	private ItemRegistryAdapter() {
 	}
 
 	public static void init(MinecraftServer server) {
-		Set<String> set = new HashSet<>();
-		for (Identifier id : BuiltInRegistries.ITEM.keySet()) {
-			set.add(id.toString());
+		Map<String, String> names = new HashMap<>();
+		for (Map.Entry<ResourceKey<Item>, Item> e : BuiltInRegistries.ITEM.entrySet()) {
+			Identifier id = e.getKey().identifier();
+			String label;
+			try {
+				label = new ItemStack(e.getValue()).getHoverName().getString();
+			} catch (RuntimeException ex) {
+				label = id.getPath();
+			}
+			names.put(id.toString(), label);
 		}
-		ids = Set.copyOf(set);
+		labels = Map.copyOf(names);
+		ids = names.keySet();
 		ClaimMap.LOGGER.info("[claimmap] Item registry snapshot: {} items", ids.size());
 	}
 
@@ -35,5 +48,12 @@ public final class ItemRegistryAdapter {
 
 	public static boolean ready() {
 		return ids != null;
+	}
+
+	/** Human readable name, falling back to the id itself. */
+	public static String label(String itemId) {
+		Map<String, String> map = labels;
+		String l = map.get(itemId);
+		return l == null ? itemId : l;
 	}
 }
