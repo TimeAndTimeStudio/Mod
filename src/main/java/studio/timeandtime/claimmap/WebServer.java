@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -40,6 +41,8 @@ public final class WebServer {
 	private final ShopManager shop;
 	private final AuctionManager auctions;
 	private final AdminService admin;
+	private static final Pattern STATIC_PATH =
+			Pattern.compile("^/(css|js|icons)/[A-Za-z0-9_./-]+$");
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
@@ -203,7 +206,10 @@ public final class WebServer {
 				handleAdminAudit(ex);
 			}
 			default -> {
-				if (path.startsWith("/api/admin/")) {
+				if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/icons/")) {
+					requireMethod(ex, method, "GET");
+					handleStatic(ex, path);
+				} else if (path.startsWith("/api/admin/")) {
 					handleAdminDynamic(ex, method, path);
 				} else if (path.startsWith("/api/auctions/")) {
 					handleAuctionAction(ex, method, path);
@@ -270,6 +276,55 @@ public final class WebServer {
 	}
 
 	// ---- handlers -----------------------------------------------------------
+
+	/**
+	 * Serves the bundled CSS/JS/icon files. Only the three asset folders are
+	 * reachable, and encoded or dotted traversal segments are rejected before
+	 * the classpath lookup (PHASES.md 8).
+	 */
+	private void handleStatic(HttpExchange ex, String path) throws IOException {
+		String raw = ex.getRequestURI().getRawPath() == null ? path : ex.getRequestURI().getRawPath();
+		if (!STATIC_PATH.matcher(path).matches() || !STATIC_PATH.matcher(raw).matches()
+				|| path.contains("..") || raw.contains("..")
+				|| path.contains("//") || raw.contains("//")
+				|| path.indexOf('\\') >= 0 || raw.indexOf('\\') >= 0
+				|| path.contains("%") || hasHiddenSegment(path)) {
+			throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+		}
+		String rel = path.substring(1);
+		byte[] data;
+		try (InputStream in = WebServer.class.getResourceAsStream("/claimmap-web/" + rel)) {
+			if (in == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+			data = in.readAllBytes();
+		} catch (IOException e) {
+			throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+		}
+		String type = contentType(rel);
+		if (type == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+		ex.getResponseHeaders().set("Content-Type", type);
+		ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+		ex.getResponseHeaders().set("Cache-Control", rel.startsWith("icons/") ? "max-age=86400" : "no-cache");
+		ex.sendResponseHeaders(200, data.length);
+		try (OutputStream os = ex.getResponseBody()) {
+			os.write(data);
+		}
+	}
+
+	private static boolean hasHiddenSegment(String path) {
+		for (String segment : path.split("/")) {
+			if (segment.startsWith(".")) return true;
+		}
+		return false;
+	}
+
+	private static String contentType(String rel) {
+		if (rel.endsWith(".css")) return "text/css; charset=utf-8";
+		if (rel.endsWith(".js")) return "text/javascript; charset=utf-8";
+		if (rel.endsWith(".png")) return "image/png";
+		if (rel.endsWith(".svg")) return "image/svg+xml";
+		if (rel.endsWith(".html")) return "text/html; charset=utf-8";
+		return null;
+	}
 
 	/** Serves the web page exactly as bundled — never injects any token. */
 	private void sendWeb(HttpExchange ex) throws IOException {
@@ -486,6 +541,7 @@ public final class WebServer {
 		JsonObject out = new JsonObject();
 		out.addProperty("balance", economy.balance(uuid));
 		out.addProperty("currency", config.currencyName);
+		out.addProperty("mailboxCount", mailbox.count(uuid));
 		JsonArray history = new JsonArray();
 		for (EconomyManager.TxView v : economy.history(uuid, EconomyManager.HISTORY_PER_PLAYER)) {
 			JsonObject o = new JsonObject();

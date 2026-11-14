@@ -370,3 +370,40 @@
 
 **⚠️ ข้อจำกัด**
 - reset-password ระหว่างที่ผู้เล่นยังไม่ได้ตั้งรหัสใหม่ ใน offline-mode ใครสวมชื่อนั้นเข้าเกมก่อนจะตั้งรหัสได้ → ต้องแจ้งเจ้าของชื่อให้เข้าเกมทันที (จะเตือนใน UI เฟส 8)
+
+---
+
+### เฟส 8 — หน้าเว็บแบบ "มือถือเปิดแอป" (2026-11-14)
+
+**ไฟล์ที่เพิ่ม**
+- `src/main/resources/claimmap-web/css/app.css` — ธีมส้ม `#e96f00`, เหลี่ยม, mobile-first, ปุ่ม ≥44px, รองรับ dark mode
+- `src/main/resources/claimmap-web/js/core.js` — session, `api()`, router แบบ hash, confirm modal, toast, แถบสถานะ + polling (หยุดเมื่อแท็บซ่อน, backoff เมื่อล้มติดกัน)
+- `src/main/resources/claimmap-web/js/main.js` — ผูก route ทั้งหมด
+- `src/main/resources/claimmap-web/js/apps/{home,map,sell,buy,auction,wallet,mailbox,prices,admin}.js`
+- แทน `index.html` เดิมด้วย shell (status bar / `#app` / Home-Back / toast)
+
+**ไฟล์ที่แก้**
+- `WebServer.java` — static route `/css/*` `/js/*` `/icons/*` อ่านจาก classpath, ตรวจ path ด้วย regex + ปฏิเสธ `..`, `//`, `\`, `%`, segment ขึ้นต้นด้วย `.` · Content-Type ตามนามสกุล · no-cache สำหรับ html/js/css, max-age=86400 สำหรับ icons · เพิ่ม `mailboxCount` ใน `/api/wallet` (เข้ากันได้ย้อนหลัง)
+- `claim-map.html` (root) — เปลี่ยนเป็นหน้า redirect ไป `/` (ยังมี README อ้างถึงเป็นไฟล์ deploy เดิม จึงไม่ลบ)
+
+**การตัดสินใจ**
+- ใช้ ES modules ไม่มี build step และไม่โหลดทรัพยากรภายนอกเลย
+- ข้อมูลจากเซิร์ฟเวอร์ทุกจุดผ่าน `textContent`/`createElement` (ไม่มี `innerHTML`) — ตรวจด้วย grep แล้วเหลือแต่คอมเมนต์
+- แผนที่เดิมถูกย้ายมาเป็น `apps/map.js` พร้อม `dispose()` (หยุด timer/observer/event ตอนออกจากแอป)
+- ปุ่มที่ใช้เงินทุกปุ่มเปิด confirm modal แสดงราคา/ยอดคงเหลือ และ disable ระหว่างทำรายการ
+- แอปแอดมินเห็นเฉพาะ `admin:true`; พิมพ์ `#admin` เองจะถูกพากลับ `#home`
+
+**ผลทดสอบ**
+- [x] `./gradlew test` ผ่าน 84 เทสต์ · build 26.3 ✅ · 26.2 ✅
+- [x] jar มี `claimmap-web/{index.html,css/app.css,js/...}` ครบ (`jar tf`)
+- [x] static: `/` 200 html, `/css/app.css` 200 css, `/js/main.js` 200 js, `/js/apps/admin.js` 200 js, `/icons/nope.png` 404
+- [x] path traversal: `/js/../../config/claimmap/accounts.json`, `/js/%2e%2e/%2e%2e/...`, `/js//main.js`, `/icons/%2e%2e/app.css` → 404 ทั้งหมด
+- [x] jsdom smoke test: login → home tile, admin tile, wallet แสดงยอด, ชื่อผู้เล่นที่มี `<img onerror>` แสดงเป็นข้อความ (ไม่มี `<img>` ถูกสร้าง), non-admin เข้า `#admin` ถูกพากลับ, 401 ล้าง session แล้วกลับหน้าล็อกอิน
+- [x] `grep -RIn "https\?://"` ใน `claimmap-web` → ไม่พบคำขอภายนอก
+- [x] `node --check` ผ่านทุกไฟล์ JS
+- [ ] ทดสอบบนมือถือ/เดสก์ท็อปจริงและกดทุกแอป — สภาพแวดล้อมนี้ไม่มีเบราว์เซอร์/จอ
+- [ ] กดรัว ๆ บนปุ่มเงินเทียบ ledger — ต้องมีเบราว์เซอร์จริง
+
+**⚠️ ข้อจำกัด**
+- ไม่มี Chrome/Playwright ในเครื่อง จึงทดสอบ UI ระดับ DOM ด้วย jsdom และตรวจ HTTP เท่านั้น
+- ไอคอนไอเท็มยังไม่มีไฟล์ PNG; หน้าเว็บใช้ชื่อ/ตัวอักษรแทน (ไม่มีการโหลดภายนอก)
