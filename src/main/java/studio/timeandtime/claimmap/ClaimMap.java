@@ -91,7 +91,7 @@ public class ClaimMap implements ModInitializer {
 		economy = new EconomyManager(config.dataDir(), config, System::currentTimeMillis);
 		economy.load();
 		authGate = new AuthGate(config, accounts, links, economy);
-		seedDefaultPricesIfMissing(config.dataDir().resolve("prices-cache.json"));
+		seedDefaultPricesIfMissing(config.dataDir());
 		prices = new PriceService(config.dataDir(), config, System::currentTimeMillis);
 		prices.loadCache();
 		mailbox = new MailboxManager(config.mailboxFile(), System::currentTimeMillis, config.mailboxMaxEntries);
@@ -204,16 +204,20 @@ public class ClaimMap implements ModInitializer {
 		});
 	}
 
-	private static void seedDefaultPricesIfMissing(java.nio.file.Path cacheFile) {
-		if (java.nio.file.Files.exists(cacheFile)) return;
+	private static void seedDefaultPricesIfMissing(java.nio.file.Path dir) {
+		java.nio.file.Path pricesJson = dir.resolve("prices.json");
+		java.nio.file.Path cacheJson = dir.resolve("prices-cache.json");
+		if (java.nio.file.Files.exists(pricesJson)) return;
 		try (var in = ClaimMap.class.getResourceAsStream("/default-prices.json")) {
 			if (in != null) {
-				java.nio.file.Files.createDirectories(cacheFile.getParent());
-				java.nio.file.Files.copy(in, cacheFile);
-				LOGGER.info("[claimmap] Seeded initial prices-cache.json from default-prices.json");
+				java.nio.file.Files.createDirectories(dir);
+				byte[] bytes = in.readAllBytes();
+				java.nio.file.Files.write(pricesJson, bytes);
+				java.nio.file.Files.write(cacheJson, bytes);
+				LOGGER.info("[timesmp] Seeded initial prices.json and prices-cache.json from default-prices.json");
 			}
 		} catch (Exception e) {
-			LOGGER.warn("[claimmap] Could not seed default-prices.json: {}", e.getMessage());
+			LOGGER.warn("[timesmp] Could not seed default-prices.json: {}", e.getMessage());
 		}
 	}
 }

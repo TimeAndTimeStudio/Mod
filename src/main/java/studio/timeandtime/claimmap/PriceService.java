@@ -77,6 +77,7 @@ public final class PriceService {
 	private static final Gson GSON = new GsonBuilder().create();
 
 	private final Path dir;
+	private final Path pricesFile;
 	private final Path cacheFile;
 	private final Path overridesFile;
 	private final Path dynamicsFile;
@@ -103,6 +104,7 @@ public final class PriceService {
 
 	public PriceService(Path dir, ClaimMapConfig cfg, LongSupplier now) {
 		this.dir = dir;
+		this.pricesFile = dir.resolve("prices.json");
 		this.cacheFile = dir.resolve("prices-cache.json");
 		this.overridesFile = dir.resolve("price-overrides.json");
 		this.dynamicsFile = dir.resolve("price-dynamics.json");
@@ -122,14 +124,18 @@ public final class PriceService {
 			readOverridesFile();
 			readDynamicsFile();
 		}
-		ClaimMap.LOGGER.info("[claimmap] Prices loaded: {} web entries, {} overrides, {} blocked",
+		ClaimMap.LOGGER.info("[timesmp] Prices loaded: {} base entries, {} overrides, {} blocked",
 				webPrices.size(), overrides.size(), blockedCount());
 	}
 
 	private void readCacheFile() {
-		if (!Files.exists(cacheFile)) return;
+		Path target = Files.exists(pricesFile) ? pricesFile : cacheFile;
+		if (!Files.exists(target)) {
+			target = dir.resolve("default-prices.json");
+		}
+		if (!Files.exists(target)) return;
 		try {
-			JsonObject root = JsonParser.parseString(Files.readString(cacheFile, StandardCharsets.UTF_8)).getAsJsonObject();
+			JsonObject root = JsonParser.parseString(Files.readString(target, StandardCharsets.UTF_8)).getAsJsonObject();
 			fetchedAt = root.has("fetchedAt") ? root.get("fetchedAt").getAsLong() : 0L;
 			Map<String, Long> parsed = new HashMap<>();
 			JsonObject prices = root.getAsJsonObject("prices");
@@ -143,7 +149,7 @@ public final class PriceService {
 			lastSuccessMs = fetchedAt;
 		} catch (Exception e) {
 			// Prices are not money: keep running with no table instead of disabling the market.
-			ClaimMap.LOGGER.warn("[claimmap] Could not read prices-cache.json ({}); starting without cached prices", e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read prices from {} ({}); starting without base prices", target.getFileName(), e.getMessage());
 			webPrices = Map.of();
 			fetchedAt = 0;
 		}
@@ -646,9 +652,11 @@ public final class PriceService {
 			JsonObject prices = new JsonObject();
 			for (Map.Entry<String, Long> e : webPrices.entrySet()) prices.addProperty(e.getKey(), e.getValue());
 			root.add("prices", prices);
-			writeAtomic(cacheFile, GSON.toJson(root));
+			String json = GSON.toJson(root);
+			writeAtomic(pricesFile, json);
+			writeAtomic(cacheFile, json);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not write prices-cache.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not write prices.json", e);
 		}
 	}
 
