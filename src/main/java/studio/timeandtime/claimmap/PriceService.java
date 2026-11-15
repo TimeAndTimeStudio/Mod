@@ -48,14 +48,14 @@ import java.util.function.LongSupplier;
  */
 public final class PriceService {
 	/** Buy/sell pair for one item. */
-	public record PricePair(long buy, long sell) {
+	public record PricePair(double buy, double sell) {
 	}
 
-	public record PriceHistoryPoint(long t, long price, int sold) {
+	public record PriceHistoryPoint(long t, double price, int sold) {
 	}
 
-	public record ItemPriceDetail(String id, long nominalBase, long effectiveBase,
-			long buyPrice, long sellPrice, double multiplier, int soldUnits,
+	public record ItemPriceDetail(String id, long nominalBase, double effectiveBase,
+			double buyPrice, double sellPrice, double multiplier, int soldUnits,
 			boolean blocked, boolean overridden) {
 	}
 
@@ -218,7 +218,7 @@ public final class PriceService {
 							if (item.isJsonObject()) {
 								JsonObject p = item.getAsJsonObject();
 								long t = p.has("t") ? p.get("t").getAsLong() : 0L;
-								long pr = p.has("price") ? p.get("price").getAsLong() : 0L;
+								double pr = p.has("price") ? p.get("price").getAsDouble() : 0.0;
 								int s = p.has("sold") ? p.get("sold").getAsInt() : 0;
 								points.add(new PriceHistoryPoint(t, pr, s));
 							}
@@ -250,7 +250,7 @@ public final class PriceService {
 			for (PriceHistoryPoint p : e.getValue()) {
 				JsonObject po = new JsonObject();
 				po.addProperty("t", p.t());
-				po.addProperty("price", p.price());
+				po.addProperty("price", Math.round(p.price() * 100.0) / 100.0);
 				po.addProperty("sold", p.sold());
 				arr.add(po);
 			}
@@ -425,7 +425,7 @@ public final class PriceService {
 
 		// Record price recovery in history point so chart displays the rebound
 		List<PriceHistoryPoint> list = history.computeIfAbsent(id, k -> new CopyOnWriteArrayList<>());
-		long curSell = sellPrice(id).orElse(1L);
+		double curSell = sellPriceDouble(id);
 		list.add(new PriceHistoryPoint(nowMs, curSell, 0));
 		while (list.size() > 50) {
 			list.remove(0);
@@ -452,7 +452,7 @@ public final class PriceService {
 		applyDecay(id, currentNow);
 		soldUnits.merge(id, qty, Integer::sum);
 		lastDecayTimes.put(id, currentNow);
-		long curSell = sellPrice(id).orElse(1L);
+		double curSell = sellPriceDouble(id);
 		List<PriceHistoryPoint> list = history.computeIfAbsent(id, k -> new CopyOnWriteArrayList<>());
 		list.add(new PriceHistoryPoint(currentNow, curSell, qty));
 		while (list.size() > 50) {
@@ -507,18 +507,40 @@ public final class PriceService {
 		return OptionalLong.of(eff);
 	}
 
+	public double sellPriceDouble(String itemId) {
+		if (isBlocked(itemId)) return 0.0;
+		OptionalLong nom = nominalBase(itemId);
+		if (nom.isEmpty()) return 0.0;
+		double mult = multiplier(itemId);
+		long b = nom.getAsLong();
+		double nominalSell = (b <= 1L) ? 1.0 : (b * (double) cfg.sellPercent / 100.0);
+		double raw = nominalSell * mult;
+		return Math.max(0.01, Math.round(raw * 100.0) / 100.0);
+	}
+
+	public double buyPriceDouble(String itemId) {
+		if (isBlocked(itemId)) return 0.0;
+		OptionalLong nom = nominalBase(itemId);
+		if (nom.isEmpty()) return 0.0;
+		double mult = multiplier(itemId);
+		long b = nom.getAsLong();
+		double raw = (b * (double) cfg.buyPercent / 100.0) * mult;
+		double sell = sellPriceDouble(itemId);
+		return Math.max(sell + 0.01, Math.round(raw * 100.0) / 100.0);
+	}
+
 	public OptionalLong buyPrice(String itemId) {
 		if (isBlocked(itemId)) return OptionalLong.empty();
-		OptionalLong b = base(itemId);
-		return b.isEmpty() ? OptionalLong.empty()
-				: OptionalLong.of(PriceMath.buyPrice(b.getAsLong(), cfg.sellPercent, cfg.buyPercent));
+		double bp = buyPriceDouble(itemId);
+		if (bp <= 0.0) return OptionalLong.empty();
+		return OptionalLong.of(Math.max(1L, Math.round(bp)));
 	}
 
 	public OptionalLong sellPrice(String itemId) {
 		if (isBlocked(itemId)) return OptionalLong.empty();
-		OptionalLong b = base(itemId);
-		return b.isEmpty() ? OptionalLong.empty()
-				: OptionalLong.of(PriceMath.sellPrice(b.getAsLong(), cfg.sellPercent));
+		double sp = sellPriceDouble(itemId);
+		if (sp <= 0.0) return OptionalLong.empty();
+		return OptionalLong.of(Math.max(1L, Math.round(sp)));
 	}
 
 	public boolean isBlocked(String itemId) {
@@ -537,12 +559,10 @@ public final class PriceService {
 		Map<String, PricePair> out = new LinkedHashMap<>();
 		for (String id : keys) {
 			if (isBlocked(id)) continue;
-			OptionalLong b = base(id);
-			if (b.isEmpty() || b.getAsLong() < 1) continue;
-			long base = b.getAsLong();
-			out.put(id, new PricePair(
-					PriceMath.buyPrice(base, cfg.sellPercent, cfg.buyPercent),
-					PriceMath.sellPrice(base, cfg.sellPercent)));
+			double buy = buyPriceDouble(id);
+			double sell = sellPriceDouble(id);
+			if (sell <= 0.0) continue;
+			out.put(id, new PricePair(buy, sell));
 		}
 		return out;
 	}
@@ -560,9 +580,9 @@ public final class PriceService {
 			long nom = ov.getOrDefault(id, web.getOrDefault(id, 0L));
 			if (nom < 1) continue;
 			double mult = multiplier(id);
-			long eff = Math.max(1L, Math.round(nom * mult));
-			long buy = PriceMath.buyPrice(eff, cfg.sellPercent, cfg.buyPercent);
-			long sell = PriceMath.sellPrice(eff, cfg.sellPercent);
+			double eff = Math.round(nom * mult * 100.0) / 100.0;
+			double buy = buyPriceDouble(id);
+			double sell = sellPriceDouble(id);
 			int sold = soldUnits.getOrDefault(id, 0);
 			out.add(new ItemPriceDetail(id, nom, eff, buy, sell, mult, sold, blocked, overridden));
 		}

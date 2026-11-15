@@ -191,4 +191,20 @@ class PriceServiceTest {
 		assertEquals(1.0, prices.multiplier("minecraft:diamond"), "Should fully recover to 1.0");
 		assertEquals(0, prices.getSoldUnits("minecraft:diamond"));
 	}
+
+	@Test
+	void testDecimalPriceDropsForCheapItems() {
+		prices.applyFetched(Map.of("minecraft:dirt", 1L));
+		assertEquals(1.00, prices.sellPriceDouble("minecraft:dirt"));
+
+		// Sell 82 dirt
+		prices.recordSale("minecraft:dirt", 82);
+		double sellPrice = prices.sellPriceDouble("minecraft:dirt");
+		assertTrue(sellPrice < 1.00, "Price should drop below 1.0 into decimals: " + sellPrice);
+		assertTrue(sellPrice > 0.80, "Price should be around 0.89: " + sellPrice);
+
+		var hist = prices.getHistory("minecraft:dirt");
+		assertFalse(hist.isEmpty());
+		assertTrue(hist.get(hist.size() - 1).price() < 1.0);
+	}
 }

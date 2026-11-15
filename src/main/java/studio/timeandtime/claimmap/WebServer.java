@@ -2027,7 +2027,6 @@ public final class WebServer {
 
 	/** GET /api/prices — never exposes the URL, key or raw base prices. */
 	private void handlePrices(HttpExchange ex) throws IOException {
-		requireSession(ex);
 		JsonObject out = new JsonObject();
 		out.addProperty("currency", config.currencyName);
 		out.addProperty("stale", prices.staleForApi());
@@ -2045,7 +2044,6 @@ public final class WebServer {
 	}
 
 	private void handlePriceTrends(HttpExchange ex) throws IOException {
-		requireSession(ex);
 		List<PriceService.ItemPriceDetail> details = prices.detailsSnapshot();
 		JsonObject out = new JsonObject();
 		out.addProperty("ok", true);

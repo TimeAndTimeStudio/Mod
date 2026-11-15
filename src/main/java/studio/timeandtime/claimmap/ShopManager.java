@@ -271,18 +271,13 @@ public final class ShopManager {
 			if (isDisabled()) return new SellOutcome(Result.DISABLED, 0, 0, economy.balance(uuid));
 			if (economy.isFrozen(uuid)) return new SellOutcome(Result.FROZEN, 0, 0, economy.balance(uuid));
 			if (prices.isBlocked(itemId)) return new SellOutcome(Result.BLOCKED, 0, 0, economy.balance(uuid));
-			var unit = prices.sellPrice(itemId);
-			if (unit.isEmpty()) return new SellOutcome(Result.NO_PRICE, 0, 0, economy.balance(uuid));
+			double unit = prices.sellPriceDouble(itemId);
+			if (unit <= 0.0) return new SellOutcome(Result.NO_PRICE, 0, 0, economy.balance(uuid));
 
 			int have = countPlain(inventory, itemId);
 			if (have < qty) return new SellOutcome(Result.NOT_ENOUGH_ITEMS, 0, 0, economy.balance(uuid));
 
-			long total;
-			try {
-				total = Math.multiplyExact(unit.getAsLong(), (long) qty);
-			} catch (ArithmeticException e) {
-				return new SellOutcome(Result.OVERFLOW, 0, 0, economy.balance(uuid));
-			}
+			long total = Math.max(1L, Math.round(unit * (double) qty));
 			if (economy.balance(uuid) > EconomyManager.MAX_BALANCE - total) {
 				return new SellOutcome(Result.OVERFLOW, 0, 0, economy.balance(uuid));
 			}
@@ -310,7 +305,7 @@ public final class ShopManager {
 			prices.recordSale(itemId, qty);
 			SalesTracker st = salesTracker;
 			if (st != null) {
-				st.record(uuid, playerName(uuid), itemId, itemId, qty, total, unit.getAsLong(), "inventory");
+				st.record(uuid, playerName(uuid), itemId, itemId, qty, total, Math.max(1L, Math.round(unit)), "inventory");
 			}
 			return new SellOutcome(Result.OK, qty, total, economy.balance(uuid));
 		}
@@ -330,18 +325,13 @@ public final class ShopManager {
 			if (isDisabled()) return new SellOutcome(Result.DISABLED, 0, 0, economy.balance(uuid));
 			if (economy.isFrozen(uuid)) return new SellOutcome(Result.FROZEN, 0, 0, economy.balance(uuid));
 			if (prices.isBlocked(itemId)) return new SellOutcome(Result.BLOCKED, 0, 0, economy.balance(uuid));
-			var unit = prices.sellPrice(itemId);
-			if (unit.isEmpty()) return new SellOutcome(Result.NO_PRICE, 0, 0, economy.balance(uuid));
+			double unit = prices.sellPriceDouble(itemId);
+			if (unit <= 0.0) return new SellOutcome(Result.NO_PRICE, 0, 0, economy.balance(uuid));
 			ItemStack before = source.get().copy();
 			if (before.isEmpty() || !ItemCodecs.isPlain(before) || before.getCount() < qty) {
 				return new SellOutcome(Result.NOT_ENOUGH_ITEMS, 0, 0, economy.balance(uuid));
 			}
-			long total;
-			try {
-				total = Math.multiplyExact(unit.getAsLong(), (long) qty);
-			} catch (ArithmeticException e) {
-				return new SellOutcome(Result.OVERFLOW, 0, 0, economy.balance(uuid));
-			}
+			long total = Math.max(1L, Math.round(unit * (double) qty));
 			if (economy.balance(uuid) > EconomyManager.MAX_BALANCE - total) {
 				return new SellOutcome(Result.OVERFLOW, 0, 0, economy.balance(uuid));
 			}
@@ -357,7 +347,7 @@ public final class ShopManager {
 			prices.recordSale(itemId, qty);
 			SalesTracker st = salesTracker;
 			if (st != null) {
-				st.record(uuid, playerName(uuid), itemId, itemId, qty, total, unit.getAsLong(), "inventory");
+				st.record(uuid, playerName(uuid), itemId, itemId, qty, total, Math.max(1L, Math.round(unit)), "inventory");
 			}
 			return new SellOutcome(Result.OK, qty, total, economy.balance(uuid));
 		}

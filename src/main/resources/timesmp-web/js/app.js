@@ -44,7 +44,11 @@ function el(tag, attrs, ...kids) {
   return node;
 }
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-function money(n) { return Number(n || 0).toLocaleString('en-US'); }
+function money(n) {
+  const num = Number(n || 0);
+  if (Number.isInteger(num)) return num.toLocaleString('en-US');
+  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 function num(v) { const n = Number.parseInt(v, 10); return Number.isFinite(n) ? n : 0; }
 function txt(v, fallback = '-') { return v == null || v === '' ? fallback : String(v); }
 function errText(error, fallback = 'เกิดข้อผิดพลาด') { return txt(error?.message, fallback); }
@@ -1379,7 +1383,7 @@ function drawTrendChart(canvas, history, basePrice, currentSell) {
     ctx.stroke();
     ctx.fillStyle = '#777777';
     ctx.textAlign = 'left';
-    ctx.fillText('ฐาน: ' + basePrice.toFixed(0), padL + 6, baseY - 8);
+    ctx.fillText('ฐาน: ' + Number(basePrice).toFixed(basePrice >= 10 ? 0 : 2), padL + 6, baseY - 8);
     ctx.restore();
   }
 
