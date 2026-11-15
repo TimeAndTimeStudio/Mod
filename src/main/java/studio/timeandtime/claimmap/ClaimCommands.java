@@ -48,6 +48,7 @@ public final class ClaimCommands {
 	private final AuctionManager auctions;
 	private final PriceService prices;
 	private final AdminService admin;
+	private final TeleportManager teleports;
 	private final Map<UUID, SellAllPlan> sellAllPlans = new HashMap<>();
 
 	private record SellAllPlan(Map<String, Integer> items, long expiresAt) {
@@ -56,6 +57,13 @@ public final class ClaimCommands {
 	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
 			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
 			AuctionManager auctions, PriceService prices, AdminService admin) {
+		this(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices, admin,
+				new TeleportManager());
+	}
+
+	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
+			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
+			AuctionManager auctions, PriceService prices, AdminService admin, TeleportManager teleports) {
 		this.regions = regions;
 		this.links = links;
 		this.accounts = accounts;
@@ -67,6 +75,7 @@ public final class ClaimCommands {
 		this.auctions = auctions;
 		this.prices = prices;
 		this.admin = admin;
+		this.teleports = teleports != null ? teleports : new TeleportManager();
 	}
 
 	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
@@ -144,6 +153,43 @@ public final class ClaimCommands {
 															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cx"),
 															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cz"),
 															StringArgumentType.getString(ctx, "player"))))))));
+
+			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
+					.then(Commands.literal("accept")
+							.executes(ctx -> runTpaAccept(ctx.getSource(), null))
+							.then(Commands.argument("player", StringArgumentType.word())
+									.executes(ctx -> runTpaAccept(ctx.getSource(),
+											StringArgumentType.getString(ctx, "player")))))
+					.then(Commands.literal("deny")
+							.executes(ctx -> runTpaDeny(ctx.getSource(), null))
+							.then(Commands.argument("player", StringArgumentType.word())
+									.executes(ctx -> runTpaDeny(ctx.getSource(),
+											StringArgumentType.getString(ctx, "player")))))
+					.then(Commands.literal("cancel")
+							.executes(ctx -> runTpaCancel(ctx.getSource())))
+					.then(Commands.argument("player", StringArgumentType.word())
+							.executes(ctx -> runTpaRequest(ctx.getSource(),
+									StringArgumentType.getString(ctx, "player")))));
+
+			dispatcher.register(Commands.literal("tpaccept").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaAccept(ctx.getSource(), null))
+					.then(Commands.argument("player", StringArgumentType.word())
+							.executes(ctx -> runTpaAccept(ctx.getSource(),
+									StringArgumentType.getString(ctx, "player")))));
+
+			dispatcher.register(Commands.literal("tpdeny").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaDeny(ctx.getSource(), null))
+					.then(Commands.argument("player", StringArgumentType.word())
+							.executes(ctx -> runTpaDeny(ctx.getSource(),
+									StringArgumentType.getString(ctx, "player")))));
+
+			dispatcher.register(Commands.literal("tpacancel").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaCancel(ctx.getSource())));
+
+			dispatcher.register(Commands.literal("tp").requires(src -> src.getPlayer() != null)
+					.then(Commands.argument("player", StringArgumentType.word())
+							.executes(ctx -> runTp(ctx.getSource(),
+									StringArgumentType.getString(ctx, "player")))));
 		});
 	}
 
@@ -669,5 +715,58 @@ public final class ClaimCommands {
 			src.sendFailure(Component.literal("ไม่พบเขต " + id + " หรือยังไม่มีการจอง"));
 		}
 		return ok ? 1 : 0;
+	}
+
+	private int runTp(CommandSourceStack src, String targetName) {
+		ServerPlayer sender = src.getPlayer();
+		if (sender == null || src.getServer() == null) return 0;
+		ServerPlayer target = src.getServer().getPlayerList().getPlayerByName(targetName);
+		if (target == null) {
+			sender.sendSystemMessage(Component.literal("§c[TP] ไม่พบผู้เล่น " + targetName + " ในเซิร์ฟเวอร์ (ต้องออนไลน์อยู่)"));
+			return 0;
+		}
+
+		boolean isAdmin = config.isAdmin(sender.getScoreboardName()) || src.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
+		if (isAdmin) {
+			teleports.teleportDirect(sender, target);
+			return 1;
+		} else {
+			sender.sendSystemMessage(Component.literal("§e[TP] กำลังส่งคำขอ /tpa ไปยัง " + target.getScoreboardName() + "..."));
+			teleports.request(sender, target);
+			return 1;
+		}
+	}
+
+	private int runTpaRequest(CommandSourceStack src, String targetName) {
+		ServerPlayer sender = src.getPlayer();
+		if (sender == null || src.getServer() == null) return 0;
+		ServerPlayer target = src.getServer().getPlayerList().getPlayerByName(targetName);
+		if (target == null) {
+			sender.sendSystemMessage(Component.literal("§c[TPA] ไม่พบผู้เล่น " + targetName + " ในเซิร์ฟเวอร์ (ต้องออนไลน์อยู่)"));
+			return 0;
+		}
+		teleports.request(sender, target);
+		return 1;
+	}
+
+	private int runTpaAccept(CommandSourceStack src, String targetName) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		teleports.accept(player, targetName);
+		return 1;
+	}
+
+	private int runTpaDeny(CommandSourceStack src, String targetName) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		teleports.deny(player, targetName);
+		return 1;
+	}
+
+	private int runTpaCancel(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		teleports.cancel(player);
+		return 1;
 	}
 }

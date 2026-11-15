@@ -58,6 +58,7 @@ public class ClaimMap implements ModInitializer {
 	private AuditLog audit;
 	private AdminService admin;
 	private SalesTracker salesTracker;
+	private TeleportManager teleports;
 	private studio.timeandtime.claimmap.world.WorldManager worldManager;
 	private AuthGate authGate;
 	private WebServer web;
@@ -153,8 +154,9 @@ public class ClaimMap implements ModInitializer {
 		});
 		prices.start(priceExecutor);
 
+		teleports = new TeleportManager();
 		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices,
-				admin).register();
+				admin, teleports).register();
 		new AuctionTicker(auctions, playerMarket).register();
 		protection.register();
 		authGate.registerHooks();
