@@ -8,7 +8,10 @@
 		"PlayerProfileAccessor",
 		"ConfigurationFinishMixin",
 		"ConfigurationClickMixin",
-		"FinishSendMixin"
+		"FinishSendMixin",
+		"LevelStoragePathMixin",
+		"ServerLevelsAccessor",
+		"ServerWorldSaveMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

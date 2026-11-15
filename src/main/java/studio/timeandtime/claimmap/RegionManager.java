@@ -201,6 +201,40 @@ public final class RegionManager {
 		}
 	}
 
+	/**
+	 * Assigns a cell to a winner even when the cell was free or the player is at
+	 * the claim limit. Used only by trusted auction settlement.
+	 */
+	public boolean assign(String id, String newOwnerUuid, String newOwnerName) {
+		if (id == null || newOwnerUuid == null) return false;
+		String[] parts = id.split(",", -1);
+		if (parts.length != 2) return false;
+		int cx;
+		int cz;
+		try {
+			cx = Integer.parseInt(parts[0]);
+			cz = Integer.parseInt(parts[1]);
+		} catch (NumberFormatException e) {
+			return false;
+		}
+		synchronized (lock) {
+			CellData c = cells.get(id);
+			if (c == null) {
+				c = new CellData();
+				c.id = id;
+				c.cx = cx;
+				c.cz = cz;
+				c.members = new ArrayList<>();
+				cells.put(id, c);
+			}
+			c.ownerUuid = newOwnerUuid;
+			c.ownerName = newOwnerName;
+			c.members = new ArrayList<>();
+			save();
+			return true;
+		}
+	}
+
 	public boolean addMember(String id, String uuid, String memberUuid, String memberName) {
 		synchronized (lock) {
 			CellData c = cells.get(id);

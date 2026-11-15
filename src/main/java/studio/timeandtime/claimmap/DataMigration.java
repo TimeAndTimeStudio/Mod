@@ -34,6 +34,9 @@ public final class DataMigration {
 			"mailbox.json",
 			"shop-usage.json",
 			"auctions.json",
+			"player-market.json",
+			"consignments.json",
+			"positions.json",
 			"audit.jsonl");
 
 	private DataMigration() {

@@ -28,7 +28,6 @@ import net.minecraft.world.item.ItemStack;
  *   <li>{@code /buy <item> <qty>}     - buy from the shop (items go to the mailbox)</li>
  *   <li>{@code /mail [claim]}         - list / claim mailbox items</li>
  *   <li>{@code /ah}                   - auction house list</li>
- *   <li>{@code /ah sell <start> [buyout] [hours]} - list the held stack</li>
  *   <li>{@code /ah bid <id> <amount>} - place a bid</li>
  *   <li>{@code /ah cancel <id>}       - cancel a listing without bids</li>
  *   <li>{@code /eco give|take|set <player> <amount> [reason]} - admin money (OP only)</li>
@@ -108,19 +107,6 @@ public final class ClaimCommands {
 
 			dispatcher.register(Commands.literal("ah").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runAhList(ctx.getSource()))
-					.then(Commands.literal("sell")
-							.then(Commands.argument("start", StringArgumentType.word())
-									.executes(ctx -> runAhSell(ctx.getSource(),
-											StringArgumentType.getString(ctx, "start"), "0", "0"))
-									.then(Commands.argument("buyout", StringArgumentType.word())
-											.executes(ctx -> runAhSell(ctx.getSource(),
-													StringArgumentType.getString(ctx, "start"),
-													StringArgumentType.getString(ctx, "buyout"), "0"))
-											.then(Commands.argument("hours", StringArgumentType.word())
-													.executes(ctx -> runAhSell(ctx.getSource(),
-															StringArgumentType.getString(ctx, "start"),
-															StringArgumentType.getString(ctx, "buyout"),
-															StringArgumentType.getString(ctx, "hours")))))))
 					.then(Commands.literal("bid")
 							.then(Commands.argument("id", StringArgumentType.word())
 									.then(Commands.argument("amount", StringArgumentType.word())
@@ -410,7 +396,7 @@ public final class ClaimCommands {
 			sb.append(" เหลือ ").append(mins).append(" นาที\n");
 		}
 		if (active == 0) {
-			player.sendSystemMessage(Component.literal("ยังไม่มีการประมูล\n/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"));
+			player.sendSystemMessage(Component.literal("ยังไม่มีการประมูล — เซิร์ฟเวอร์เท่านั้นที่เปิดประมูลได้"));
 			return 0;
 		}
 		player.sendSystemMessage(Component.literal(sb.toString()));
@@ -523,6 +509,8 @@ public final class ClaimCommands {
 			case DISABLED -> "ระบบตลาดถูกปิดชั่วคราว";
 			case HAS_BIDS -> "มีผู้ประมูลแล้ว ยกเลิกไม่ได้";
 			case FORBIDDEN -> "ไม่มีสิทธิ์กับรายการนี้";
+			case ALREADY_LISTED -> "เขตนี้มีรายการประมูลเปิดอยู่แล้ว";
+			case ALREADY_OWNER -> "คุณเป็นเจ้าของเขตนี้อยู่แล้ว";
 			case BAD_REQUEST -> "ข้อมูลไม่ถูกต้อง";
 			default -> "เกิดข้อผิดพลาดภายใน กรุณาลองใหม่";
 		};

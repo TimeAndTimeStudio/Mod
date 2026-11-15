@@ -36,6 +36,10 @@ public class ClaimMap implements ModInitializer {
 		return authGate;
 	}
 
+	public studio.timeandtime.claimmap.world.WorldManager worldManager() {
+		return worldManager;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
@@ -48,8 +52,12 @@ public class ClaimMap implements ModInitializer {
 	private MailboxManager mailbox;
 	private ShopManager shop;
 	private AuctionManager auctions;
+	private PlayerMarket playerMarket;
+	private ConsignmentManager consignments;
+	private PlayerItemStore playerItems;
 	private AuditLog audit;
 	private AdminService admin;
+	private studio.timeandtime.claimmap.world.WorldManager worldManager;
 	private AuthGate authGate;
 	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
@@ -61,6 +69,7 @@ public class ClaimMap implements ModInitializer {
 
 		config = new ClaimMapConfig();
 		config.load();
+		worldManager = new studio.timeandtime.claimmap.world.WorldManager(config);
 		regions = new RegionManager(config);
 		regions.load();
 		maps = new MapRenderer(config);
@@ -78,24 +87,48 @@ public class ClaimMap implements ModInitializer {
 		auctions = new AuctionManager(config.dataDir(), config, economy, mailbox, System::currentTimeMillis);
 		auctions.load();
 		auctions.validateEscrow();
+		consignments = new ConsignmentManager(config.dataDir(), System::currentTimeMillis);
+		consignments.load();
+		auctions.attachConsignments(consignments);
+		auctions.attachRegions(regions);
+		playerItems = new PlayerItemStore(config.playerItemsDir());
+		playerMarket = new PlayerMarket(config.dataDir(), config, economy, mailbox, System::currentTimeMillis);
+		playerMarket.load();
 		shop = new ShopManager(config, economy, mailbox, prices, System::currentTimeMillis);
 		shop.attachAuctions(auctions);
 		audit = new AuditLog(config.dataDir(), System::currentTimeMillis);
 		admin = new AdminService(config, economy, accounts, links, prices, auctions, mailbox, shop, audit,
+				consignments,
 				uuid -> {
 					MinecraftServer s = server;
 					return s != null && s.getPlayerList().getPlayer(uuid) != null;
 				});
 		protection = new Protection(regions);
 		PlayerPositions.init(config.dataDir());
-		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions, admin);
+		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions,
+				playerMarket, consignments, admin, playerItems, worldManager);
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
+			if (worldManager != null) worldManager.tick();
 			if (srv.getTickCount() % 20 == 0) {
 				for (net.minecraft.server.level.ServerPlayer p : srv.getPlayerList().getPlayers()) {
 					PlayerPositions.update(p);
 					if (p.level() instanceof net.minecraft.server.level.ServerLevel sl) {
 						maps.onPlayerPosition(sl, p.getBlockX(), p.getBlockZ());
+					}
+				}
+			}
+			// Keep the per-player item JSON warm when items are used or picked up.
+			// Every 5 seconds, only carried stacks are re-read; container rows stay
+			// until the next full /api/sources scan.
+			if (srv.getTickCount() % 100 == 0) {
+				for (net.minecraft.server.level.ServerPlayer p : srv.getPlayerList().getPlayers()) {
+					try {
+						playerItems.mergeCarried(p.getUUID(), p.getGameProfile().name(),
+								ItemSources.listCarried(p));
+					} catch (RuntimeException e) {
+						LOGGER.warn("[claimmap] Could not refresh item cache for {}: {}",
+								p.getGameProfile().name(), e.getMessage());
 					}
 				}
 			}
@@ -116,7 +149,7 @@ public class ClaimMap implements ModInitializer {
 
 		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices,
 				admin).register();
-		new AuctionTicker(auctions).register();
+		new AuctionTicker(auctions, playerMarket).register();
 		protection.register();
 		authGate.registerHooks();
 
@@ -125,6 +158,7 @@ public class ClaimMap implements ModInitializer {
 
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			this.server = server;
+			worldManager.start(server);
 			ItemRegistryAdapter.init(server);
 			auctions.closeExpired(System.currentTimeMillis());
 			maps.start();
@@ -134,6 +168,7 @@ public class ClaimMap implements ModInitializer {
 		});
 
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+			if (worldManager != null) worldManager.shutdown();
 			web.stop();
 			PlayerPositions.save();
 			maps.flush();
@@ -144,6 +179,9 @@ public class ClaimMap implements ModInitializer {
 			if (backupExecutor != null) backupExecutor.shutdownNow();
 			if (priceExecutor != null) priceExecutor.shutdownNow();
 			this.server = null;
+		});
+		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+			if (worldManager != null) worldManager.closeStorage();
 		});
 	}
 }

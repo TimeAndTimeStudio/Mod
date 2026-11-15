@@ -27,6 +27,7 @@ class AuctionManagerTest {
 	private ClaimMapConfig cfg;
 	private EconomyManager econ;
 	private MailboxManager mailbox;
+	private RegionManager regions;
 	private AuctionManager auctions;
 	private long clock = 1_700_000_000_000L;
 
@@ -53,8 +54,11 @@ class AuctionManagerTest {
 		econ.ensureAccount(carol);
 		mailbox = new MailboxManager(tmp.resolve("mailbox.json"), () -> clock, 100);
 		mailbox.load();
+		regions = new RegionManager(cfg);
+		regions.load();
 		auctions = new AuctionManager(tmp, cfg, econ, mailbox, () -> clock);
 		auctions.load();
+		auctions.attachRegions(regions);
 		assertTrue(auctions.validateEscrow());
 	}
 
@@ -103,6 +107,48 @@ class AuctionManagerTest {
 		assertEquals(aliceBefore + 110 - 5, econ.balance(alice), "seller receives the bid minus the 5% fee");
 		assertTrue(mailbox.exists(carol, "mb_au_" + id + "_winner"));
 		assertEquals(0L, invariant());
+	}
+
+	@Test
+	void cellAuctionTransfersOwnershipWhenTheTimerEnds() {
+		econ.deposit(bob, 500, "test.give", "");
+		AuctionManager.CreateOutcome out = auctions.createCellAuction("4,4", 100, null, 1);
+		assertEquals(AuctionManager.Result.OK, out.result());
+		assertEquals(AuctionManager.Result.ALREADY_LISTED, auctions.createCellAuction("4,4", 100, null, 1).result());
+
+		assertEquals(AuctionManager.Result.OK, auctions.bid(bob, "Bob", out.auctionId(), 100).result());
+		assertTrue(regions.get("4,4") == null, "bidding must not transfer the cell before the timer ends");
+
+		clock += 3_600_001L;
+		auctions.closeExpired(clock);
+
+		AuctionManager.Auction a = auctions.find(out.auctionId());
+		assertEquals(AuctionManager.SOLD, a.status);
+		assertEquals("Bob", regions.get("4,4").ownerName);
+		assertEquals(bob.toString(), regions.get("4,4").ownerUuid);
+		assertEquals(0L, econ.escrowBalance(out.auctionId()));
+		assertEquals(0L, invariant());
+	}
+
+	@Test
+	void cellAuctionBuyoutTransfersImmediately() {
+		econ.deposit(bob, 500, "test.give", "");
+		econ.deposit(carol, 500, "test.give", "");
+		AuctionManager.CreateOutcome out = auctions.createCellAuction("5,5", 100, 200L, 2);
+		assertEquals(AuctionManager.Result.OK, out.result());
+
+		assertEquals(AuctionManager.Result.OK, auctions.buyout(bob, "Bob", out.auctionId()));
+		assertEquals("Bob", regions.get("5,5").ownerName);
+		assertEquals(AuctionManager.Result.CLOSED, auctions.buyout(carol, "Carol", out.auctionId()));
+		assertEquals(0L, invariant());
+	}
+
+	@Test
+	void cellAuctionRejectsBidsFromTheCurrentOwner() {
+		assertTrue(regions.assign("6,6", bob.toString(), "Bob"));
+		AuctionManager.CreateOutcome out = auctions.createCellAuction("6,6", 100, null, 2);
+		assertEquals(AuctionManager.Result.OK, out.result());
+		assertEquals(AuctionManager.Result.ALREADY_OWNER, auctions.bid(bob, "Bob", out.auctionId(), 100).result());
 	}
 
 	@Test

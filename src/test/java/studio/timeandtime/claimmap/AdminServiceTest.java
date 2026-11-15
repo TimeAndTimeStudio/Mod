@@ -64,7 +64,7 @@ class AdminServiceTest {
 		ShopManager shop = new ShopManager(cfg, econ, mailbox, prices, () -> clock);
 		shop.attachAuctions(auctions);
 		audit = new AuditLog(tmp, () -> clock);
-		admin = new AdminService(cfg, econ, accounts, links, prices, auctions, mailbox, shop, audit, u -> false);
+		admin = new AdminService(cfg, econ, accounts, links, prices, auctions, mailbox, shop, audit, null, u -> false);
 	}
 
 	private long invariant() {

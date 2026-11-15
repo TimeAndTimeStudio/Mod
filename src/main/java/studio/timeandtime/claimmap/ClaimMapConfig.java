@@ -75,6 +75,16 @@ public final class ClaimMapConfig {
 	public int auctionListFeePercent = 0;
 	public int auctionMinIncrementPercent = 5;
 	public int auctionAntiSnipeSeconds = 60;
+	/** Maximum simultaneous fixed-price listings per player in the player market. */
+	public int marketMaxActivePerPlayer = 10;
+	/** Folder (relative to the server root) containing independent world saves. */
+	public String worldDirectory = "worlds";
+	/** How often the worlds folder is rescanned while the server runs. */
+	public int worldScanSeconds = 30;
+	/** Idle time before an empty loaded world is unloaded; 0 keeps it loaded. */
+	public int worldIdleUnloadSeconds = 300;
+	/** Expose one short command per discovered world, e.g. /adventure. */
+	public boolean worldPlayerCommands = true;
 
 	public ClaimMapConfig() {
 		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
@@ -128,6 +138,12 @@ public final class ClaimMapConfig {
 		auctionListFeePercent = getInt("auctionListFeePercent", auctionListFeePercent, 0, 100);
 		auctionMinIncrementPercent = getInt("auctionMinIncrementPercent", auctionMinIncrementPercent, 1, 1000);
 		auctionAntiSnipeSeconds = getInt("auctionAntiSnipeSeconds", auctionAntiSnipeSeconds, 0, 3600);
+		marketMaxActivePerPlayer = getInt("marketMaxActivePerPlayer", marketMaxActivePerPlayer, 1, 1000);
+		worldDirectory = props.getProperty("worldDirectory", worldDirectory).trim();
+		if (worldDirectory.isEmpty()) worldDirectory = "worlds";
+		worldScanSeconds = getInt("worldScanSeconds", worldScanSeconds, 5, 86_400);
+		worldIdleUnloadSeconds = getInt("worldIdleUnloadSeconds", worldIdleUnloadSeconds, 0, 86_400);
+		worldPlayerCommands = getBool("worldPlayerCommands", worldPlayerCommands);
 
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
@@ -152,7 +168,9 @@ public final class ClaimMapConfig {
 				"pbkdf2Iterations", "pricesUrl", "pricesAccessKey", "priceRefreshSeconds", "sellPercent",
 				"buyPercent", "blockedItems", "shopMaxQtyPerTx", "shopDailyBuyQty", "mailboxMaxEntries",
 				"auctionMaxActivePerPlayer", "auctionDefaultHours", "auctionMaxHours", "auctionFeePercent",
-				"auctionListFeePercent", "auctionMinIncrementPercent", "auctionAntiSnipeSeconds"}) {
+				"auctionListFeePercent", "auctionMinIncrementPercent", "auctionAntiSnipeSeconds",
+				"marketMaxActivePerPlayer", "worldDirectory", "worldScanSeconds", "worldIdleUnloadSeconds",
+				"worldPlayerCommands"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
@@ -176,6 +194,11 @@ public final class ClaimMapConfig {
 					case "auctionListFeePercent" -> Integer.toString(auctionListFeePercent);
 					case "auctionMinIncrementPercent" -> Integer.toString(auctionMinIncrementPercent);
 					case "auctionAntiSnipeSeconds" -> Integer.toString(auctionAntiSnipeSeconds);
+					case "marketMaxActivePerPlayer" -> Integer.toString(marketMaxActivePerPlayer);
+					case "worldDirectory" -> worldDirectory;
+					case "worldScanSeconds" -> Integer.toString(worldScanSeconds);
+					case "worldIdleUnloadSeconds" -> Integer.toString(worldIdleUnloadSeconds);
+					case "worldPlayerCommands" -> Boolean.toString(worldPlayerCommands);
 					default -> bindAddress;
 				});
 				changed = true;
@@ -243,6 +266,11 @@ public final class ClaimMapConfig {
 		props.setProperty("auctionListFeePercent", Integer.toString(auctionListFeePercent));
 		props.setProperty("auctionMinIncrementPercent", Integer.toString(auctionMinIncrementPercent));
 		props.setProperty("auctionAntiSnipeSeconds", Integer.toString(auctionAntiSnipeSeconds));
+		props.setProperty("marketMaxActivePerPlayer", Integer.toString(marketMaxActivePerPlayer));
+		props.setProperty("worldDirectory", worldDirectory);
+		props.setProperty("worldScanSeconds", Integer.toString(worldScanSeconds));
+		props.setProperty("worldIdleUnloadSeconds", Integer.toString(worldIdleUnloadSeconds));
+		props.setProperty("worldPlayerCommands", Boolean.toString(worldPlayerCommands));
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);
@@ -328,6 +356,11 @@ public final class ClaimMapConfig {
 		return dir().resolve("auctions.json");
 	}
 
+	/** Directory holding one item-cache JSON file per player UUID. */
+	public Path playerItemsDir() {
+		return dir().resolve("player-items");
+	}
+
 	private Path dir() {
 		return file.getParent();
 	}
@@ -339,6 +372,15 @@ public final class ClaimMapConfig {
 		} catch (NumberFormatException ignored) {
 		}
 		return Math.max(min, Math.min(max, v));
+	}
+
+	private boolean getBool(String key, boolean def) {
+		String raw = props.getProperty(key);
+		if (raw == null) return def;
+		raw = raw.trim();
+		if (raw.equalsIgnoreCase("true") || raw.equalsIgnoreCase("yes") || raw.equals("1")) return true;
+		if (raw.equalsIgnoreCase("false") || raw.equalsIgnoreCase("no") || raw.equals("0")) return false;
+		return def;
 	}
 
 	private long getLong(String key, long def, long min, long max) {

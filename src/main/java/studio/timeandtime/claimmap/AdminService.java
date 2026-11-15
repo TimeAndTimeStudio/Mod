@@ -16,12 +16,15 @@ import java.util.function.Predicate;
  * whether it succeeded or was rejected.
  */
 public final class AdminService {
-	public enum Result { OK, BAD_REQUEST, NO_ACCOUNT, INSUFFICIENT, NOT_FOUND, DISABLED, IO_ERROR }
+	public enum Result { OK, BAD_REQUEST, NO_ACCOUNT, INSUFFICIENT, NOT_FOUND, DISABLED, IO_ERROR, ALREADY_LISTED }
 
 	public record MoneyOutcome(Result result, long balance) {
 	}
 
 	public record PriceOutcome(Result result, long base) {
+	}
+
+	public record ServerAuctionOutcome(Result result, String auctionId) {
 	}
 
 	private final ClaimMapConfig config;
@@ -33,11 +36,12 @@ public final class AdminService {
 	private final MailboxManager mailbox;
 	private final ShopManager shop;
 	private final AuditLog audit;
+	private final ConsignmentManager consignments;
 	private final Predicate<UUID> online;
 
 	public AdminService(ClaimMapConfig config, EconomyManager economy, AccountManager accounts, LinkManager links,
 			PriceService prices, AuctionManager auctions, MailboxManager mailbox, ShopManager shop,
-			AuditLog audit, Predicate<UUID> online) {
+			AuditLog audit, ConsignmentManager consignments, Predicate<UUID> online) {
 		this.config = config;
 		this.economy = economy;
 		this.accounts = accounts;
@@ -47,6 +51,7 @@ public final class AdminService {
 		this.mailbox = mailbox;
 		this.shop = shop;
 		this.audit = audit;
+		this.consignments = consignments;
 		this.online = online;
 	}
 
@@ -229,6 +234,77 @@ public final class AdminService {
 		return out;
 	}
 
+	/** Turns one player consignment into a server-owned auction. */
+	public ServerAuctionOutcome createServerAuction(String actor, String ip, String consignmentId,
+			long startPrice, Long buyout, int hours) {
+		Map<String, Object> details = new LinkedHashMap<>();
+		details.put("consignment", consignmentId);
+		details.put("startPrice", startPrice);
+		details.put("buyout", buyout);
+		details.put("hours", hours);
+		if (consignmentId == null || consignmentId.isBlank()) {
+			audit.write(actor, "auction.server_create", details, ip, false);
+			return new ServerAuctionOutcome(Result.BAD_REQUEST, null);
+		}
+		ConsignmentManager.Entry entry = consignments.take(consignmentId);
+		if (entry == null) {
+			audit.write(actor, "auction.server_create", details, ip, false);
+			return new ServerAuctionOutcome(Result.NOT_FOUND, null);
+		}
+		AuctionManager.CreateOutcome out = auctions.createServerAuction(
+				entry.itemJson, entry.itemId, entry.count, entry.label, startPrice, buyout, hours);
+		if (out.result() != AuctionManager.Result.OK) {
+			consignments.restore(entry);
+			Result r = out.result() == AuctionManager.Result.DISABLED ? Result.DISABLED : Result.BAD_REQUEST;
+			audit.write(actor, "auction.server_create", details, ip, false);
+			return new ServerAuctionOutcome(r, null);
+		}
+		audit.write(actor, "auction.server_create", details, ip, true);
+		return new ServerAuctionOutcome(Result.OK, out.auctionId());
+	}
+
+	/** Opens an admin-owned auction for a cell; the winner receives ownership. */
+	public ServerAuctionOutcome createCellAuction(String actor, String ip, String cellId,
+			long startPrice, Long buyout, int hours, String reason) {
+		Map<String, Object> details = new LinkedHashMap<>();
+		details.put("cell", cellId);
+		details.put("startPrice", startPrice);
+		details.put("buyout", buyout);
+		details.put("hours", hours);
+		details.put("reason", reason);
+		if (cellId == null || cellId.isBlank() || !validReason(reason)) {
+			audit.write(actor, "auction.cell_create", details, ip, false);
+			return new ServerAuctionOutcome(Result.BAD_REQUEST, null);
+		}
+		AuctionManager.CreateOutcome out = auctions.createCellAuction(cellId.trim(), startPrice, buyout, hours);
+		Result r = switch (out.result()) {
+			case OK -> Result.OK;
+			case DISABLED -> Result.DISABLED;
+			case ALREADY_LISTED -> Result.ALREADY_LISTED;
+			default -> Result.BAD_REQUEST;
+		};
+		audit.write(actor, "auction.cell_create", details, ip, r == Result.OK);
+		return new ServerAuctionOutcome(r, out.auctionId());
+	}
+
+	/** Returns the pending player consignments for the admin auction picker. */
+	public JsonArray consignmentsForAdmin(String actor, String ip) {
+		JsonArray arr = new JsonArray();
+		for (ConsignmentManager.Entry e : consignments.pending()) {
+			JsonObject o = new JsonObject();
+			o.addProperty("id", e.id);
+			o.addProperty("from", e.from);
+			o.addProperty("fromName", e.fromName);
+			o.addProperty("itemId", e.itemId);
+			o.addProperty("count", e.count);
+			o.addProperty("label", e.label);
+			o.addProperty("t", e.depositedAt);
+			arr.add(o);
+		}
+		audit.write(actor, "admin.consignments", Map.of(), ip, true);
+		return arr;
+	}
+
 	// ---- config -------------------------------------------------------------
 
 	/** Returns false when port/bindAddress were edited and need a restart. */
@@ -286,6 +362,9 @@ public final class AdminService {
 		for (AuctionManager.Auction a : auctions.all()) {
 			JsonObject o = new JsonObject();
 			o.addProperty("id", a.id);
+			o.addProperty("kind", a.isCellAuction() ? "CELL" : "ITEM");
+			o.addProperty("cellId", a.cellId);
+			o.addProperty("cellOwnerName", a.isCellAuction() ? auctions.cellOwnerName(a.cellId) : null);
 			o.addProperty("seller", a.seller);
 			o.addProperty("sellerName", a.sellerName);
 			o.addProperty("itemId", a.itemId);

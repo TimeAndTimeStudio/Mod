@@ -36,13 +36,18 @@ public final class AuctionManager {
 
 	public enum Result {
 		OK, NOT_FOUND, CLOSED, OWN_AUCTION, ALREADY_HIGHEST, BID_TOO_LOW, USE_BUYOUT,
-		LIMIT_REACHED, INSUFFICIENT, FROZEN, DISABLED, IO_ERROR, HAS_BIDS, FORBIDDEN, BAD_REQUEST
+		LIMIT_REACHED, INSUFFICIENT, FROZEN, DISABLED, IO_ERROR, HAS_BIDS, FORBIDDEN, BAD_REQUEST,
+		ALREADY_LISTED, ALREADY_OWNER
 	}
 
 	public static final class Auction {
 		public String id;
 		public String seller;
 		public String sellerName;
+		/** ITEM or CELL. Older files without this field are item auctions. */
+		public String kind = "ITEM";
+		/** Cell id "cx,cz" for CELL auctions, null for item auctions. */
+		public String cellId;
 		public String itemJson;
 		public String itemId;
 		public int count;
@@ -55,6 +60,8 @@ public final class AuctionManager {
 		public long createdAt;
 		public long endsAt;
 		public String status = ACTIVE;
+		/** True for auctions created by the server/admin from a consignment. */
+		public boolean serverOwned;
 		public boolean paidOut;
 		public boolean itemDelivered;
 		public Long closedAt;
@@ -63,6 +70,10 @@ public final class AuctionManager {
 
 		public boolean isActive() {
 			return ACTIVE.equals(status);
+		}
+
+		public boolean isCellAuction() {
+			return "CELL".equals(kind);
 		}
 	}
 
@@ -84,6 +95,8 @@ public final class AuctionManager {
 	private final MailboxManager mailbox;
 	private final LongSupplier now;
 	private final List<Auction> auctions = new ArrayList<>();
+	private volatile ConsignmentManager consignments;
+	private volatile RegionManager regions;
 	private volatile boolean disabled;
 	private long lastPruneMs;
 	private int idCounter;
@@ -111,8 +124,13 @@ public final class AuctionManager {
 				if (arr != null) {
 					for (JsonElement el : arr) {
 						Auction a = GSON.fromJson(el, Auction.class);
-						if (a == null || a.id == null || a.seller == null || a.itemJson == null
-								|| a.status == null || a.count < 1) {
+						if (a == null || a.id == null || a.seller == null || a.status == null || a.count < 1) {
+							throw new IllegalStateException("invalid auction row");
+						}
+						if (a.kind == null) a.kind = "ITEM";
+						if (a.isCellAuction()) {
+							if (a.cellId == null || a.cellId.isBlank()) throw new IllegalStateException("invalid cell auction row");
+						} else if (a.itemJson == null) {
 							throw new IllegalStateException("invalid auction row");
 						}
 						auctions.add(a);
@@ -178,10 +196,126 @@ public final class AuctionManager {
 		}
 	}
 
+	/** Server-owned auctions return cancelled items to the consignment store. */
+	public void attachConsignments(ConsignmentManager consignments) {
+		this.consignments = consignments;
+	}
+
+	/** Needed to settle CELL auctions; regions load before auctions start. */
+	public void attachRegions(RegionManager regions) {
+		this.regions = regions;
+	}
+
+	/** Creates an auction owned by the server (the only kind players cannot open). */
+	public CreateOutcome createServerAuction(String itemJson, String itemId, int count, String label,
+			long startPrice, Long buyout, int hours) {
+		if (itemJson == null || itemJson.isBlank() || itemId == null || count < 1 || label == null) {
+			return new CreateOutcome(Result.BAD_REQUEST, null);
+		}
+		if (startPrice < 1 || startPrice > EconomyManager.MAX_MONEY) {
+			return new CreateOutcome(Result.BAD_REQUEST, null);
+		}
+		if (buyout != null && (buyout <= startPrice || buyout > EconomyManager.MAX_MONEY)) {
+			return new CreateOutcome(Result.BAD_REQUEST, null);
+		}
+		int duration = hours <= 0 ? cfg.auctionDefaultHours : hours;
+		if (duration < 1 || duration > cfg.auctionMaxHours) return new CreateOutcome(Result.BAD_REQUEST, null);
+		synchronized (Market.LOCK) {
+			if (disabled) return new CreateOutcome(Result.DISABLED, null);
+			long nowMs = now.getAsLong();
+			Auction a = new Auction();
+			a.id = newId();
+			a.seller = ConsignmentManager.SERVER;
+			a.sellerName = "เซิร์ฟเวอร์";
+			a.itemJson = itemJson;
+			a.itemId = itemId;
+			a.count = count;
+			a.label = label;
+			a.startPrice = startPrice;
+			a.buyout = buyout;
+			a.highBid = 0;
+			a.createdAt = nowMs;
+			a.endsAt = nowMs + duration * 3_600_000L;
+			a.status = ACTIVE;
+			a.serverOwned = true;
+			auctions.add(a);
+			save();
+			return new CreateOutcome(Result.OK, a.id);
+		}
+	}
+
+	/** Creates an admin-owned auction for a cell. The cell may be free or owned. */
+	public CreateOutcome createCellAuction(String cellId, long startPrice, Long buyout, int hours) {
+		int[] coords = parseCellId(cellId);
+		if (coords == null || startPrice < 1 || startPrice > EconomyManager.MAX_MONEY) {
+			return new CreateOutcome(Result.BAD_REQUEST, null);
+		}
+		if (buyout != null && (buyout <= startPrice || buyout > EconomyManager.MAX_MONEY)) {
+			return new CreateOutcome(Result.BAD_REQUEST, null);
+		}
+		RegionManager rm = regions;
+		if (rm == null || rm.isCommonArea(coords[0], coords[1])) {
+			return new CreateOutcome(Result.BAD_REQUEST, null);
+		}
+		int duration = hours <= 0 ? cfg.auctionDefaultHours : hours;
+		if (duration < 1 || duration > cfg.auctionMaxHours) return new CreateOutcome(Result.BAD_REQUEST, null);
+		String canonical = coords[0] + "," + coords[1];
+		synchronized (Market.LOCK) {
+			if (disabled) return new CreateOutcome(Result.DISABLED, null);
+			for (Auction a : auctions) {
+				if (a.isActive() && a.isCellAuction() && canonical.equals(a.cellId)) {
+					return new CreateOutcome(Result.ALREADY_LISTED, null);
+				}
+			}
+			long nowMs = now.getAsLong();
+			Auction a = new Auction();
+			a.id = newId();
+			a.seller = ConsignmentManager.SERVER;
+			a.sellerName = "เซิร์ฟเวอร์";
+			a.kind = "CELL";
+			a.cellId = canonical;
+			a.itemId = "cell";
+			a.count = 1;
+			a.label = "เขต " + canonical;
+			a.startPrice = startPrice;
+			a.buyout = buyout;
+			a.highBid = 0;
+			a.createdAt = nowMs;
+			a.endsAt = nowMs + duration * 3_600_000L;
+			a.status = ACTIVE;
+			a.serverOwned = true;
+			auctions.add(a);
+			save();
+			return new CreateOutcome(Result.OK, a.id);
+		}
+	}
+
+	private static int[] parseCellId(String cellId) {
+		if (cellId == null) return null;
+		String[] parts = cellId.trim().split(",", -1);
+		if (parts.length != 2) return null;
+		try {
+			return new int[] { Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()) };
+		} catch (NumberFormatException e) {
+			return null;
+		}
+	}
+
 	// ---- queries ------------------------------------------------------------
 
 	public boolean isDisabled() {
 		return disabled;
+	}
+
+	/** True only while the auction is ACTIVE and before its deadline. */
+	public boolean isOpen(Auction a) {
+		return a != null && a.isActive() && now.getAsLong() < a.endsAt;
+	}
+
+	/** Current cell owner for admin displays, or null when the cell is free. */
+	public String cellOwnerName(String cellId) {
+		RegionManager rm = regions;
+		return rm == null || cellId == null ? null : rm.ownerName(cellId);
 	}
 
 	public List<Auction> all() {
@@ -313,6 +447,9 @@ public final class AuctionManager {
 				return new BidOutcome(Result.CLOSED, 0, a.highBid, a.endsAt);
 			}
 			if (a.seller.equals(bidder.toString())) return new BidOutcome(Result.OWN_AUCTION, 0, a.highBid, a.endsAt);
+			if (a.isCellAuction() && isCellOwner(a.cellId, bidder)) {
+				return new BidOutcome(Result.ALREADY_OWNER, 0, a.highBid, a.endsAt);
+			}
 			if (economy.isFrozen(bidder)) return new BidOutcome(Result.FROZEN, 0, a.highBid, a.endsAt);
 			if (a.highBidder != null && a.highBidder.equals(bidder.toString())) {
 				return new BidOutcome(Result.ALREADY_HIGHEST, 0, a.highBid, a.endsAt);
@@ -358,6 +495,7 @@ public final class AuctionManager {
 			if (!a.isActive() || nowMs >= a.endsAt) return Result.CLOSED;
 			if (a.buyout == null) return Result.BAD_REQUEST;
 			if (a.seller.equals(buyer.toString())) return Result.OWN_AUCTION;
+			if (a.isCellAuction() && isCellOwner(a.cellId, buyer)) return Result.ALREADY_OWNER;
 			if (economy.isFrozen(buyer)) return Result.FROZEN;
 
 			long price = a.buyout;
@@ -368,9 +506,13 @@ public final class AuctionManager {
 						a.highBid, "auction.refund:" + a.id, a.id));
 			}
 			moves.add(new Move(Acct.player(buyer), Acct.escrow(a.id), price, "auction.buyout:" + a.id, a.id));
-			moves.add(new Move(Acct.escrow(a.id), Acct.player(UUID.fromString(a.seller)),
-					price - fee, "auction.sale:" + a.id, a.id));
-			moves.add(new Move(Acct.escrow(a.id), Acct.SYSTEM, fee, "auction.fee:" + a.id, a.id));
+			if (a.serverOwned) {
+				moves.add(new Move(Acct.escrow(a.id), Acct.SYSTEM, price, "auction.server_sale:" + a.id, a.id));
+			} else {
+				moves.add(new Move(Acct.escrow(a.id), Acct.player(UUID.fromString(a.seller)),
+						price - fee, "auction.sale:" + a.id, a.id));
+				moves.add(new Move(Acct.escrow(a.id), Acct.SYSTEM, fee, "auction.fee:" + a.id, a.id));
+			}
 			TxResult r = economy.apply(moves, false);
 			if (r == TxResult.INSUFFICIENT) return Result.INSUFFICIENT;
 			if (r == TxResult.FROZEN) return Result.FROZEN;
@@ -471,10 +613,14 @@ public final class AuctionManager {
 			a.finalPrice = a.highBid;
 			if (!a.paidOut) {
 				long fee = feeOf(a.highBid);
-				TxResult r = economy.apply(List.of(
-						new Move(Acct.escrow(a.id), Acct.player(UUID.fromString(a.seller)),
-								a.highBid - fee, "auction.sale:" + a.id, a.id),
-						new Move(Acct.escrow(a.id), Acct.SYSTEM, fee, "auction.fee:" + a.id, a.id)), true);
+				List<Move> payout = a.serverOwned
+						? List.of(new Move(Acct.escrow(a.id), Acct.SYSTEM, a.highBid,
+								"auction.server_sale:" + a.id, a.id))
+						: List.of(
+								new Move(Acct.escrow(a.id), Acct.player(UUID.fromString(a.seller)),
+										a.highBid - fee, "auction.sale:" + a.id, a.id),
+								new Move(Acct.escrow(a.id), Acct.SYSTEM, fee, "auction.fee:" + a.id, a.id));
+				TxResult r = economy.apply(payout, true);
 				if (r != TxResult.OK) {
 					ClaimMap.LOGGER.error("[claimmap] Settle payment failed for {} ({}); retrying next tick",
 							a.id, r);
@@ -505,7 +651,20 @@ public final class AuctionManager {
 		}
 	}
 
+	private boolean isCellOwner(String cellId, UUID player) {
+		RegionManager rm = regions;
+		if (rm == null || cellId == null) return false;
+		RegionManager.CellData cell = rm.get(cellId);
+		return cell != null && player.toString().equals(cell.ownerUuid);
+	}
+
 	private boolean deliverWinner(Auction a) {
+		if (a.isCellAuction()) {
+			RegionManager rm = regions;
+			if (rm == null || a.winner == null) return false;
+			String winnerName = a.highBidderName == null ? "ผู้ชนะ" : a.highBidderName;
+			return rm.assign(a.cellId, a.winner, winnerName);
+		}
 		String id = "mb_au_" + a.id + "_winner";
 		if (mailbox.exists(UUID.fromString(a.winner), id)) return true;
 		return mailbox.add(UUID.fromString(a.winner), new MailboxManager.MailEntry(
@@ -513,6 +672,12 @@ public final class AuctionManager {
 	}
 
 	private boolean deliverSeller(Auction a) {
+		if (a.isCellAuction()) return true;
+		if (a.serverOwned) {
+			ConsignmentManager store = consignments;
+			if (store == null) return false;
+			return store.putReturned(a.itemJson, a.itemId, a.count, a.label, a.id);
+		}
 		String id = "mb_au_" + a.id + "_return";
 		if (mailbox.exists(UUID.fromString(a.seller), id)) return true;
 		return mailbox.add(UUID.fromString(a.seller), new MailboxManager.MailEntry(

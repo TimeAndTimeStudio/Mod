@@ -8,6 +8,7 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
@@ -197,8 +198,16 @@ public final class ShopManager {
 
 	/** Counts plain stacks of one item in the main inventory + hotbar. */
 	public static int countPlain(ServerPlayer player, String itemId) {
+		return player == null ? 0 : countPlain(player.getInventory(), itemId);
+	}
+
+	/** Counts plain stacks in slots 0-35 (hotbar + main) of any container. */
+	public static int countPlain(Container inventory, String itemId) {
 		int total = 0;
-		for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
+		if (inventory == null) return 0;
+		int slots = Math.min(36, inventory.getContainerSize());
+		for (int i = 0; i < slots; i++) {
+			ItemStack stack = inventory.getItem(i);
 			if (stack == null || stack.isEmpty()) continue;
 			if (!ItemCodecs.idOf(stack).equals(itemId)) continue;
 			if (!ItemCodecs.isPlain(stack)) continue;
@@ -221,7 +230,15 @@ public final class ShopManager {
 
 	/** Runs on the server thread. Removes the items, then credits the money. */
 	public SellOutcome sell(ServerPlayer player, String rawItem, int qty, String ref) {
-		UUID uuid = player.getUUID();
+		if (player == null) return new SellOutcome(Result.OFFLINE, 0, 0, 0);
+		return sell(player.getInventory(), player.getUUID(), rawItem, qty, ref);
+	}
+
+	/**
+	 * Sells from any inventory container, including one loaded from offline
+	 * player data. Runs on the server thread.
+	 */
+	public SellOutcome sell(Container inventory, UUID uuid, String rawItem, int qty, String ref) {
 		String itemId = PriceService.normalize(rawItem);
 		if (itemId.isEmpty() || !ItemRegistryAdapter.exists(itemId)) {
 			return new SellOutcome(Result.INVALID_ITEM, 0, 0, economy.balance(uuid));
@@ -236,7 +253,7 @@ public final class ShopManager {
 			var unit = prices.sellPrice(itemId);
 			if (unit.isEmpty()) return new SellOutcome(Result.NO_PRICE, 0, 0, economy.balance(uuid));
 
-			int have = countPlain(player, itemId);
+			int have = countPlain(inventory, itemId);
 			if (have < qty) return new SellOutcome(Result.NOT_ENOUGH_ITEMS, 0, 0, economy.balance(uuid));
 
 			long total;
@@ -249,15 +266,15 @@ public final class ShopManager {
 				return new SellOutcome(Result.OVERFLOW, 0, 0, economy.balance(uuid));
 			}
 
-			List<ItemStack> removed = takeItems(player, itemId, qty);
+			List<ItemStack> removed = takeItems(inventory, itemId, qty);
 			if (removed == null) {
 				return new SellOutcome(Result.NOT_ENOUGH_ITEMS, 0, 0, economy.balance(uuid));
 			}
 			TxResult credit = economy.deposit(uuid, total, "shop.sell:" + itemId, ref);
 			if (credit != TxResult.OK) {
 				for (ItemStack stack : removed) {
-					if (!player.getInventory().add(stack)) {
-						String json = ItemCodecs.encode(stack, player.level().registryAccess());
+					if (!addTo(inventory, stack)) {
+						String json = ItemCodecs.encode(stack, registryAccess(inventory));
 						if (json != null) {
 							ItemCodecs.ItemView v = ItemCodecs.view(stack);
 							mailbox.add(uuid, new MailboxManager.MailEntry(
@@ -273,28 +290,72 @@ public final class ShopManager {
 		}
 	}
 
+	/** Sells items taken from one resolved source (claim chest, ender, inventory). */
+	public SellOutcome sellFromSource(UUID uuid, ItemSources.Source source, int qty, String ref) {
+		if (source == null) return new SellOutcome(Result.NOT_ENOUGH_ITEMS, 0, 0, economy.balance(uuid));
+		String itemId = ItemCodecs.idOf(source.get());
+		if (itemId.isEmpty() || !ItemRegistryAdapter.exists(itemId)) {
+			return new SellOutcome(Result.INVALID_ITEM, 0, 0, economy.balance(uuid));
+		}
+		if (qty < 1 || qty > cfg.shopMaxQtyPerTx) {
+			return new SellOutcome(Result.INVALID_QTY, 0, 0, economy.balance(uuid));
+		}
+		synchronized (Market.LOCK) {
+			if (isDisabled()) return new SellOutcome(Result.DISABLED, 0, 0, economy.balance(uuid));
+			if (economy.isFrozen(uuid)) return new SellOutcome(Result.FROZEN, 0, 0, economy.balance(uuid));
+			if (prices.isBlocked(itemId)) return new SellOutcome(Result.BLOCKED, 0, 0, economy.balance(uuid));
+			var unit = prices.sellPrice(itemId);
+			if (unit.isEmpty()) return new SellOutcome(Result.NO_PRICE, 0, 0, economy.balance(uuid));
+			ItemStack before = source.get().copy();
+			if (before.isEmpty() || !ItemCodecs.isPlain(before) || before.getCount() < qty) {
+				return new SellOutcome(Result.NOT_ENOUGH_ITEMS, 0, 0, economy.balance(uuid));
+			}
+			long total;
+			try {
+				total = Math.multiplyExact(unit.getAsLong(), (long) qty);
+			} catch (ArithmeticException e) {
+				return new SellOutcome(Result.OVERFLOW, 0, 0, economy.balance(uuid));
+			}
+			if (economy.balance(uuid) > EconomyManager.MAX_BALANCE - total) {
+				return new SellOutcome(Result.OVERFLOW, 0, 0, economy.balance(uuid));
+			}
+			ItemStack rest = before.copy();
+			rest.setCount(before.getCount() - qty);
+			source.set(rest.isEmpty() ? ItemStack.EMPTY : rest);
+			TxResult credit = economy.deposit(uuid, total, "shop.sell:" + itemId, ref);
+			if (credit != TxResult.OK) {
+				source.set(before);
+				return new SellOutcome(credit == TxResult.FROZEN ? Result.FROZEN : Result.IO_ERROR, 0, 0,
+						economy.balance(uuid));
+			}
+			return new SellOutcome(Result.OK, qty, total, economy.balance(uuid));
+		}
+	}
+
 	/** Removes exactly {@code qty}; returns the removed stacks, or null when short. */
-	private static List<ItemStack> takeItems(ServerPlayer player, String itemId, int qty) {
+	private static List<ItemStack> takeItems(Container inventory, String itemId, int qty) {
 		List<ItemStack> removed = new ArrayList<>();
 		int left = qty;
-		List<ItemStack> inv = player.getInventory().getNonEquipmentItems();
-		for (ItemStack stack : inv) {
+		int slots = Math.min(36, inventory.getContainerSize());
+		for (int i = 0; i < slots; i++) {
 			if (left <= 0) break;
+			ItemStack stack = inventory.getItem(i);
 			if (stack == null || stack.isEmpty()) continue;
 			if (!ItemCodecs.idOf(stack).equals(itemId) || !ItemCodecs.isPlain(stack)) continue;
 			int take = Math.min(left, stack.getCount());
 			if (take == stack.getCount()) {
 				removed.add(stack.copy());
-				stack.setCount(0);
+				inventory.setItem(i, ItemStack.EMPTY);
 			} else {
 				removed.add(stack.copyWithCount(take));
 				stack.shrink(take);
+				inventory.setChanged();
 			}
 			left -= take;
 		}
 		if (left > 0) {
 			// put back what we already removed so a failed sell changes nothing
-			for (ItemStack stack : removed) player.getInventory().add(stack);
+			for (ItemStack stack : removed) addTo(inventory, stack);
 			return null;
 		}
 		return removed;
@@ -304,8 +365,12 @@ public final class ShopManager {
 
 	/** Runs on the server thread: moves as much as fits into the inventory. */
 	public ClaimOutcome claim(ServerPlayer player) {
-		UUID uuid = player.getUUID();
-		RegistryAccess access = player.level().registryAccess();
+		if (player == null) return new ClaimOutcome(0, 0, 0, true);
+		return claimInto(player.getUUID(), player.getInventory(), player.level().registryAccess());
+	}
+
+	/** Moves mailbox items into any inventory container (online or offline data). */
+	public ClaimOutcome claimInto(UUID uuid, Container inventory, RegistryAccess access) {
 		int claimed = 0;
 		int skipped = 0;
 		boolean inventoryFull = false;
@@ -321,7 +386,7 @@ public final class ShopManager {
 				ItemStack stack = decoded.get();
 				stack.setCount(Math.min(entry.count(), stack.getMaxStackSize()));
 				int before = stack.getCount();
-				player.getInventory().add(stack);
+				addTo(inventory, stack);
 				int moved = before - stack.getCount();
 				claimed += moved;
 				if (stack.getCount() > 0) {
@@ -342,10 +407,33 @@ public final class ShopManager {
 			}
 		}
 		int remaining = mailbox.count(uuid);
-		if (remaining > 0 && player.getInventory().getFreeSlot() == -1) {
+		if (remaining > 0 && freeSlot(inventory) == -1) {
 			inventoryFull = true;
 		}
 		return new ClaimOutcome(claimed, remaining, skipped, inventoryFull);
+	}
+
+	private static boolean addTo(Container inventory, ItemStack stack) {
+		if (inventory instanceof net.minecraft.world.entity.player.Inventory playerInventory) {
+			return playerInventory.add(stack);
+		}
+		if (inventory instanceof OfflinePlayers.InventoryView view) return view.add(stack);
+		return false;
+	}
+
+	private static int freeSlot(Container inventory) {
+		if (inventory instanceof net.minecraft.world.entity.player.Inventory playerInventory) {
+			return playerInventory.getFreeSlot();
+		}
+		if (inventory instanceof OfflinePlayers.InventoryView view) return view.getFreeSlot();
+		return -1;
+	}
+
+	private static RegistryAccess registryAccess(Container inventory) {
+		if (inventory instanceof net.minecraft.world.entity.player.Inventory) {
+			return ClaimMap.getServer() == null ? null : ClaimMap.getServer().registryAccess();
+		}
+		return ClaimMap.getServer() == null ? null : ClaimMap.getServer().registryAccess();
 	}
 
 	// ---- daily quota --------------------------------------------------------

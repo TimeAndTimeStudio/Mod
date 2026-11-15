@@ -7,6 +7,11 @@ import com.google.gson.JsonParser;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import studio.timeandtime.claimmap.world.WorldManager;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,6 +25,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
@@ -41,12 +47,17 @@ public final class WebServer {
 	private final MailboxManager mailbox;
 	private final ShopManager shop;
 	private final AuctionManager auctions;
+	private final PlayerMarket playerMarket;
+	private final ConsignmentManager consignments;
 	private final AdminService admin;
+	private final PlayerItemStore playerItems;
+	private final WorldManager worlds;
 	private static final Pattern STATIC_PATH =
 			Pattern.compile("^/(css|js|icons|img)/[A-Za-z0-9_./-]+$|^/favicon\\.png$");
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
+	private ExecutorService httpExecutor;
 	private byte[] webPage;
 
 	private record Cached(JsonObject body, long expiresAt) {
@@ -54,7 +65,9 @@ public final class WebServer {
 
 	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
 			AccountManager accounts, EconomyManager economy, PriceService prices, MailboxManager mailbox,
-			ShopManager shop, AuctionManager auctions, AdminService admin) {
+			ShopManager shop, AuctionManager auctions, PlayerMarket playerMarket,
+			ConsignmentManager consignments, AdminService admin, PlayerItemStore playerItems,
+			WorldManager worlds) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
@@ -65,14 +78,19 @@ public final class WebServer {
 		this.mailbox = mailbox;
 		this.shop = shop;
 		this.auctions = auctions;
+		this.playerMarket = playerMarket;
+		this.consignments = consignments;
 		this.admin = admin;
+		this.playerItems = playerItems;
+		this.worlds = worlds;
 	}
 
 	public void start() {
 		try {
 			server = HttpServer.create(new InetSocketAddress(config.bindAddress, config.port), 0);
 			server.createContext("/", this::handle);
-			server.setExecutor(Executors.newFixedThreadPool(8));
+			httpExecutor = Executors.newFixedThreadPool(8);
+			server.setExecutor(httpExecutor);
 			server.start();
 			ClaimMap.LOGGER.info("[claimmap] HTTP API listening on {}:{}", config.bindAddress, config.port);
 		} catch (IOException e) {
@@ -82,6 +100,7 @@ public final class WebServer {
 
 	public void stop() {
 		if (server != null) server.stop(0);
+		if (httpExecutor != null) httpExecutor.shutdownNow();
 	}
 
 	// ---- routing ------------------------------------------------------------
@@ -125,6 +144,10 @@ public final class WebServer {
 			case "/api/login" -> {
 				requireMethod(ex, method, "POST");
 				handleLogin(ex);
+			}
+			case "/api/names" -> {
+				requireMethod(ex, method, "GET");
+				handleNames(ex);
 			}
 			case "/api/me" -> {
 				requireMethod(ex, method, "GET");
@@ -175,15 +198,33 @@ public final class WebServer {
 				handleMailboxClaim(ex);
 			}
 			case "/api/auctions" -> {
-				if (method.equals("POST")) handleCreateAuction(ex);
+				if (method.equals("POST")) {
+					throw new Json.ApiError(403, "forbidden", "เปิดประมูลได้เฉพาะเซิร์ฟเวอร์/แอดมินเท่านั้น");
+				}
+				requireMethod(ex, method, "GET");
+				handleAuctions(ex);
+			}
+			case "/api/market" -> {
+				if (method.equals("POST")) handleCreateListing(ex);
 				else {
 					requireMethod(ex, method, "GET");
-					handleAuctions(ex);
+					handleMarket(ex);
+				}
+			}
+			case "/api/consign" -> {
+				if (method.equals("POST")) handleConsign(ex);
+				else {
+					requireMethod(ex, method, "GET");
+					handleConsignList(ex);
 				}
 			}
 			case "/api/sources" -> {
 				requireMethod(ex, method, "GET");
 				handleSources(ex);
+			}
+			case "/api/items" -> {
+				requireMethod(ex, method, "GET");
+				handlePlayerItems(ex);
 			}
 			case "/api/admin/overview" -> {
 				requireMethod(ex, method, "GET");
@@ -206,8 +247,26 @@ public final class WebServer {
 				handleAdminPriceRefresh(ex);
 			}
 			case "/api/admin/auctions" -> {
+				if (method.equals("POST")) handleAdminCreateAuction(ex);
+				else {
+					requireMethod(ex, method, "GET");
+					handleAdminAuctions(ex);
+				}
+			}
+			case "/api/admin/cell-auctions" -> {
+				if (method.equals("POST")) handleAdminCreateCellAuction(ex);
+				else {
+					requireMethod(ex, method, "GET");
+					handleAdminCellAuctions(ex);
+				}
+			}
+			case "/api/admin/consignments" -> {
 				requireMethod(ex, method, "GET");
-				handleAdminAuctions(ex);
+				handleAdminConsignments(ex);
+			}
+			case "/api/admin/cells" -> {
+				requireMethod(ex, method, "GET");
+				handleAdminCells(ex);
 			}
 			case "/api/admin/config/reload" -> {
 				requireMethod(ex, method, "POST");
@@ -217,6 +276,14 @@ public final class WebServer {
 				requireMethod(ex, method, "GET");
 				handleAdminAudit(ex);
 			}
+			case "/api/admin/worlds" -> {
+				requireMethod(ex, method, "GET");
+				handleAdminWorlds(ex);
+			}
+			case "/api/admin/worlds/scan" -> {
+				requireMethod(ex, method, "POST");
+				handleAdminWorldsScan(ex);
+			}
 			default -> {
 				if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/icons/") || path.startsWith("/img/") || path.equals("/favicon.png")) {
 					requireMethod(ex, method, "GET");
@@ -225,6 +292,8 @@ public final class WebServer {
 					handleAdminDynamic(ex, method, path);
 				} else if (path.startsWith("/api/auctions/")) {
 					handleAuctionAction(ex, method, path);
+				} else if (path.startsWith("/api/market/")) {
+					handleMarketAction(ex, method, path);
 				} else if (path.startsWith("/api/map/")) {
 					requireMethod(ex, method, "GET");
 					handleMap(ex, path);
@@ -410,6 +479,29 @@ public final class WebServer {
 		Json.send(ex, 200, out);
 	}
 
+	/** GET /api/names -> names registered in config or with an account. Public. */
+	private void handleNames(HttpExchange ex) throws IOException {
+		java.util.TreeSet<String> names = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+		addNames(names, config.players);
+		addNames(names, config.admins);
+		for (AccountManager.Identity id : accounts.identities()) {
+			if (id.name() != null && !id.name().isBlank()) names.add(id.name());
+		}
+		JsonArray arr = new JsonArray();
+		for (String name : names) arr.add(name);
+		JsonObject out = new JsonObject();
+		out.add("names", arr);
+		Json.send(ex, 200, out);
+	}
+
+	private static void addNames(java.util.TreeSet<String> names, String csv) {
+		if (csv == null) return;
+		for (String part : csv.split(",")) {
+			String name = part.trim();
+			if (!name.isEmpty()) names.add(name);
+		}
+	}
+
 	/** GET /api/me -> {"name","admin","x","z","hasPos"} */
 	private void handleMe(HttpExchange ex) throws IOException {
 		Auth a = requireAuth(ex);
@@ -574,7 +666,7 @@ public final class WebServer {
 					throw new Json.ApiError(400, "bad_request", "ต้องระบุชื่อผู้รับโอน");
 				}
 				to = to.trim();
-				UUID targetUuid = accounts.uuidOf(to).orElse(null);
+				UUID targetUuid = accounts.anyUuidOf(to).orElse(null);
 				String targetName = to;
 				if (targetUuid == null) {
 					var s = ClaimMap.getServer();
@@ -767,13 +859,18 @@ public final class WebServer {
 		Json.send(ex, 200, out);
 	}
 
-	/** POST /api/shop/sell {item, qty} — requires the player to be online. */
+	/**
+	 * POST /api/shop/sell {item, qty, ref?} — sells from the inventory or from
+	 * one resolved claim/chest source. Works while the player is offline.
+	 */
 	private void handleShopSell(HttpExchange ex) throws IOException {
 		Auth a = requireSession(ex);
 		requireShopEnabled();
 		UUID uuid = sessionUuid(a);
 		JsonObject body = Json.readObject(ex);
 		String item = Json.str(body, "item");
+		String ref = Json.str(body, "ref");
+		if (ref != null && ref.isBlank()) ref = null;
 		Long qtyValue = Json.integer(body, "qty");
 		if (item == null || item.isBlank()) throw new Json.ApiError(400, "invalid_item", "ต้องระบุไอเท็ม");
 		if (qtyValue == null || qtyValue < 1 || qtyValue > config.shopMaxQtyPerTx) {
@@ -782,27 +879,43 @@ public final class WebServer {
 		int qty = qtyValue.intValue();
 		var server = ClaimMap.getServer();
 		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
-		if (server.getPlayerList().getPlayer(uuid) == null) {
-			throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงจะขายของได้");
-		}
 
-		String ref = "w" + Long.toString(System.currentTimeMillis(), 36);
-		ShopManager.SellOutcome outcome;
+		String refId = "w" + Long.toString(System.currentTimeMillis(), 36);
+		final String sourceRef = ref;
+		final String itemId = item;
+		SellTask task;
 		try {
-			outcome = GameBridge.call(server, () -> {
-				var player = server.getPlayerList().getPlayer(uuid);
-				if (player == null) return new ShopManager.SellOutcome(ShopManager.Result.OFFLINE, 0, 0, 0);
-				return shop.sell(player, item, qty, ref);
-			}, GameBridge.DEFAULT_TIMEOUT_MS);
+			task = GameBridge.call(server, () -> {
+				ItemEnv env = openItemEnv(server, uuid, a.name());
+				if (env == null) return null;
+				try {
+					ShopManager.SellOutcome outcome;
+					if (sourceRef != null) {
+						ItemSources.Source source = ItemSources.find(env.context(), regions, sourceRef);
+						outcome = shop.sellFromSource(uuid, source, qty, refId);
+					} else if (env.session() != null) {
+						outcome = shop.sell(env.session().inventory(), uuid, itemId, qty, refId);
+					} else {
+						outcome = shop.sell(server.getPlayerList().getPlayer(uuid), itemId, qty, refId);
+					}
+					if (outcome.result() == ShopManager.Result.OK) refreshCache(env, uuid, a.name());
+					return new SellTask(outcome, env.session() != null);
+				} finally {
+					flushItemEnv(env, server.registryAccess());
+				}
+			}, 15000L);
 		} catch (GameBridge.GameUnavailableException e) {
 			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
 		}
+		if (task == null) throw new Json.ApiError(404, "not_found", "ไม่พบข้อมูลผู้เล่น (ต้องเคยเข้าเกมอย่างน้อยหนึ่งครั้ง)");
+		ShopManager.SellOutcome outcome = task.outcome();
 		if (outcome.result() != ShopManager.Result.OK) throw shopError(outcome.result());
 		JsonObject out = new JsonObject();
 		out.addProperty("ok", true);
 		out.addProperty("sold", outcome.sold());
 		out.addProperty("earned", outcome.earned());
 		out.addProperty("balance", outcome.balance());
+		out.addProperty("offline", task.offline());
 		Json.send(ex, 200, out);
 	}
 
@@ -830,26 +943,45 @@ public final class WebServer {
 		Json.send(ex, 200, out);
 	}
 
-	/** POST /api/mailbox/claim — requires the player to be online. */
+	/** POST /api/mailbox/claim — delivers into the live or saved inventory. */
 	private void handleMailboxClaim(HttpExchange ex) throws IOException {
 		Auth a = requireSession(ex);
 		requireShopEnabled();
 		UUID uuid = sessionUuid(a);
 		var server = ClaimMap.getServer();
 		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
-		if (server.getPlayerList().getPlayer(uuid) == null) {
-			throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงรับของได้");
-		}
-		ShopManager.ClaimOutcome outcome;
+		ClaimTask task;
 		try {
-			outcome = GameBridge.call(server, () -> {
-				var player = server.getPlayerList().getPlayer(uuid);
-				return player == null ? null : shop.claim(player);
-			}, GameBridge.DEFAULT_TIMEOUT_MS);
+			task = GameBridge.call(server, () -> {
+				ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+				if (player != null) {
+					ShopManager.ClaimOutcome outcome = shop.claim(player);
+					if (outcome.claimed() > 0) {
+						playerItems.mergeCarried(uuid, a.name(), ItemSources.listCarried(player));
+					}
+					return new ClaimTask(outcome, false);
+				}
+				RegistryAccess access = server.registryAccess();
+				var session = OfflinePlayers.open(server, uuid, a.name(), access);
+				if (session.isEmpty()) return null;
+				try {
+					ShopManager.ClaimOutcome outcome = shop.claimInto(uuid, session.get().inventory(), access);
+					if (outcome.claimed() > 0) {
+						playerItems.mergeCarried(uuid, a.name(), ItemSources.listCarried(
+								ItemSources.Context.offline(uuid, server.overworld(), session.get().inventory(),
+										session.get().ender(), PlayerPositions.get(uuid) == null
+												? BlockPos.ZERO : PlayerPositions.get(uuid))));
+					}
+					return new ClaimTask(outcome, true);
+				} finally {
+					session.get().flush(access);
+				}
+			}, 15000L);
 		} catch (GameBridge.GameUnavailableException e) {
 			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
 		}
-		if (outcome == null) throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงรับของได้");
+		if (task == null) throw new Json.ApiError(404, "not_found", "ไม่พบข้อมูลผู้เล่น (ต้องเคยเข้าเกมอย่างน้อยหนึ่งครั้ง)");
+		ShopManager.ClaimOutcome outcome = task.outcome();
 		if (outcome.claimed() == 0 && outcome.remaining() > 0) {
 			throw new Json.ApiError(409, "inventory_full", "ช่องเก็บของในตัวไม่พอ กรุณาเคลียร์ช่องในกระเป๋าก่อนรับของ");
 		}
@@ -858,6 +990,7 @@ public final class WebServer {
 		out.addProperty("remaining", outcome.remaining());
 		out.addProperty("skipped", outcome.skipped());
 		out.addProperty("inventoryFull", outcome.inventoryFull());
+		out.addProperty("offline", task.offline());
 		Json.send(ex, 200, out);
 	}
 
@@ -886,7 +1019,18 @@ public final class WebServer {
 
 	private JsonObject auctionView(AuctionManager.Auction au, UUID viewer) {
 		JsonObject o = new JsonObject();
+		boolean cell = au.isCellAuction();
+		String viewerId = viewer.toString();
+		RegionManager.CellData cellData = cell ? regions.get(au.cellId) : null;
+		String cellOwner = cellData == null ? null : cellData.ownerName;
+		boolean viewerOwnsCell = cellData != null && viewerId.equals(cellData.ownerUuid);
+		boolean mine = au.seller.equals(viewerId);
+		boolean highest = viewerId.equals(au.highBidder);
+		boolean open = auctions.isOpen(au);
 		o.addProperty("id", au.id);
+		o.addProperty("kind", cell ? "CELL" : "ITEM");
+		o.addProperty("cellId", au.cellId);
+		o.addProperty("cellOwnerName", cellOwner);
 		o.addProperty("sellerName", au.sellerName);
 		o.addProperty("itemId", au.itemId);
 		o.addProperty("count", au.count);
@@ -899,11 +1043,12 @@ public final class WebServer {
 		o.addProperty("status", au.status);
 		o.addProperty("minBid", auctions.minBid(au));
 		o.addProperty("finalPrice", au.finalPrice);
-		o.addProperty("winner", au.winner == null ? null : au.winner.equals(viewer.toString()) ? "คุณ" : null);
-		boolean mine = au.seller.equals(viewer.toString());
+		o.addProperty("winner", au.winner == null ? null : au.winner.equals(viewerId) ? "คุณ" : null);
 		o.addProperty("mine", mine);
-		o.addProperty("canBid", au.isActive() && !mine && !viewer.toString().equals(au.highBidder));
-		o.addProperty("canCancel", au.isActive() && mine && au.highBidder == null);
+		o.addProperty("highest", highest);
+		o.addProperty("canBid", open && !mine && !highest && !viewerOwnsCell);
+		o.addProperty("canBuyout", open && au.buyout != null && !mine && !viewerOwnsCell);
+		o.addProperty("canCancel", open && mine && au.highBidder == null);
 		return o;
 	}
 
@@ -959,110 +1104,144 @@ public final class WebServer {
 		}
 	}
 
-	/** GET /api/sources — sellable stacks in inventory, ender chest and claimed containers. */
+	/** GET /api/sources — sellable stacks, online or from the saved offline data. */
 	private void handleSources(HttpExchange ex) throws IOException {
 		Auth a = requireSession(ex);
 		UUID uuid = sessionUuid(a);
 		var server = ClaimMap.getServer();
 		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
-		List<ItemSources.Entry> entries;
+		SourceResult result;
 		try {
-			entries = GameBridge.call(server, () -> {
-				var player = server.getPlayerList().getPlayer(uuid);
-				if (player == null) return null;
-				return ItemSources.list(player, regions);
-			}, 8000L);
+			result = GameBridge.call(server, () -> {
+				ItemEnv env = openItemEnv(server, uuid, a.name());
+				if (env == null) return null;
+				try {
+					return new SourceResult(ItemSources.list(env.context(), regions), env.session() != null);
+				} finally {
+					flushItemEnv(env, server.registryAccess());
+				}
+			}, 20000L);
 		} catch (GameBridge.GameUnavailableException e) {
 			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
 		}
-		if (entries == null) throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงจะดึงของได้");
+		if (result == null) throw new Json.ApiError(404, "not_found", "ไม่พบข้อมูลผู้เล่น (ต้องเคยเข้าเกมอย่างน้อยหนึ่งครั้ง)");
+		List<ItemSources.Entry> entries = result.entries();
 		entries.sort((x, y) -> {
 			int c = x.area().compareTo(y.area());
 			return c != 0 ? c : x.label().compareTo(y.label());
 		});
+		// Persist the exact stack locations for the web and for later decrements.
+		PlayerItemStore.Snapshot snapshot = playerItems.record(uuid, a.name(),
+				result.offline() ? "offline" : "online", entries);
 		JsonArray arr = new JsonArray();
-		for (ItemSources.Entry e : entries) {
-			JsonObject o = new JsonObject();
-			o.addProperty("ref", e.ref());
-			o.addProperty("area", e.area());
-			o.addProperty("itemId", e.itemId());
-			o.addProperty("label", e.label());
-			o.addProperty("count", e.count());
-			arr.add(o);
-		}
+		for (ItemSources.Entry e : entries) arr.add(itemEntryView(e));
 		JsonObject out = new JsonObject();
 		out.add("items", arr);
-		out.addProperty("note", "เฉพาะกล่องในพื้นที่ที่โหลดอยู่ และเฉพาะพื้นที่ที่คุณเป็นเจ้าของหรือสมาชิก");
+		out.addProperty("offline", result.offline());
+		out.addProperty("updatedAt", snapshot.updatedAt());
+		out.addProperty("source", snapshot.source());
+		out.addProperty("stacks", entries.size());
+		out.addProperty("totalCount", snapshot.totalCount());
+		out.addProperty("note", result.offline()
+				? "โหมดออฟไลน์: อ่านจากข้อมูลที่บันทึกไว้ และโหลด chunk ในเขตแบบจำกัดจำนวน"
+				: "เฉพาะกล่องในพื้นที่ที่โหลดอยู่ และเฉพาะพื้นที่ที่คุณเป็นเจ้าของหรือสมาชิก");
 		Json.send(ex, 200, out);
 	}
 
-	/** POST /api/auctions {ref,count,startPrice,buyout,hours} — web listing. */
-	private void handleCreateAuction(HttpExchange ex) throws IOException {
+	/**
+	 * GET /api/items — the cached player-items/<uuid>.json projection. This is
+	 * intentionally read-only and fast; the authoritative refs are re-resolved
+	 * when a sale or listing is committed.
+	 */
+	private void handlePlayerItems(HttpExchange ex) throws IOException {
 		Auth a = requireSession(ex);
-		requireAuctionEnabled();
 		UUID uuid = sessionUuid(a);
-		JsonObject body = Json.readObject(ex);
-		String ref = Json.str(body, "ref");
-		Long countValue = Json.integer(body, "count");
-		Long startValue = Json.integer(body, "startPrice");
-		Long buyoutValue = Json.integer(body, "buyout");
-		Long hoursValue = Json.integer(body, "hours");
-		if (ref == null || ref.isBlank()) throw new Json.ApiError(400, "invalid_source", "ต้องเลือกไอเท็มที่จะขาย");
-		if (countValue == null || countValue < 1 || countValue > 2304) {
-			throw new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง");
-		}
-		if (startValue == null || startValue < 1 || startValue > EconomyManager.MAX_MONEY) {
-			throw new Json.ApiError(400, "invalid_amount", "ราคาเริ่มต้นไม่ถูกต้อง");
-		}
-		Long buyout = buyoutValue == null || buyoutValue <= 0 ? null : buyoutValue;
-		int hours = hoursValue == null ? 0 : (int) Math.max(0, Math.min(24 * 7, hoursValue));
-
-		var server = ClaimMap.getServer();
-		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
-		if (server.getPlayerList().getPlayer(uuid) == null) {
-			throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงจะลงขายได้");
-		}
-		String[] result;
-		try {
-			result = GameBridge.call(server, () -> {
-				var player = server.getPlayerList().getPlayer(uuid);
-				if (player == null) return new String[]{"player_offline", null};
-				ItemSources.Taken taken = ItemSources.take(player, regions, ref, null, countValue.intValue());
-				if (taken == null) return new String[]{"invalid_source", null};
-				String itemId = ItemCodecs.idOf(taken.stack());
-				if (prices.isBlocked(itemId) || !ItemRegistryAdapter.exists(itemId)) {
-					taken.restore().run();
-					return new String[]{"invalid_item", null};
-				}
-				String json = ItemCodecs.encode(taken.stack(), server.registryAccess());
-				String label = ItemRegistryAdapter.label(itemId);
-				AuctionManager.CreatePlan plan = new AuctionManager.CreatePlan(uuid.toString(), a.name(), json, itemId,
-						taken.stack().getCount(), label, startValue, buyout, hours);
-				AuctionManager.CreateOutcome check = auctions.planCreate(plan);
-				if (check.result() != AuctionManager.Result.OK) {
-					taken.restore().run();
-					return new String[]{check.result().name(), null};
-				}
-				AuctionManager.CreateOutcome created = auctions.create(plan);
-				if (created.result() != AuctionManager.Result.OK) {
-					taken.restore().run();
-					return new String[]{created.result().name(), null};
-				}
-				return new String[]{null, created.auctionId()};
-			}, GameBridge.DEFAULT_TIMEOUT_MS);
-		} catch (GameBridge.GameUnavailableException e) {
-			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
-		}
-		if (result[0] != null) {
-			if (result[0].equals("invalid_source")) throw new Json.ApiError(409, "invalid_source", "ไอเท็มในช่องนั้นเปลี่ยนแล้ว กรุณารีเฟรช");
-			if (result[0].equals("invalid_item")) throw new Json.ApiError(400, "invalid_item", "ไอเท็มนี้ลงขายไม่ได้");
-			if (result[0].equals("player_offline")) throw new Json.ApiError(409, "player_offline", "ต้องเข้าเกมก่อนจึงจะลงขายได้");
-			throw auctionError(AuctionManager.Result.valueOf(result[0]), 0);
-		}
 		JsonObject out = new JsonObject();
-		out.addProperty("ok", true);
-		out.addProperty("id", result[1]);
+		Optional<PlayerItemStore.Snapshot> found = playerItems.get(uuid);
+		out.addProperty("present", found.isPresent());
+		out.addProperty("offline", found.map(s -> "offline".equals(s.source())).orElse(false));
+		JsonArray arr = new JsonArray();
+		if (found.isPresent()) {
+			PlayerItemStore.Snapshot s = found.get();
+			out.addProperty("updatedAt", s.updatedAt());
+			out.addProperty("source", s.source());
+			out.addProperty("name", s.name());
+			out.addProperty("stacks", s.items().size());
+			out.addProperty("totalCount", s.totalCount());
+			for (ItemSources.Entry e : s.items()) arr.add(itemEntryView(e));
+		} else {
+			out.addProperty("updatedAt", 0L);
+			out.addProperty("source", "none");
+			out.addProperty("stacks", 0);
+			out.addProperty("totalCount", 0);
+		}
+		out.add("items", arr);
+		out.addProperty("note", found.isPresent()
+				? "แคชจาก player-items/<uuid>.json"
+				: "ยังไม่มีแคช กรุณาโหลดรายการของอีกครั้ง");
 		Json.send(ex, 200, out);
+	}
+
+	/** Converts one resolved source (including its exact position) for the web. */
+	private static JsonObject itemEntryView(ItemSources.Entry e) {
+		JsonObject o = new JsonObject();
+		o.addProperty("ref", e.ref());
+		o.addProperty("area", e.area());
+		o.addProperty("container", e.container());
+		o.addProperty("slot", e.slot());
+		o.addProperty("dimension", e.dimension());
+		if (e.x() != null) o.addProperty("x", e.x());
+		if (e.y() != null) o.addProperty("y", e.y());
+		if (e.z() != null) o.addProperty("z", e.z());
+		o.addProperty("itemId", e.itemId());
+		o.addProperty("label", e.label());
+		o.addProperty("count", e.count());
+		return o;
+	}
+
+	// ---- offline item access helpers ----------------------------------------
+
+	private record ItemEnv(ItemSources.Context context, OfflinePlayers.Session session) {
+	}
+
+	private record SourceResult(List<ItemSources.Entry> entries, boolean offline) {
+	}
+
+	private record SellTask(ShopManager.SellOutcome outcome, boolean offline) {
+	}
+
+	private record ClaimTask(ShopManager.ClaimOutcome outcome, boolean offline) {
+	}
+
+	/** Runs on the server thread. Opens the live player or the saved player data. */
+	private ItemEnv openItemEnv(net.minecraft.server.MinecraftServer server, UUID uuid, String name) {
+		ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+		if (player != null) return new ItemEnv(ItemSources.Context.online(player), null);
+		var session = OfflinePlayers.open(server, uuid, name, server.registryAccess());
+		if (session.isEmpty()) return null;
+		OfflinePlayers.Session s = session.get();
+		ServerLevel level = server.overworld();
+		BlockPos near = PlayerPositions.get(uuid);
+		if (near == null) near = BlockPos.ZERO;
+		return new ItemEnv(ItemSources.Context.offline(uuid, level, s.inventory(), s.ender(), near), s);
+	}
+
+	private void flushItemEnv(ItemEnv env, RegistryAccess access) {
+		if (env != null && env.session() != null) env.session().flush(access);
+	}
+
+	/**
+	 * Refreshes the carried rows in the per-player JSON after a mutation. Older
+	 * container rows are kept; a later /api/sources full scan updates those.
+	 * Runs on the server thread, like the mutation itself.
+	 */
+	private void refreshCache(ItemEnv env, UUID uuid, String name) {
+		if (env == null) return;
+		try {
+			playerItems.mergeCarried(uuid, name, ItemSources.listCarried(env.context()));
+		} catch (RuntimeException e) {
+			ClaimMap.LOGGER.warn("[claimmap] Could not refresh item cache for {}: {}", name, e.getMessage());
+		}
 	}
 
 	private void requireAuctionEnabled() {
@@ -1085,10 +1264,266 @@ public final class WebServer {
 			case FROZEN -> new Json.ApiError(409, "account_frozen", "บัญชีนี้ถูกระงับการค้า");
 			case HAS_BIDS -> new Json.ApiError(409, "has_bids", "มีผู้ประมูลแล้ว ยกเลิกไม่ได้");
 			case FORBIDDEN -> new Json.ApiError(403, "forbidden", "ไม่มีสิทธิ์กับรายการนี้");
+			case ALREADY_LISTED -> new Json.ApiError(409, "already_listed", "เขตนี้มีรายการประมูลเปิดอยู่แล้ว");
+			case ALREADY_OWNER -> new Json.ApiError(409, "already_owner", "คุณเป็นเจ้าของเขตนี้อยู่แล้ว");
 			case BAD_REQUEST -> new Json.ApiError(400, "invalid_amount", "ข้อมูลไม่ถูกต้อง");
 			case DISABLED -> new Json.ApiError(503, "market_disabled", "ระบบตลาดถูกปิดชั่วคราว");
 			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
 		};
+	}
+
+	// ---- player fixed-price market (separate from auctions) -----------------
+
+	private void requirePlayerMarketEnabled() {
+		requireMarketEnabled();
+		if (playerMarket.isDisabled()) {
+			throw new Json.ApiError(503, "market_disabled", "ตลาดผู้เล่นถูกปิดชั่วคราวเพราะไฟล์ข้อมูลเสีย");
+		}
+	}
+
+	/** GET /api/market — active player listings plus the caller's own history. */
+	private void handleMarket(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requirePlayerMarketEnabled();
+		UUID uuid = sessionUuid(a);
+		JsonArray listings = new JsonArray();
+		for (PlayerMarket.Listing l : playerMarket.all()) {
+			if (l.isActive()) listings.add(marketView(l, uuid));
+		}
+		JsonArray mine = new JsonArray();
+		for (PlayerMarket.Listing l : playerMarket.recentForSeller(uuid.toString())) {
+			mine.add(marketView(l, uuid));
+		}
+		JsonObject out = new JsonObject();
+		out.addProperty("currency", config.currencyName);
+		out.add("listings", listings);
+		out.add("mine", mine);
+		Json.send(ex, 200, out);
+	}
+
+	private JsonObject marketView(PlayerMarket.Listing l, UUID viewer) {
+		JsonObject o = new JsonObject();
+		o.addProperty("id", l.id);
+		o.addProperty("sellerName", l.sellerName);
+		o.addProperty("itemId", l.itemId);
+		o.addProperty("count", l.count);
+		o.addProperty("label", l.label);
+		o.addProperty("price", l.price);
+		o.addProperty("createdAt", l.createdAt);
+		o.addProperty("status", l.status);
+		boolean mine = l.seller.equals(viewer.toString());
+		o.addProperty("mine", mine);
+		o.addProperty("canBuy", l.isActive() && !mine);
+		o.addProperty("canCancel", l.isActive() && mine);
+		o.addProperty("boughtByYou", PlayerMarket.SOLD.equals(l.status) && buyerIs(l, viewer));
+		return o;
+	}
+
+	private static boolean buyerIs(PlayerMarket.Listing l, UUID viewer) {
+		return l.buyer != null && l.buyer.equals(viewer.toString());
+	}
+
+	/** POST /api/market {ref,count,price} — fixed-price listing from any source. */
+	private void handleCreateListing(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		requirePlayerMarketEnabled();
+		UUID uuid = sessionUuid(a);
+		JsonObject body = Json.readObject(ex);
+		String ref = Json.str(body, "ref");
+		Long countValue = Json.integer(body, "count");
+		Long priceValue = Json.integer(body, "price");
+		if (ref == null || ref.isBlank()) throw new Json.ApiError(400, "invalid_source", "ต้องเลือกไอเท็มที่จะขาย");
+		if (countValue == null || countValue < 1 || countValue > 2304) {
+			throw new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง");
+		}
+		if (priceValue == null || priceValue < 1 || priceValue > EconomyManager.MAX_MONEY) {
+			throw new Json.ApiError(400, "invalid_amount", "ราคาไม่ถูกต้อง");
+		}
+		var server = ClaimMap.getServer();
+		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
+		String[] result;
+		try {
+			result = GameBridge.call(server, () -> {
+				ItemEnv env = openItemEnv(server, uuid, a.name());
+				if (env == null) return new String[]{"offline_data", null};
+				try {
+					ItemSources.Taken taken = ItemSources.take(env.context(), regions, ref, null, countValue.intValue());
+					if (taken == null) return new String[]{"invalid_source", null};
+					String itemId = ItemCodecs.idOf(taken.stack());
+					if (prices.isBlocked(itemId) || !ItemRegistryAdapter.exists(itemId)) {
+						taken.restore().run();
+						return new String[]{"invalid_item", null};
+					}
+					String json = ItemCodecs.encode(taken.stack(), server.registryAccess());
+					if (json == null) {
+						taken.restore().run();
+						return new String[]{"io_error", null};
+					}
+					PlayerMarket.CreateOutcome created = playerMarket.create(new PlayerMarket.CreatePlan(
+							uuid.toString(), a.name(), json, itemId, taken.stack().getCount(),
+							ItemRegistryAdapter.label(itemId), priceValue));
+					if (created.result() != PlayerMarket.Result.OK) {
+						taken.restore().run();
+						return new String[]{created.result().name(), null};
+					}
+					refreshCache(env, uuid, a.name());
+					return new String[]{null, created.listingId()};
+				} finally {
+					flushItemEnv(env, server.registryAccess());
+				}
+			}, 20000L);
+		} catch (GameBridge.GameUnavailableException e) {
+			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
+		}
+		if (result[0] != null) {
+			switch (result[0]) {
+				case "invalid_source" -> throw new Json.ApiError(409, "invalid_source", "ไอเท็มในช่องนั้นเปลี่ยนแล้ว กรุณารีเฟรช");
+				case "invalid_item" -> throw new Json.ApiError(400, "invalid_item", "ไอเท็มนี้ลงขายไม่ได้");
+				case "offline_data" -> throw new Json.ApiError(404, "not_found", "ไม่พบข้อมูลผู้เล่น (ต้องเคยเข้าเกมอย่างน้อยหนึ่งครั้ง)");
+				default -> throw marketError(PlayerMarket.Result.valueOf(result[0]));
+			}
+		}
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("id", result[1]);
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/market/{id}/{buy|cancel} */
+	private void handleMarketAction(HttpExchange ex, String method, String path) throws IOException {
+		requireMethod(ex, method, "POST");
+		Auth a = requireSession(ex);
+		requirePlayerMarketEnabled();
+		String rest = path.substring("/api/market/".length());
+		int slash = rest.indexOf('/');
+		if (slash <= 0 || slash == rest.length() - 1) {
+			throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+		}
+		String id = rest.substring(0, slash);
+		String action = rest.substring(slash + 1);
+		UUID uuid = sessionUuid(a);
+		switch (action) {
+			case "buy" -> {
+				Json.readObject(ex);
+				PlayerMarket.Result r = playerMarket.buy(uuid, a.name(), id);
+				if (r != PlayerMarket.Result.OK) throw marketError(r);
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("balance", economy.balance(uuid));
+				out.addProperty("mailboxCount", mailbox.count(uuid));
+				Json.send(ex, 200, out);
+			}
+			case "cancel" -> {
+				Json.readObject(ex);
+				PlayerMarket.Result r = playerMarket.cancel(uuid, a.admin(), id);
+				if (r != PlayerMarket.Result.OK) throw marketError(r);
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("mailboxCount", mailbox.count(uuid));
+				Json.send(ex, 200, out);
+			}
+			default -> throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+		}
+	}
+
+	private Json.ApiError marketError(PlayerMarket.Result r) {
+		return switch (r) {
+			case NOT_FOUND -> new Json.ApiError(404, "not_found", "ไม่พบรายการขายนี้");
+			case CLOSED -> new Json.ApiError(409, "listing_closed", "รายการนี้ปิดแล้ว");
+			case OWN_LISTING -> new Json.ApiError(409, "own_listing", "ซื้อรายการของตัวเองไม่ได้");
+			case LIMIT_REACHED -> new Json.ApiError(409, "limit_reached", "ลงขายครบจำนวนสูงสุดแล้ว");
+			case INSUFFICIENT -> new Json.ApiError(409, "insufficient_funds", "ยอดเงินไม่พอ");
+			case FROZEN -> new Json.ApiError(409, "account_frozen", "บัญชีนี้ถูกระงับการค้า");
+			case FORBIDDEN -> new Json.ApiError(403, "forbidden", "ไม่มีสิทธิ์กับรายการนี้");
+			case BAD_REQUEST -> new Json.ApiError(400, "invalid_amount", "ข้อมูลไม่ถูกต้อง");
+			case DISABLED -> new Json.ApiError(503, "market_disabled", "ตลาดผู้เล่นถูกปิดชั่วคราว");
+			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
+		};
+	}
+
+	// ---- consignments (player hands items to the server) --------------------
+
+	/** POST /api/consign {ref,count} — moves items into the server auction pool. */
+	private void handleConsign(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		if (consignments.isDisabled()) {
+			throw new Json.ApiError(503, "market_disabled", "ระบบรับฝากของถูกปิดชั่วคราว");
+		}
+		UUID uuid = sessionUuid(a);
+		JsonObject body = Json.readObject(ex);
+		String ref = Json.str(body, "ref");
+		Long countValue = Json.integer(body, "count");
+		if (ref == null || ref.isBlank()) throw new Json.ApiError(400, "invalid_source", "ต้องเลือกไอเท็มที่จะส่งให้เซิร์ฟเวอร์");
+		if (countValue == null || countValue < 1 || countValue > 2304) {
+			throw new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง");
+		}
+		var server = ClaimMap.getServer();
+		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
+		String[] result;
+		try {
+			result = GameBridge.call(server, () -> {
+				ItemEnv env = openItemEnv(server, uuid, a.name());
+				if (env == null) return new String[]{"offline_data", null};
+				try {
+					ItemSources.Taken taken = ItemSources.take(env.context(), regions, ref, null, countValue.intValue());
+					if (taken == null) return new String[]{"invalid_source", null};
+					String itemId = ItemCodecs.idOf(taken.stack());
+					if (prices.isBlocked(itemId) || !ItemRegistryAdapter.exists(itemId)) {
+						taken.restore().run();
+						return new String[]{"invalid_item", null};
+					}
+					String json = ItemCodecs.encode(taken.stack(), server.registryAccess());
+					if (json == null) {
+						taken.restore().run();
+						return new String[]{"io_error", null};
+					}
+					ConsignmentManager.Entry entry = consignments.add(new ConsignmentManager.Plan(
+							uuid.toString(), a.name(), json, itemId, taken.stack().getCount(),
+							ItemRegistryAdapter.label(itemId)));
+					if (entry == null) {
+						taken.restore().run();
+						return new String[]{"io_error", null};
+					}
+					refreshCache(env, uuid, a.name());
+					return new String[]{null, entry.id};
+				} finally {
+					flushItemEnv(env, server.registryAccess());
+				}
+			}, 20000L);
+		} catch (GameBridge.GameUnavailableException e) {
+			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
+		}
+		if (result[0] != null) {
+			switch (result[0]) {
+				case "invalid_source" -> throw new Json.ApiError(409, "invalid_source", "ไอเท็มในช่องนั้นเปลี่ยนแล้ว กรุณารีเฟรช");
+				case "invalid_item" -> throw new Json.ApiError(400, "invalid_item", "ไอเท็มนี้ส่งให้เซิร์ฟเวอร์ไม่ได้");
+				case "offline_data" -> throw new Json.ApiError(404, "not_found", "ไม่พบข้อมูลผู้เล่น (ต้องเคยเข้าเกมอย่างน้อยหนึ่งครั้ง)");
+				default -> throw new Json.ApiError(500, "internal_error", "บันทึกของฝากไม่สำเร็จ");
+			}
+		}
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("id", result[1]);
+		Json.send(ex, 200, out);
+	}
+
+	/** GET /api/consign — the caller's items waiting for an admin auction. */
+	private void handleConsignList(HttpExchange ex) throws IOException {
+		Auth a = requireSession(ex);
+		UUID uuid = sessionUuid(a);
+		JsonArray arr = new JsonArray();
+		for (ConsignmentManager.Entry e : consignments.pendingFrom(uuid.toString())) {
+			JsonObject o = new JsonObject();
+			o.addProperty("id", e.id);
+			o.addProperty("itemId", e.itemId);
+			o.addProperty("count", e.count);
+			o.addProperty("label", e.label);
+			o.addProperty("t", e.depositedAt);
+			arr.add(o);
+		}
+		JsonObject out = new JsonObject();
+		out.add("entries", arr);
+		Json.send(ex, 200, out);
 	}
 
 	// ---- admin --------------------------------------------------------------
@@ -1207,6 +1642,96 @@ public final class WebServer {
 		Auth a = requireAdmin(ex, "/api/admin/auctions");
 		JsonObject out = new JsonObject();
 		out.add("auctions", admin.auctionsForAdmin(a.name(), clientIp(ex)));
+		out.add("consignments", admin.consignmentsForAdmin(a.name(), clientIp(ex)));
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/admin/auctions {consignmentId,startPrice,buyout,hours} */
+	private void handleAdminCreateAuction(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/auctions");
+		JsonObject body = Json.readObject(ex);
+		String consignmentId = Json.str(body, "consignmentId");
+		Long start = Json.integer(body, "startPrice");
+		Long buyoutValue = Json.integer(body, "buyout");
+		Long hoursValue = Json.integer(body, "hours");
+		if (consignmentId == null || consignmentId.isBlank()) {
+			throw new Json.ApiError(400, "bad_request", "ต้องเลือกของฝากจากผู้เล่น");
+		}
+		if (start == null || start < 1 || start > EconomyManager.MAX_MONEY) {
+			throw new Json.ApiError(400, "invalid_amount", "ราคาเริ่มต้นไม่ถูกต้อง");
+		}
+		Long buyout = buyoutValue == null || buyoutValue <= 0 ? null : buyoutValue;
+		int hours = hoursValue == null ? 0 : (int) Math.max(0, Math.min(24 * 7, hoursValue));
+		AdminService.ServerAuctionOutcome o = admin.createServerAuction(
+				a.name(), clientIp(ex), consignmentId, start, buyout, hours);
+		if (o.result() != AdminService.Result.OK) throw adminError(o.result());
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("id", o.auctionId());
+		Json.send(ex, 200, out);
+	}
+
+	/** GET /api/admin/cell-auctions — active and closed cell auctions only. */
+	private void handleAdminCellAuctions(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/cell-auctions");
+		JsonArray arr = new JsonArray();
+		for (JsonElement el : admin.auctionsForAdmin(a.name(), clientIp(ex))) {
+			JsonObject o = el.getAsJsonObject();
+			if (o.has("kind") && "CELL".equals(o.get("kind").getAsString())) arr.add(o);
+		}
+		JsonObject out = new JsonObject();
+		out.add("auctions", arr);
+		Json.send(ex, 200, out);
+	}
+
+	/** POST /api/admin/cell-auctions {cellId,startPrice,buyout,hours,reason} */
+	private void handleAdminCreateCellAuction(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/cell-auctions");
+		JsonObject body = Json.readObject(ex);
+		String cellId = Json.str(body, "cellId");
+		String reason = Json.str(body, "reason");
+		Long start = Json.integer(body, "startPrice");
+		Long buyoutValue = Json.integer(body, "buyout");
+		Long hoursValue = Json.integer(body, "hours");
+		if (cellId == null || cellId.isBlank()) {
+			throw new Json.ApiError(400, "bad_request", "ต้องระบุเขตที่จะประมูล เช่น 0,0");
+		}
+		if (start == null || start < 1 || start > EconomyManager.MAX_MONEY) {
+			throw new Json.ApiError(400, "invalid_amount", "ราคาเริ่มต้นไม่ถูกต้อง");
+		}
+		if (!AdminService.validReason(reason)) {
+			throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");
+		}
+		Long buyout = buyoutValue == null || buyoutValue <= 0 ? null : buyoutValue;
+		int hours = hoursValue == null ? 0 : (int) Math.max(0, Math.min(24 * 7, hoursValue));
+		AdminService.ServerAuctionOutcome o = admin.createCellAuction(
+				a.name(), clientIp(ex), cellId, start, buyout, hours, reason);
+		if (o.result() != AdminService.Result.OK) throw adminError(o.result());
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("id", o.auctionId());
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminConsignments(HttpExchange ex) throws IOException {
+		Auth a = requireAdmin(ex, "/api/admin/consignments");
+		JsonObject out = new JsonObject();
+		out.add("consignments", admin.consignmentsForAdmin(a.name(), clientIp(ex)));
+		Json.send(ex, 200, out);
+	}
+
+	/** GET /api/admin/cells — every claimed cell with its owner, for transfers. */
+	private void handleAdminCells(HttpExchange ex) throws IOException {
+		requireAdmin(ex, "/api/admin/cells");
+		JsonArray arr = new JsonArray();
+		for (Map.Entry<String, String> e : regions.ownerMap().entrySet()) {
+			JsonObject o = new JsonObject();
+			o.addProperty("id", e.getKey());
+			o.addProperty("owner", e.getValue());
+			arr.add(o);
+		}
+		JsonObject out = new JsonObject();
+		out.add("cells", arr);
 		Json.send(ex, 200, out);
 	}
 
@@ -1240,6 +1765,10 @@ public final class WebServer {
 	/** GET /api/admin/wallet/{name}, POST /api/admin/auctions/{id}/cancel, ... */
 	private void handleAdminDynamic(HttpExchange ex, String method, String path) throws IOException {
 		String rest = path.substring("/api/admin/".length());
+		if (rest.startsWith("worlds/")) {
+			handleAdminWorldAction(ex, method, path, rest.substring("worlds/".length()));
+			return;
+		}
 		if (rest.startsWith("wallet/")) {
 			requireMethod(ex, method, "GET");
 			Auth a = requireAdmin(ex, path);
@@ -1314,12 +1843,90 @@ public final class WebServer {
 		throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
 	}
 
+	private void handleAdminWorlds(HttpExchange ex) throws IOException {
+		requireAdmin(ex, "/api/admin/worlds");
+		Json.send(ex, 200, worldsView(worlds.snapshot()));
+	}
+
+	private void handleAdminWorldsScan(HttpExchange ex) throws IOException {
+		requireAdmin(ex, "/api/admin/worlds/scan");
+		try {
+			Json.send(ex, 200, worldsView(worlds.scanNow()));
+		} catch (Exception e) {
+			throw worldError(e);
+		}
+	}
+
+	private void handleAdminWorldAction(HttpExchange ex, String method, String path, String rest)
+			throws IOException {
+		requireMethod(ex, method, "POST");
+		Auth a = requireAdmin(ex, path);
+		int slash = rest.indexOf('/');
+		if (slash <= 0 || slash == rest.length() - 1) {
+			throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+		}
+		String name = rest.substring(0, slash);
+		String action = rest.substring(slash + 1);
+		try {
+			switch (action) {
+				case "load" -> Json.send(ex, 200, worldView(worlds.load(name)));
+				case "unload" -> Json.send(ex, 200, worldView(worlds.unload(name)));
+				case "tp" -> {
+					JsonObject body = Json.readObject(ex);
+					String player = Json.str(body, "player");
+					if (player == null || player.isBlank()) player = a.name();
+					Json.send(ex, 200, worldView(worlds.teleport(name, player)));
+				}
+				default -> throw new Json.ApiError(404, "not_found", "ไม่พบเส้นทางที่เรียก");
+			}
+		} catch (Json.ApiError e) {
+			throw e;
+		} catch (Exception e) {
+			throw worldError(e);
+		}
+	}
+
+	private JsonObject worldsView(List<WorldManager.WorldInfo> list) {
+		JsonObject out = new JsonObject();
+		out.addProperty("directory", worlds.directory());
+		out.addProperty("inventoryPolicy", worlds.inventoryPolicy());
+		out.addProperty("scanSeconds", worlds.scanSeconds());
+		out.addProperty("idleSeconds", worlds.idleSeconds());
+		JsonArray arr = new JsonArray();
+		for (WorldManager.WorldInfo info : list) arr.add(worldView(info));
+		out.add("worlds", arr);
+		return out;
+	}
+
+	private JsonObject worldView(WorldManager.WorldInfo info) {
+		JsonObject o = new JsonObject();
+		o.addProperty("name", info.name());
+		o.addProperty("folder", info.folder());
+		o.addProperty("state", info.state().name());
+		o.addProperty("loaded", info.loaded());
+		o.addProperty("players", info.players());
+		o.addProperty("present", info.present());
+		o.addProperty("commandAvailable", info.commandAvailable());
+		o.addProperty("commandConflict", info.commandConflict());
+		o.addProperty("error", info.error());
+		return o;
+	}
+
+	private Json.ApiError worldError(Exception e) {
+		String message = e.getMessage() == null ? "จัดการโลกไม่สำเร็จ" : e.getMessage();
+		if (e instanceof IllegalArgumentException) {
+			return new Json.ApiError(404, "world_not_found", message);
+		}
+		return new Json.ApiError(409, "world_error", message);
+	}
+
 	private Json.ApiError adminError(AdminService.Result r) {
 		return switch (r) {
 			case BAD_REQUEST -> new Json.ApiError(400, "bad_request", "ข้อมูลไม่ถูกต้อง");
 			case NO_ACCOUNT -> new Json.ApiError(404, "player_not_found", "ไม่พบบัญชีผู้เล่นนี้");
 			case INSUFFICIENT -> new Json.ApiError(409, "insufficient_funds", "ยอดเงินไม่พอ (ห้ามติดลบ)");
 			case NOT_FOUND -> new Json.ApiError(404, "not_found", "ไม่พบรายการ");
+			case ALREADY_LISTED -> new Json.ApiError(409, "already_listed", "เขตนี้มีรายการประมูลเปิดอยู่แล้ว");
 			case DISABLED -> new Json.ApiError(503, "market_disabled", "ตลาดถูกปิดชั่วคราว");
 			default -> new Json.ApiError(500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
 		};

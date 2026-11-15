@@ -79,6 +79,31 @@ server {
 - `/claimmap here` — เช็กช่องปัจจุบัน
 - `/claimmap reload` — โหลด config + regions (operator)
 
+## หลายโลก (Automatic Multi-World)
+
+วางโลกที่สมบูรณ์ (มี `level.dat`) เป็นโฟลเดอร์ลูกใน `worlds/` ของ server root:
+
+```text
+server/
+├── world/              # โลกหลัก (ม็อดไม่ปิด/ไม่ลบ)
+└── worlds/
+    ├── adventure/
+    ├── survival/
+    └── minigame/
+```
+
+ม็อดจะสแกน `worlds/` ตอนเริ่มเซิร์ฟเวอร์และซ้ำทุก `worldScanSeconds` วินาที (หรือกดสแกนในหน้าแอดมิน) แล้วลงทะเบียนโลกที่ถูกต้อง โลกจะถูกโหลดเมื่อมีคนขอครั้งแรก และปิดเมื่อว่างครบ `worldIdleUnloadSeconds` (0 = ไม่ปิดอัตโนมัติ)
+
+- ผู้เล่นใช้ `/<ชื่อโฟลเดอร์>` เช่น `/adventure`, `/survival`, `/minigame`
+- แอดมินใช้ `/worlds list|scan|load <name>|unload <name>|tp <name> [player]` หรือแท็บ **โลก** ในหน้าแอดมิน
+- ชื่อโฟลเดอร์ต้องเป็น `a-z`, `0-9`, `_`, `-` ยาวไม่เกิน 32 ตัว; ชื่อที่ชนกับคำสั่งอื่นจะไม่ถูกเขียนทับ (ใช้ `/worlds tp` แทน)
+- **กระเป๋าไอเท็มใช้ร่วมกันทุกโลก** (inventory, ender chest, exp, health, effects, advancements) เพราะสลับมิติโดยไม่สร้าง player object ใหม่
+- โลกที่โหลดอยู่จะไม่ถูกปิดถ้ายังมีผู้เล่น; โลกที่โฟลเดอร์หายจะไม่ถูกถอดออกจากหน่วยความจำทันที
+
+ค่าที่ปรับได้ใน `config/claimmap/claimmap.properties`: `worldDirectory` (`worlds`), `worldScanSeconds` (30), `worldIdleUnloadSeconds` (300), `worldPlayerCommands` (`true`)
+
+> ออกแบบจากพฤติกรรมของ [Wroud/mc-worlds](https://github.com/Wroud/mc-worlds) (MIT) และตรวจ API จริงของ Minecraft 26.2/26.3; โค้ดในโปรเจกต์นี้เขียนแยก ไม่ได้คัดลอกไฟล์จากโปรเจกต์อ้างอิง
+
 ## โครงสร้างโค้ด
 
 ```
