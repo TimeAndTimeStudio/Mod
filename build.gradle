@@ -17,8 +17,13 @@ def fabApiVersion = project.hasProperty('fabric_api_version')
 	: (String) fabricApiFor.getOrDefault(mcVersion, '0.165.2+26.3')
 
 base {
-	// e.g. claimmap-mc26.3-1.0.0.jar
-	archivesName = "${project.archives_base_name}-mc${mcVersion}"
+	archivesName = "timesmp"
+}
+
+tasks.withType(Jar).configureEach {
+	if (name == 'jar' || name == 'remapJar') {
+		archiveFileName.set("timesmp.jar")
+	}
 }
 
 repositories {
@@ -30,7 +35,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"claimmap" {
+		"timesmp" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}

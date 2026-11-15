@@ -140,7 +140,7 @@ public final class ClaimCommands {
 									.executes(ctx -> runClaimTransferHere(ctx.getSource(),
 											StringArgumentType.getString(ctx, "player"))))));
 
-			dispatcher.register(Commands.literal("claimmap")
+			var timesmpNode = dispatcher.register(Commands.literal("timesmp")
 					.then(Commands.literal("here").requires(src -> src.getPlayer() != null)
 							.executes(ctx -> runHere(ctx.getSource())))
 					.then(Commands.literal("reload").requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
@@ -153,6 +153,8 @@ public final class ClaimCommands {
 															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cx"),
 															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cz"),
 															StringArgumentType.getString(ctx, "player"))))))));
+
+			dispatcher.register(Commands.literal("claimmap").redirect(timesmpNode));
 
 			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runTpaAccept(ctx.getSource(), null))

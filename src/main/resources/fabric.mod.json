@@ -1,6 +1,6 @@
 {
 	"schemaVersion": 1,
-	"id": "claimmap",
+	"id": "timesmp",
 	"version": "${version}",
 	"name": "Time SMP",
 	"description": "Time SMP - Fabric server-only claim mod + web market (500x500 cells). Supports Minecraft 26.2 and 26.3.",
@@ -18,7 +18,7 @@
 		]
 	},
 	"mixins": [
-		"claimmap.mixins.json"
+		"timesmp.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.20.1",

@@ -16,7 +16,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * the explored chunks and protects claimed cells (see plan.md).
  */
 public class ClaimMap implements ModInitializer {
-	public static final String MOD_ID = "claimmap";
+	public static final String MOD_ID = "timesmp";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 	/** Data backup cadence (PHASES.md 2.7). */
 	private static final long BACKUP_INTERVAL_MS = 60L * 60_000L;

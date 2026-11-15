@@ -76,9 +76,9 @@ public final class AuthGate {
 	static final int MAX_FAILS = 3;
 	static final long TIMEOUT_MS = 60_000L;
 
-	private static final Identifier LOGIN_ACTION = Identifier.fromNamespaceAndPath("claimmap", "auth/login");
-	private static final Identifier REGISTER_ACTION = Identifier.fromNamespaceAndPath("claimmap", "auth/register");
-	private static final Identifier QUIT_ACTION = Identifier.fromNamespaceAndPath("claimmap", "auth/quit");
+	private static final Identifier LOGIN_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/login");
+	private static final Identifier REGISTER_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/register");
+	private static final Identifier QUIT_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/quit");
 
 	/** Play-phase state, used by command/item hooks. */
 	static final class State {

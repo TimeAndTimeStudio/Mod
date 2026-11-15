@@ -32,6 +32,7 @@ class CommandsMixinTest {
 		assertTrue(CommandFilter.isAllowedCommand("ah", null));
 		assertTrue(CommandFilter.isAllowedCommand("claim", null));
 		assertTrue(CommandFilter.isAllowedCommand("claimmap", null));
+		assertTrue(CommandFilter.isAllowedCommand("timesmp", null));
 		assertTrue(CommandFilter.isAllowedCommand("spawn", null));
 		assertTrue(CommandFilter.isAllowedCommand("main", null));
 		assertTrue(CommandFilter.isAllowedCommand("world", null));

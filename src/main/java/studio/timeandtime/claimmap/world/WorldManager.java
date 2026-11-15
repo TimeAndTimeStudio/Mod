@@ -72,8 +72,8 @@ import java.util.concurrent.TimeoutException;
  * server thread. HTTP callers are scheduled onto that thread and wait briefly.
  */
 public final class WorldManager {
-	private static final Logger LOGGER = LoggerFactory.getLogger("claimmap-worlds");
-	private static final String DIMENSION_NAMESPACE = "claimmap";
+	private static final Logger LOGGER = LoggerFactory.getLogger("timesmp-worlds");
+	private static final String DIMENSION_NAMESPACE = "timesmp";
 
 	private final ClaimMapConfig config;
 	private final WorldScanner scanner = new WorldScanner();
@@ -203,23 +203,21 @@ public final class WorldManager {
 			tickCounter = 0;
 			scanLocked();
 		}
-		if (config.worldIdleUnloadSeconds > 0) {
-			int now = s.getTickCount();
-			for (WorldDefinition def : new ArrayList<>(worlds.values())) {
-				ServerLevel level = def.level;
-				if (!def.loaded() || level == null) continue;
-				if (!level.players().isEmpty()) {
-					def.lastEmptyTick = now;
-					continue;
-				}
-				if (def.lastEmptyTick == 0L) {
-					def.lastEmptyTick = now;
-				} else if (now - def.lastEmptyTick >= config.worldIdleUnloadSeconds * 20) {
-					try {
-						unloadLocked(def);
-					} catch (Exception e) {
-						LOGGER.warn("[worlds] Idle unload of {} failed: {}", def.name(), e.getMessage());
-					}
+		int now = s.getTickCount();
+		for (WorldDefinition def : new ArrayList<>(worlds.values())) {
+			ServerLevel level = def.level;
+			if (!def.loaded() || level == null) continue;
+			if (!level.players().isEmpty()) {
+				def.lastEmptyTick = 0L;
+				continue;
+			}
+			if (def.lastEmptyTick == 0L) {
+				def.lastEmptyTick = now;
+			} else if (now - def.lastEmptyTick >= Math.max(20, config.worldIdleUnloadSeconds * 20)) {
+				try {
+					unloadLocked(def);
+				} catch (Exception e) {
+					LOGGER.warn("[worlds] Auto unload of empty world {} failed: {}", def.name(), e.getMessage());
 				}
 			}
 		}

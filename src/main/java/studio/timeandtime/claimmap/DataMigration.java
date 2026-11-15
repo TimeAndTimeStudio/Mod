@@ -23,6 +23,7 @@ public final class DataMigration {
 			DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(ZoneId.systemDefault());
 
 	private static final List<String> FILES = List.of(
+			"timesmp.properties",
 			"claimmap.properties",
 			"accounts.json",
 			"sessions.json",

@@ -1416,7 +1416,7 @@ async function auctionList(panel, mineOnly) {
   try {
     const data = await api('GET', '/api/auctions');
     clear(box);
-    const list = mineOnly ? (data.mine || []) : (data.auctions || []);
+    const list = (mineOnly ? (data.mine || []) : (data.auctions || [])).filter(a => a.kind !== 'CELL');
     if (!list.length) { box.append(emptyState(mineOnly ? 'ยังไม่มีประวัติ' : 'ยังไม่มีรายการประมูล', 'แอดมินเป็นผู้เปิดรายการจากของที่ผู้เล่นฝากไว้')); return; }
     const rows = el('div', { class: 'rows' });
     const live = [];
@@ -1613,7 +1613,7 @@ function pageAbout(view) {
   page.append(pageHead('about', 'ช่วยเหลือ', 'คำสั่งและกติกาหลัก'));
   const commands = [
     ['/claim', 'จองช่องที่ยืนอยู่ เปิดเมนูเขต'],
-    ['/claimmap', 'เปิดลิงก์เว็บและสถานะเขต'],
+    ['/timesmp', 'เปิดลิงก์เว็บและสถานะเขต (หรือ /claimmap)'],
     ['/ah', 'เปิดรายการประมูล'],
     ['/pay <ชื่อ> <จำนวน>', 'โอนเงินให้ผู้เล่น'],
     ['/mail', 'เปิดกล่องของ'],
@@ -1633,7 +1633,7 @@ async function pageAdmin(view) {
   page.append(pageHead('admin', 'แอดมิน', 'จัดการเศรษฐกิจ เขต และรายการประมูล'));
   view.append(page);
   const tabs = [
-    ['overview', 'ภาพรวม'], ['money', 'เงิน'], ['prices', 'ราคา'], ['sales', 'ประวัติขาย'], ['auctions', 'ประมูล'], ['cellAuctions', 'ประมูลเขต'], ['consign', 'ของฝาก'], ['cells', 'เขต'], ['accounts', 'บัญชี'], ['worlds', 'โลก'], ['audit', 'บันทึก'],
+    ['overview', 'ภาพรวม'], ['money', 'เงิน'], ['prices', 'ราคา'], ['sales', 'ประวัติขาย'], ['auctions', 'ประมูล'], ['consign', 'ของฝาก'], ['cells', 'เขต'], ['accounts', 'บัญชี'], ['worlds', 'โลก'], ['audit', 'บันทึก'],
   ];
   tabbed(page, tabs.map(([id, label]) => ({ id, label })), state.adminTab, (panel, id) => {
     state.adminTab = id;
@@ -1649,7 +1649,6 @@ function adminPanel(panel, id) {
   else if (id === 'prices') adminPrices(box);
   else if (id === 'sales') adminSales(box);
   else if (id === 'auctions') adminAuctions(box);
-  else if (id === 'cellAuctions') adminCellAuctions(box);
   else if (id === 'consign') adminConsign(box);
   else if (id === 'cells') adminCells(box);
   else if (id === 'accounts') adminAccounts(box);
@@ -2032,61 +2031,6 @@ async function adminAuctions(box) {
     }
     box.append(rows);
   } catch (error) { clear(box); box.append(errorState(error)); }
-}
-
-async function adminCellAuctions(box) {
-  const cellId = el('input', { class: 'input', type: 'text', placeholder: 'เช่น 0,0', maxLength: '32' });
-  const start = el('input', { class: 'input', type: 'text', value: '0', inputmode: 'numeric' });
-  const buyout = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ (เช่น 100000)' });
-  const hours = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric' });
-  const reason = el('input', { class: 'input', type: 'text', value: 'เปิดประมูลเขตที่ดินเริ่มต้น 0', maxLength: '200' });
-  const error = el('p', { class: 'err', role: 'alert' });
-  const form = el('form', { class: 'stack', novalidate: true },
-    el('p', { class: 'hint' }, 'เปิดประมูลกรรมสิทธิ์เขต 1 ช่อง (เริ่มต้นที่ 0 ได้) · ถ้าเขตมีเจ้าของอยู่ ผู้ชนะจะได้กรรมสิทธิ์แทน'),
-    el('div', { class: 'grid2' }, el('div', { class: 'field' }, el('label', {}, 'เขต'), cellId), el('div', { class: 'field' }, el('label', {}, 'เหตุผล'), reason)),
-    el('div', { class: 'grid2' }, el('div', { class: 'field' }, el('label', {}, 'ราคาเริ่มต้น (ตั้งแต่ 0)'), start), el('div', { class: 'field' }, el('label', {}, 'ซื้อทันที (ไม่บังคับ)'), buyout)),
-    el('div', { class: 'field' }, el('label', {}, 'ชั่วโมง'), hours), error,
-    el('button', { class: 'btn primary', type: 'submit' }, 'เปิดประมูลเขต'));
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault(); error.textContent = '';
-    if (!cellId.value.trim()) { error.textContent = 'ระบุเขต เช่น 0,0'; return; }
-    if (!/^-?\d+,-?\d+$/.test(cellId.value.trim())) { error.textContent = 'รูปแบบเขตต้องเป็น cx,cz'; return; }
-    if (num(start.value) < 0) { error.textContent = 'ราคาเริ่มต้นต้องไม่ติดลบ (ตั้งแต่ 0 ขึ้นไป)'; return; }
-    if (reason.value.trim().length < 3) { error.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
-    try {
-      await api('POST', '/api/admin/cell-auctions', {
-        cellId: cellId.value.trim(), startPrice: num(start.value),
-        buyout: buyout.value === '' ? null : num(buyout.value), hours: num(hours.value), reason: reason.value.trim(),
-      });
-      toast('เปิดประมูลเขตแล้ว'); cellId.value = ''; reason.value = ''; render();
-    } catch (err) { error.textContent = errText(err); }
-  });
-  box.append(form);
-
-  const listBox = el('div', { style: 'margin-top:32px' });
-  box.append(listBox);
-  loading(listBox);
-  try {
-    const data = await api('GET', '/api/admin/cell-auctions');
-    clear(listBox);
-    const list = data.auctions || [];
-    if (!list.length) { listBox.append(emptyState('ยังไม่มีประมูลเขต', 'เปิดรายการแรกจากฟอร์มด้านบน')); return; }
-    const rows = el('div', { class: 'rows' });
-    for (const a of list) {
-      rows.append(el('div', { class: 'item' },
-        el('div', { class: 'item-main' },
-          el('span', { class: 'item-title' }, 'เขต ' + txt(a.cellId, '-')),
-          el('span', { class: 'item-meta' }, `${txt(a.status, 'ไม่ทราบสถานะ')} · เจ้าของเดิม ${txt(a.cellOwnerName, 'ที่ว่าง')} · เริ่ม ${money(a.startPrice)} · สูงสุด ${money(a.highBid)}${a.highBidderName ? ' โดย ' + a.highBidderName : ''} · ${a.status === 'ACTIVE' ? left(a.endsAt) : clock(a.endsAt)}`)),
-        el('div', { class: 'item-side' },
-          a.status === 'ACTIVE' ? el('button', { class: 'btn danger', type: 'button', onclick: async () => {
-            const why = await reasonDialog('ยกเลิกประมูลเขต ' + a.cellId);
-            if (!why) return;
-            try { await api('POST', `/api/admin/auctions/${a.id}/cancel`, { reason: why }); toast('ยกเลิกแล้ว'); render(); }
-            catch (err) { toastError(err); }
-          } }, 'ยกเลิก') : null)));
-    }
-    listBox.append(rows);
-  } catch (err) { clear(listBox); listBox.append(errorState(err)); }
 }
 
 async function adminConsign(box) {

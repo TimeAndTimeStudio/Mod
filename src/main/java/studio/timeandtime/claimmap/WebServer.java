@@ -401,7 +401,11 @@ public final class WebServer {
 		}
 		String rel = path.substring(1);
 		byte[] data;
-		try (InputStream in = WebServer.class.getResourceAsStream("/claimmap-web/" + rel)) {
+		InputStream resourceStream = WebServer.class.getResourceAsStream("/timesmp-web/" + rel);
+		if (resourceStream == null) {
+			resourceStream = WebServer.class.getResourceAsStream("/claimmap-web/" + rel);
+		}
+		try (InputStream in = resourceStream) {
 			if (in == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
 			data = in.readAllBytes();
 		} catch (IOException e) {
@@ -438,7 +442,11 @@ public final class WebServer {
 	private void sendWeb(HttpExchange ex) throws IOException {
 		if (webPage == null) {
 			byte[] raw;
-			try (InputStream in = WebServer.class.getResourceAsStream("/claimmap-web/index.html")) {
+			InputStream htmlStream = WebServer.class.getResourceAsStream("/timesmp-web/index.html");
+			if (htmlStream == null) {
+				htmlStream = WebServer.class.getResourceAsStream("/claimmap-web/index.html");
+			}
+			try (InputStream in = htmlStream) {
 				if (in == null) {
 					throw new Json.ApiError(404, "not_found", "ไม่พบหน้าเว็บในไฟล์ม็อด");
 				}

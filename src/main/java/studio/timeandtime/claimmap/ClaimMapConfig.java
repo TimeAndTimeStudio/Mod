@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +22,7 @@ import java.util.Properties;
  * responsible for network security (plain HTTP by design, see PHASES.md B).
  */
 public final class ClaimMapConfig {
-	public static final String FILE_NAME = "config/claimmap/claimmap.properties";
+	public static final String FILE_NAME = "config/timesmp/timesmp.properties";
 
 	private final Path file;
 	private final Properties props = new Properties();
@@ -82,12 +83,41 @@ public final class ClaimMapConfig {
 	/** How often the worlds folder is rescanned while the server runs. */
 	public int worldScanSeconds = 30;
 	/** Idle time before an empty loaded world is unloaded; 0 keeps it loaded. */
-	public int worldIdleUnloadSeconds = 300;
+	public int worldIdleUnloadSeconds = 0;
 	/** Expose one short command per discovered world, e.g. /adventure. */
 	public boolean worldPlayerCommands = true;
 
 	public ClaimMapConfig() {
-		this(FabricLoader.getInstance().getConfigDir().resolve("claimmap/claimmap.properties"));
+		this(resolveConfigPath());
+	}
+
+	private static Path resolveConfigPath() {
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		Path newPath = configDir.resolve("timesmp/timesmp.properties");
+		Path legacyPath = configDir.resolve("claimmap/claimmap.properties");
+		if (!Files.exists(newPath) && Files.exists(legacyPath)) {
+			try {
+				Path legacyDir = configDir.resolve("claimmap");
+				Path newDir = configDir.resolve("timesmp");
+				if (!Files.exists(newDir)) {
+					Files.createDirectories(newDir);
+					try (var stream = Files.list(legacyDir)) {
+						for (Path f : stream.toList()) {
+							if (Files.isRegularFile(f)) {
+								Path dest = f.getFileName().toString().equals("claimmap.properties")
+										? newDir.resolve("timesmp.properties")
+										: newDir.resolve(f.getFileName());
+								Files.copy(f, dest, StandardCopyOption.REPLACE_EXISTING);
+							}
+						}
+					}
+				}
+				return newPath;
+			} catch (Exception ignored) {
+				return legacyPath;
+			}
+		}
+		return newPath;
 	}
 
 	/** Test/seeded constructor: does not touch FabricLoader. */
