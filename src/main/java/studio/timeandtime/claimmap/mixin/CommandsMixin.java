@@ -56,7 +56,7 @@ public abstract class CommandsMixin {
 	);
 
 	@Unique
-	private static boolean isAllowedCommand(String name, ClaimMap mod) {
+	static boolean isAllowedCommand(String name, ClaimMap mod) {
 		if (name == null || name.isBlank()) return false;
 		String lower = name.toLowerCase(Locale.ROOT);
 		if (ALLOWED_WHISPER_COMMANDS.contains(lower) || ALLOWED_MOD_COMMANDS.contains(lower)) {
