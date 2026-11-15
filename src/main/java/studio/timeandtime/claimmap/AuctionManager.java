@@ -215,7 +215,7 @@ public final class AuctionManager {
 		if (startPrice < 1 || startPrice > EconomyManager.MAX_MONEY) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
-		if (buyout != null && (buyout <= startPrice || buyout > EconomyManager.MAX_MONEY)) {
+		if (buyout != null && (buyout < startPrice || buyout > EconomyManager.MAX_MONEY)) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
 		int duration = hours <= 0 ? cfg.auctionDefaultHours : hours;
@@ -250,7 +250,7 @@ public final class AuctionManager {
 		if (coords == null || startPrice < 1 || startPrice > EconomyManager.MAX_MONEY) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
-		if (buyout != null && (buyout <= startPrice || buyout > EconomyManager.MAX_MONEY)) {
+		if (buyout != null && (buyout < startPrice || buyout > EconomyManager.MAX_MONEY)) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
 		RegionManager rm = regions;

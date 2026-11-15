@@ -152,6 +152,16 @@ class AuctionManagerTest {
 	}
 
 	@Test
+	void cellAuctionAllowsStartPriceEqualToBuyout() {
+		AuctionManager.CreateOutcome out = auctions.createCellAuction("9,9", 100_000L, 100_000L, 24);
+		assertEquals(AuctionManager.Result.OK, out.result());
+		AuctionManager.Auction a = auctions.find(out.auctionId());
+		assertNotNull(a);
+		assertEquals(100_000L, a.startPrice);
+		assertEquals(100_000L, a.buyout);
+	}
+
+	@Test
 	void expireWithoutBidsReturnsTheItemToTheSeller() {
 		String id = list(alice, 50, null, 1);
 		clock += 2L * 3_600_000L;
