@@ -155,6 +155,7 @@ public final class ClaimCommands {
 															StringArgumentType.getString(ctx, "player"))))))));
 
 			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaAccept(ctx.getSource(), null))
 					.then(Commands.literal("accept")
 							.executes(ctx -> runTpaAccept(ctx.getSource(), null))
 							.then(Commands.argument("player", StringArgumentType.word())
@@ -168,7 +169,7 @@ public final class ClaimCommands {
 					.then(Commands.literal("cancel")
 							.executes(ctx -> runTpaCancel(ctx.getSource())))
 					.then(Commands.argument("player", StringArgumentType.word())
-							.executes(ctx -> runTpaRequest(ctx.getSource(),
+							.executes(ctx -> runTpaRequestOrAccept(ctx.getSource(),
 									StringArgumentType.getString(ctx, "player")))));
 
 			dispatcher.register(Commands.literal("tpaccept").requires(src -> src.getPlayer() != null)
@@ -187,6 +188,10 @@ public final class ClaimCommands {
 					.executes(ctx -> runTpaCancel(ctx.getSource())));
 
 			dispatcher.register(Commands.literal("tp").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> {
+						ctx.getSource().sendFailure(Component.literal("§eการใช้งาน: /tp <ชื่อผู้เล่น> (วาร์ปหรือส่งคำขอวาร์ป)"));
+						return 0;
+					})
 					.then(Commands.argument("player", StringArgumentType.word())
 							.executes(ctx -> runTp(ctx.getSource(),
 									StringArgumentType.getString(ctx, "player")))));
@@ -736,6 +741,15 @@ public final class ClaimCommands {
 			teleports.request(sender, target);
 			return 1;
 		}
+	}
+
+	private int runTpaRequestOrAccept(CommandSourceStack src, String targetName) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null || src.getServer() == null) return 0;
+		if (teleports.hasPending(player.getUUID())) {
+			return runTpaAccept(src, targetName);
+		}
+		return runTpaRequest(src, targetName);
 	}
 
 	private int runTpaRequest(CommandSourceStack src, String targetName) {

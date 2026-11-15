@@ -36,6 +36,10 @@ public class ClaimMap implements ModInitializer {
 		return authGate;
 	}
 
+	public ClaimMapConfig config() {
+		return config;
+	}
+
 	public studio.timeandtime.claimmap.world.WorldManager worldManager() {
 		return worldManager;
 	}
