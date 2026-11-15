@@ -473,13 +473,24 @@ async function fetchNames() {
 /* ---------- router ---------- */
 const PAGES = { home: pageHome, map: pageMap, buy: pageBuy, sell: pageSell, trends: pageTrends, auction: pageAuction, wallet: pageWallet, mailbox: pageMailbox, about: pageAbout, admin: pageAdmin, login: pageLogin };
 
+function requireAuth(view) {
+  if (!state.me) {
+    clear(view);
+    view.append(el('div', { class: 'page' },
+      pageHead('login', 'ต้องเข้าสู่ระบบ', 'กรุณาเข้าสู่ระบบก่อนใช้งานส่วนนี้'),
+      el('a', { class: 'btn primary', href: '#login' }, 'เข้าสู่ระบบ')));
+    return true;
+  }
+  return false;
+}
+
 function render() {
   closeOpenDD(false);
   closeMenu();
   if (pageTimer) { clearInterval(pageTimer); pageTimer = null; }
   if (mapCleanup) { mapCleanup(); mapCleanup = null; }
   const route = location.hash.replace(/^#\/?/, '') || 'home';
-  if (route !== 'login' && route !== 'home' && !state.me) {
+  if (route !== 'login' && route !== 'home' && route !== 'trends' && route !== 'about' && !state.me) {
     go('login');
     return;
   }
@@ -1142,7 +1153,6 @@ async function sellShop(panel) {
 
 /* ---------- trends ---------- */
 async function pageTrends(view) {
-  if (requireAuth(view)) return;
   const page = el('div', { class: 'page' });
   page.append(pageHead('trends', 'กราฟราคาตลาด', 'สถิติการเคลื่อนไหวของราคาและระดับความต้องการของตลาดเซิร์ฟเวอร์'));
   view.append(page);

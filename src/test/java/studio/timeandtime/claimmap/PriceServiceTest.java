@@ -168,4 +168,27 @@ class PriceServiceTest {
 		assertTrue(prices.base("does_not_exist").isEmpty());
 		assertTrue(prices.buyPrice("does_not_exist").isEmpty());
 	}
+
+	@Test
+	void testDynamicPriceRecovery() {
+		prices.applyFetched(Map.of("minecraft:diamond", 100L));
+		assertEquals(1.0, prices.multiplier("minecraft:diamond"));
+
+		// Sell items -> price multiplier drops
+		prices.recordSale("minecraft:diamond", 100);
+		double dipped = prices.multiplier("minecraft:diamond");
+		assertTrue(dipped < 1.0, "Multiplier should drop after sale");
+		assertEquals(100, prices.getSoldUnits("minecraft:diamond"));
+
+		// Advance clock by 10 minutes -> price recovers partially
+		clock[0] += 10 * 60_000L;
+		double recovered1 = prices.multiplier("minecraft:diamond");
+		assertTrue(recovered1 > dipped, "Multiplier should increase as time passes");
+		assertTrue(prices.getSoldUnits("minecraft:diamond") < 100);
+
+		// Advance clock by 2 hours -> price fully recovers to 1.0
+		clock[0] += 120 * 60_000L;
+		assertEquals(1.0, prices.multiplier("minecraft:diamond"), "Should fully recover to 1.0");
+		assertEquals(0, prices.getSoldUnits("minecraft:diamond"));
+	}
 }

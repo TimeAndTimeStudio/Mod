@@ -85,6 +85,7 @@ public final class PriceService {
 	private final HttpClient http;
 
 	private final Map<String, Integer> soldUnits = new ConcurrentHashMap<>();
+	private final Map<String, Long> lastDecayTimes = new ConcurrentHashMap<>();
 	private final Map<String, List<PriceHistoryPoint>> history = new ConcurrentHashMap<>();
 
 	private volatile Map<String, Long> webPrices = Map.of();
@@ -96,6 +97,7 @@ public final class PriceService {
 	private volatile long lastWarnMs;
 	private volatile boolean loggedMissingConfig;
 	private ScheduledFuture<?> task;
+	private ScheduledFuture<?> recoveryTask;
 	private final Set<String> configBlocked = new HashSet<>();
 	private volatile Set<String> fileUnblocked = Set.of();
 
@@ -193,6 +195,14 @@ public final class PriceService {
 					}
 				}
 			}
+			if (root.has("lastDecay") && root.get("lastDecay").isJsonObject()) {
+				JsonObject decObj = root.getAsJsonObject("lastDecay");
+				for (Map.Entry<String, JsonElement> e : decObj.entrySet()) {
+					if (e.getValue().isJsonPrimitive()) {
+						lastDecayTimes.put(normalize(e.getKey()), e.getValue().getAsLong());
+					}
+				}
+			}
 			if (root.has("history") && root.get("history").isJsonObject()) {
 				JsonObject histObj = root.getAsJsonObject("history");
 				for (Map.Entry<String, JsonElement> e : histObj.entrySet()) {
@@ -223,6 +233,11 @@ public final class PriceService {
 			soldObj.addProperty(e.getKey(), e.getValue());
 		}
 		root.add("sold", soldObj);
+		JsonObject decObj = new JsonObject();
+		for (Map.Entry<String, Long> e : lastDecayTimes.entrySet()) {
+			decObj.addProperty(e.getKey(), e.getValue());
+		}
+		root.add("lastDecay", decObj);
 		JsonObject histObj = new JsonObject();
 		for (Map.Entry<String, List<PriceHistoryPoint>> e : history.entrySet()) {
 			JsonArray arr = new JsonArray();
@@ -250,10 +265,18 @@ public final class PriceService {
 	// ---- refresh ------------------------------------------------------------
 
 	public void start(ScheduledExecutorService ex) {
+		recoveryTask = ex.scheduleWithFixedDelay(() -> {
+			try {
+				applyAllDecay(now.getAsLong());
+			} catch (Throwable t) {
+				ClaimMap.LOGGER.warn("[timesmp] Price recovery tick failed: {}", t.toString());
+			}
+		}, 30, 30, TimeUnit.SECONDS);
+
 		if (cfg.pricesUrl.isBlank() || cfg.pricesAccessKey.isBlank()) {
 			if (!loggedMissingConfig) {
 				loggedMissingConfig = true;
-				ClaimMap.LOGGER.info("[claimmap] pricesUrl/pricesAccessKey not set — using prices-cache.json only");
+				ClaimMap.LOGGER.info("[timesmp] pricesUrl/pricesAccessKey not set — using prices-cache.json only");
 			}
 			return;
 		}
@@ -264,6 +287,8 @@ public final class PriceService {
 	public void stop() {
 		ScheduledFuture<?> t = task;
 		if (t != null) t.cancel(false);
+		ScheduledFuture<?> r = recoveryTask;
+		if (r != null) r.cancel(false);
 	}
 
 	private void refreshQuiet() {
@@ -378,13 +403,52 @@ public final class PriceService {
 
 	// ---- queries ------------------------------------------------------------
 
+	public synchronized boolean applyDecay(String id, long nowMs) {
+		int current = soldUnits.getOrDefault(id, 0);
+		if (current <= 0) return false;
+		long last = lastDecayTimes.getOrDefault(id, nowMs);
+		if (nowMs <= last) return false;
+		long elapsedMinutes = (nowMs - last) / 60_000L;
+		if (elapsedMinutes < 1) return false;
+
+		// Decay rate: ~2% per minute of inactive supply, at least 1 unit per minute
+		int decay = (int) Math.max(1, Math.ceil(current * 0.02 * elapsedMinutes));
+		int next = Math.max(0, current - decay);
+		soldUnits.put(id, next);
+		lastDecayTimes.put(id, nowMs);
+
+		// Record price recovery in history point so chart displays the rebound
+		List<PriceHistoryPoint> list = history.computeIfAbsent(id, k -> new CopyOnWriteArrayList<>());
+		long curSell = sellPrice(id).orElse(1L);
+		list.add(new PriceHistoryPoint(nowMs, curSell, 0));
+		while (list.size() > 50) {
+			list.remove(0);
+		}
+		return true;
+	}
+
+	public synchronized void applyAllDecay(long nowMs) {
+		boolean changed = false;
+		for (String id : soldUnits.keySet()) {
+			if (applyDecay(id, nowMs)) {
+				changed = true;
+			}
+		}
+		if (changed) {
+			writeDynamicsFile();
+		}
+	}
+
 	public void recordSale(String rawItem, int qty) {
 		String id = normalize(rawItem);
 		if (id.isEmpty() || qty <= 0) return;
+		long currentNow = now.getAsLong();
+		applyDecay(id, currentNow);
 		soldUnits.merge(id, qty, Integer::sum);
+		lastDecayTimes.put(id, currentNow);
 		long curSell = sellPrice(id).orElse(1L);
 		List<PriceHistoryPoint> list = history.computeIfAbsent(id, k -> new CopyOnWriteArrayList<>());
-		list.add(new PriceHistoryPoint(now.getAsLong(), curSell, qty));
+		list.add(new PriceHistoryPoint(currentNow, curSell, qty));
 		while (list.size() > 50) {
 			list.remove(0);
 		}
@@ -394,12 +458,16 @@ public final class PriceService {
 	public void recordBuy(String rawItem, int qty) {
 		String id = normalize(rawItem);
 		if (id.isEmpty() || qty <= 0) return;
+		long currentNow = now.getAsLong();
+		applyDecay(id, currentNow);
 		soldUnits.compute(id, (k, v) -> v == null ? 0 : Math.max(0, v - qty));
+		lastDecayTimes.put(id, currentNow);
 		writeDynamicsFile();
 	}
 
 	public double multiplier(String rawItem) {
 		String id = normalize(rawItem);
+		applyDecay(id, now.getAsLong());
 		int sold = soldUnits.getOrDefault(id, 0);
 		if (sold <= 0) return 1.0;
 		// Smooth saturation curve: e.g. at 100 sold ~87%, at 500 sold ~57%, at 1000 sold ~40%, minimum floor 0.20 (20%)
@@ -407,6 +475,8 @@ public final class PriceService {
 	}
 
 	public int getSoldUnits(String rawItem) {
+		String id = normalize(rawItem);
+		applyDecay(id, now.getAsLong());
 		return soldUnits.getOrDefault(normalize(rawItem), 0);
 	}
 
