@@ -288,7 +288,7 @@ public final class AuthGate {
 		Input password = new Input("password", new TextInput(200,
 				Component.literal("รหัสผ่าน"), true, "", 64, Optional.empty()));
 		ActionButton enter = button("เข้าสู่เกม", LOGIN_ACTION);
-		return dialog("เข้าสู่ระบบ Claim Map", error, List.of(password), enter);
+		return dialog("เข้าสู่ระบบ Time SMP", error, List.of(password), enter);
 	}
 
 	static Dialog registerDialog(String error) {
@@ -303,7 +303,7 @@ public final class AuthGate {
 	private static Dialog dialog(String title, String error, List<Input> inputs, ActionButton enter) {
 		List<DialogBody> body = error == null
 				? List.<DialogBody>of(new PlainMessage(Component.literal(
-						"รหัสผ่านใช้ร่วมกับเว็บ Claim Map"), 260))
+						"รหัสผ่านใช้ร่วมกับเว็บ Time SMP"), 260))
 				: List.<DialogBody>of(new PlainMessage(Component.literal(error), 260));
 		CommonDialogData common = new CommonDialogData(
 				Component.literal(title),
@@ -492,7 +492,7 @@ public final class AuthGate {
 		try {
 			state.listener.disconnect(Component.literal(reason));
 		} catch (RuntimeException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not disconnect {} during configuration", state.name, e);
+			ClaimMap.LOGGER.warn("[timesmp] Could not disconnect {} during configuration", state.name, e);
 		}
 	}
 

@@ -37,7 +37,7 @@ public final class ItemRegistryAdapter {
 		}
 		labels = Map.copyOf(names);
 		ids = names.keySet();
-		ClaimMap.LOGGER.info("[claimmap] Item registry snapshot: {} items", ids.size());
+		ClaimMap.LOGGER.info("[timesmp] Item registry snapshot: {} items", ids.size());
 	}
 
 	/** True when the id exists in the running game version. */

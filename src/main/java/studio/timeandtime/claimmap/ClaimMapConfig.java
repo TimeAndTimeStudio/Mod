@@ -15,7 +15,7 @@ import java.util.Locale;
 import java.util.Properties;
 
 /**
- * File based configuration stored in {@code config/claimmap/claimmap.properties}.
+ * File based configuration stored in {@code config/timesmp/timesmp.properties}.
  *
  * <p>The HTTP API is self-hosted by the mod. {@code bindAddress} defaults to
  * {@code 0.0.0.0} so other machines on the LAN can reach it; the owner is
@@ -132,7 +132,7 @@ public final class ClaimMapConfig {
 			try (InputStream in = Files.newInputStream(file)) {
 				props.load(in);
 			} catch (IOException e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not read config", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not read config", e);
 			}
 		}
 		port = getInt("port", port, 1, 65535);
@@ -178,7 +178,7 @@ public final class ClaimMapConfig {
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
 		if (!PriceMath.validPercents(sell, buy)) {
-			ClaimMap.LOGGER.warn("[claimmap] sellPercent={} buyPercent={} is invalid (need 1<=sell<=100, buy>=100, sell<buy); "
+			ClaimMap.LOGGER.warn("[timesmp] sellPercent={} buyPercent={} is invalid (need 1<=sell<=100, buy>=100, sell<buy); "
 					+ "falling back to 70/130", sell, buy);
 			sell = 70;
 			buy = 130;
@@ -191,7 +191,7 @@ public final class ClaimMapConfig {
 			token = randomHex(32);
 			props.setProperty("token", token);
 			changed = true;
-			ClaimMap.LOGGER.info("[claimmap] Generated new master token. Keep it secret! (script-only, never embedded in the web page)");
+			ClaimMap.LOGGER.info("[timesmp] Generated new master token. Keep it secret! (script-only, never embedded in the web page)");
 		}
 		// Surface the new keys in the owner's file so they can edit them.
 		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance",
@@ -237,8 +237,8 @@ public final class ClaimMapConfig {
 		if (changed) save();
 
 		if ("127.0.0.1".equals(bindAddress) || "localhost".equalsIgnoreCase(bindAddress)) {
-			ClaimMap.LOGGER.info("[claimmap] bindAddress={} — other machines will NOT be able to open the web page. "
-					+ "Change bindAddress to 0.0.0.0 in config/claimmap/claimmap.properties to allow LAN access.", bindAddress);
+			ClaimMap.LOGGER.info("[timesmp] bindAddress={} — other machines will NOT be able to open the web page. "
+					+ "Change bindAddress to 0.0.0.0 in config/timesmp/timesmp.properties to allow LAN access.", bindAddress);
 		}
 	}
 
@@ -305,10 +305,10 @@ public final class ClaimMapConfig {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);
 			try (OutputStream out = Files.newOutputStream(file)) {
-				props.store(out, "Claim Map configuration. Restart the server after editing.");
+				props.store(out, "Time SMP configuration. Restart the server after editing.");
 			}
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not write config", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not write config", e);
 		}
 	}
 
@@ -352,7 +352,7 @@ public final class ClaimMapConfig {
 		try {
 			Files.createDirectories(dir);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not create tiles dir", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not create tiles dir", e);
 		}
 		return dir;
 	}
@@ -369,7 +369,7 @@ public final class ClaimMapConfig {
 		return dir().resolve("accounts.json");
 	}
 
-	/** Directory that holds every data file ({@code config/claimmap}). */
+	/** Directory that holds every data file ({@code config/timesmp}). */
 	public Path dataDir() {
 		return dir();
 	}

@@ -108,9 +108,9 @@ public final class WebServer {
 			httpExecutor = Executors.newFixedThreadPool(8);
 			server.setExecutor(httpExecutor);
 			server.start();
-			ClaimMap.LOGGER.info("[claimmap] HTTP API listening on {}:{}", config.bindAddress, config.port);
+			ClaimMap.LOGGER.info("[timesmp] HTTP API listening on {}:{}", config.bindAddress, config.port);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not start HTTP API", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not start HTTP API", e);
 		}
 	}
 
@@ -136,7 +136,7 @@ public final class WebServer {
 		} catch (Json.ApiError e) {
 			Json.sendError(ex, e);
 		} catch (Exception e) {
-			ClaimMap.LOGGER.error("[claimmap] API error {} {}", method, path, e);
+			ClaimMap.LOGGER.error("[timesmp] API error {} {}", method, path, e);
 			try {
 				Json.sendError(ex, 500, "internal_error", "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์");
 			} catch (IOException ignored) {
@@ -1293,7 +1293,7 @@ public final class WebServer {
 		try {
 			playerItems.mergeCarried(uuid, name, ItemSources.listCarried(env.context()));
 		} catch (RuntimeException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not refresh item cache for {}: {}", name, e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not refresh item cache for {}: {}", name, e.getMessage());
 		}
 	}
 

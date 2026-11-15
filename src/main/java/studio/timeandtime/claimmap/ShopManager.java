@@ -410,7 +410,7 @@ public final class ShopManager {
 				var decoded = ItemCodecs.decode(entry.itemJson(), access);
 				if (decoded.isEmpty()) {
 					skipped++;
-					ClaimMap.LOGGER.warn("[claimmap] Mailbox entry {} for {} cannot be decoded; leaving it in place",
+					ClaimMap.LOGGER.warn("[timesmp] Mailbox entry {} for {} cannot be decoded; leaving it in place",
 							entry.id(), uuid);
 					continue;
 				}
@@ -502,7 +502,7 @@ public final class ShopManager {
 				usage.put(e.getKey(), e.getValue().getAsInt());
 			}
 		} catch (Exception e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not read shop-usage.json ({}); resetting quotas", e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read shop-usage.json ({}); resetting quotas", e.getMessage());
 			usage.clear();
 		}
 	}
@@ -520,7 +520,7 @@ public final class ShopManager {
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
 			Files.move(tmp, usageFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not write shop-usage.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not write shop-usage.json", e);
 		}
 	}
 }

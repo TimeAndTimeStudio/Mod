@@ -1,8 +1,8 @@
-# Claim Map (Fabric Mod) 🗺️
+# Time SMP (Fabric Mod) 🗺️
 
 Fabric **server-only** mod + web map ตามแผนใน `plan.md` รองรับ **Minecraft 26.2 และ 26.3** (Java 25, Fabric API)
 
-- โลกแบ่งเป็นช่อง 500×500 บล็อก จองได้ทางหน้าเว็บ `claim-map.html`
+- โลกแบ่งเป็นช่อง 500×500 บล็อก จองได้ทางหน้าเว็บ `timesmp.html`
 - แผนที่แสดงเฉพาะส่วนที่โหลด/สำรวจแล้ว (ไม่ pre-generate): น้ำ = ฟ้า, ทราย = เหลือง, หิมะ/น้ำแข็ง = ขาว, ที่เหลือ = เขียว, ยังไม่สำรวจ = เทาเข้ม
 - ช่องของเรา = ส้ม, ช่องคนอื่น = แดง (ดูชื่อได้ แต่จองไม่ได้)
 - เขตที่จองแล้ว: คนนอกวาง/ทุบ/เปิดหีบ/ใช้ถังน้ำ-ลาวา/จุดไฟไม่ได้
@@ -18,13 +18,13 @@ Fabric **server-only** mod + web map ตามแผนใน `plan.md` รอ�
 ./gradlew build -Pminecraft_version=26.2 -Pfabric_api_version=0.161.0+26.2
 ```
 
-ผลลัพธ์อยู่ที่ `build/libs/claimmap-mc<เวอร์ชัน>-1.0.0.jar`
+ผลลัพธ์อยู่ที่ `build/libs/timesmp-mc<เวอร์ชัน>-1.0.0.jar`
 GitHub Actions (`.github/workflows/build.yml`) จะ build ทั้ง 26.2 และ 26.3 ให้อัตโนมัติทุกครั้งที่ push
 
 ## ติดตั้ง
 
 1. วาง jar ลงโฟลเดอร์ `mods/` ของเซิร์ฟเวอร์ Fabric (ต้องลง Fabric API 0.161+ ด้วย)
-2. รันเซิร์ฟเวอร์ → เปิด config ได้ที่ `config/claimmap/claimmap.properties`
+2. รันเซิร์ฟเวอร์ → เปิด config ได้ที่ `config/timesmp/timesmp.properties`
    - `token` จะถูกสุ่มให้ครั้งแรก (ตั้งเป็น `Authorization: Bearer <token>` ในการเรียก API)
    - ปรับได้: `port` (8085), `cellSize` (500), `maxCellsPerPlayer`, `spawnProtectedCells` (0 = ปิด = จองได้ทุกช่อง), `renderScale`, `saveDelayMs`, `linkCodeMinutes`, `sessionHours`
 3. ม็อด **host หน้าเว็บเอง** ที่พอร์ตเดียวกับ API — เปิด `http://127.0.0.1:8085/` ได้เลย (ม็อดบังคับ bind `127.0.0.1` เพื่อความปลอดภัย ดังนั้นถ้าต้องการเข้าจากนอกเครื่องให้ใช้ Nginx/tunnel ต่อไปที่พอร์ตนี้)
@@ -34,9 +34,9 @@ GitHub Actions (`.github/workflows/build.yml`) จะ build ทั้ง 26.2 �
 
 | ไฟล์ | เนื้อหา |
 |---|---|
-| `config/claimmap/accounts.json` | บัญชีผู้เล่น + รหัสผ่านแบบ salted SHA-256 (ไม่เก็บ plain text) |
-| `config/claimmap/regions.json` | ช่องที่จองแล้ว: เจ้าของ/สมาชิก |
-| `config/claimmap/sessions.json` | session token ของเว็บ (หมดอายุตาม `sessionHours`) |
+| `config/timesmp/accounts.json` | บัญชีผู้เล่น + รหัสผ่านแบบ salted SHA-256 (ไม่เก็บ plain text) |
+| `config/timesmp/regions.json` | ช่องที่จองแล้ว: เจ้าของ/สมาชิก |
+| `config/timesmp/sessions.json` | session token ของเว็บ (หมดอายุตาม `sessionHours`) |
 
 ## เชื่อมต่อ Nginx (HTTPS)
 
@@ -46,8 +46,8 @@ server {
   server_name map.example.com;
   # ssl_certificate ...; ssl_certificate_key ...;
 
-  root /var/www/claimmap;           # วาง claim-map.html ที่นี่
-  index claim-map.html;
+  root /var/www/timesmp;           # วาง timesmp.html ที่นี่
+  index timesmp.html;
 
   location /api/ {
     proxy_pass http://127.0.0.1:8085;
@@ -76,8 +76,8 @@ server {
 
 - `/pass <รหัสผ่าน>` — ตั้ง/เปลี่ยนรหัสผ่านสำหรับล็อกอินบนเว็บ (4–64 ตัวอักษร)
 - `/claim` — จองช่องที่ยืนอยู่
-- `/claimmap here` — เช็กช่องปัจจุบัน
-- `/claimmap reload` — โหลด config + regions (operator)
+- `/timesmp here` — เช็กช่องปัจจุบัน
+- `/timesmp reload` — โหลด config + regions (operator)
 
 ## หลายโลก (Automatic Multi-World)
 
@@ -100,24 +100,24 @@ server/
 - **กระเป๋าไอเท็มใช้ร่วมกันทุกโลก** (inventory, ender chest, exp, health, effects, advancements) เพราะสลับมิติโดยไม่สร้าง player object ใหม่
 - โลกที่โหลดอยู่จะไม่ถูกปิดถ้ายังมีผู้เล่น; โลกที่โฟลเดอร์หายจะไม่ถูกถอดออกจากหน่วยความจำทันที
 
-ค่าที่ปรับได้ใน `config/claimmap/claimmap.properties`: `worldDirectory` (`worlds`), `worldScanSeconds` (30), `worldIdleUnloadSeconds` (300), `worldPlayerCommands` (`true`)
+ค่าที่ปรับได้ใน `config/timesmp/timesmp.properties`: `worldDirectory` (`worlds`), `worldScanSeconds` (30), `worldIdleUnloadSeconds` (300), `worldPlayerCommands` (`true`)
 
 > ออกแบบจากพฤติกรรมของ [Wroud/mc-worlds](https://github.com/Wroud/mc-worlds) (MIT) และตรวจ API จริงของ Minecraft 26.2/26.3; โค้ดในโปรเจกต์นี้เขียนแยก ไม่ได้คัดลอกไฟล์จากโปรเจกต์อ้างอิง
 
 ## โครงสร้างโค้ด
 
 ```
-src/main/java/studio/timeandtime/claimmap/
+src/main/java/studio/timeandtime/timesmp/
   ClaimMap        # ModInitializer: ติดตั้ง events/commands, เปิด-ปิด WebServer
-  ClaimMapConfig  # config/claimmap/claimmap.properties + สุ่ม master token
+  ClaimMapConfig  # config/timesmp/timesmp.properties + สุ่ม master token
   RegionManager   # ช่อง 500×500 -> เจ้าของ/สมาชิก เก็บ regions.json
   AccountManager  # บัญชี + รหัสผ่าน (salted hash) เก็บ accounts.json
-  MapRenderer     # ดัก CHUNK_LOAD แล้ววาด PNG ต่อช่อง (แคชที่ config/claimmap/tiles/)
+  MapRenderer     # ดัก CHUNK_LOAD แล้ววาด PNG ต่อช่อง (แคชที่ config/timesmp/tiles/)
   Protection      # อีเวนต์กันวาง/ทุบ/เปิดหีบ/ถังน้ำ-ลาวา/ไฟ ในเขตของคนอื่น
   LinkManager     # session token ผูก UUID เก็บ sessions.json (login ผ่าน /pass)
   WebServer       # HttpServer 127.0.0.1:8085: host หน้าเว็บเอง + API ด้านบน
-  ClaimCommands   # /pass /claim /claimmap ...
+  ClaimCommands   # /pass /claim /timesmp ...
 src/main/resources/fabric.mod.json
-src/main/resources/claimmap-web/index.html   # หน้าเว็บฝังใน jar (สิ้นเปลือง Nginx)
-claim-map.html    # หน้าเว็บสำเนา (สำหรับ deploy นอก jar เช่น Nginx)
+src/main/resources/timesmp-web/index.html   # หน้าเว็บฝังใน jar (สิ้นเปลือง Nginx)
+timesmp.html    # หน้าเว็บสำเนา (สำหรับ deploy นอก jar เช่น Nginx)
 ```

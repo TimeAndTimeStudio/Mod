@@ -11,7 +11,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * Claim Map: server-only Fabric mod that divides the world into 500x500 cells
+ * Time SMP: server-only Fabric mod that divides the world into 500x500 cells
  * which players can claim from a web page, renders an up-to-date map of only
  * the explored chunks and protects claimed cells (see plan.md).
  */
@@ -145,7 +145,7 @@ public class ClaimMap implements ModInitializer {
 						playerItems.mergeCarried(p.getUUID(), p.getGameProfile().name(),
 								ItemSources.listCarried(p));
 					} catch (RuntimeException e) {
-						LOGGER.warn("[claimmap] Could not refresh item cache for {}: {}",
+						LOGGER.warn("[timesmp] Could not refresh item cache for {}: {}",
 								p.getGameProfile().name(), e.getMessage());
 					}
 				}
@@ -182,7 +182,7 @@ public class ClaimMap implements ModInitializer {
 			auctions.closeExpired(System.currentTimeMillis());
 			maps.start();
 			web.start();
-			LOGGER.info("[claimmap] Started. Web map/API on {}:{} (see config/claimmap/claimmap.properties)",
+			LOGGER.info("[timesmp] Started. Web map/API on {}:{} (see config/timesmp/timesmp.properties)",
 					config.bindAddress, config.port);
 		});
 

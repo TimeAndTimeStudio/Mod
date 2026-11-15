@@ -51,7 +51,7 @@ public final class AuditLog {
 				Files.writeString(file, line, StandardCharsets.UTF_8,
 						StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
 			} catch (IOException e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not append to audit.jsonl", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not append to audit.jsonl", e);
 			}
 		}
 	}
@@ -66,7 +66,7 @@ public final class AuditLog {
 			try {
 				lines = Files.readAllLines(file, StandardCharsets.UTF_8);
 			} catch (IOException e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not read audit.jsonl", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not read audit.jsonl", e);
 				return List.of();
 			}
 		}

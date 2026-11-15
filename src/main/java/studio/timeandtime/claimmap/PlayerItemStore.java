@@ -154,7 +154,7 @@ public final class PlayerItemStore {
 					source == null ? "unknown" : source, updatedAt, List.copyOf(items));
 		} catch (Exception e) {
 			// A cache is rebuildable; never let a damaged file disable the market.
-			ClaimMap.LOGGER.warn("[claimmap] Could not read player-items/{}.json: {}", uuid, e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read player-items/{}.json: {}", uuid, e.getMessage());
 			return null;
 		}
 	}
@@ -197,7 +197,7 @@ public final class PlayerItemStore {
 				Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
 			}
 		} catch (IOException | RuntimeException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not write player-items/{}.json", snap.uuid(), e);
+			ClaimMap.LOGGER.error("[timesmp] Could not write player-items/{}.json", snap.uuid(), e);
 		}
 	}
 

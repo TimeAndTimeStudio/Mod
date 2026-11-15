@@ -27,7 +27,7 @@ import java.util.UUID;
  * in game with {@code /pass <password>}; they then log in on the web page
  * with their Minecraft name + that password.
  *
- * <p>Only JSON persistence: {@code config/claimmap/accounts.json}
+ * <p>Only JSON persistence: {@code config/timesmp/accounts.json}
  * (passwords are salted SHA-256, never stored in plain text).
  */
 public final class AccountManager {
@@ -82,7 +82,7 @@ public final class AccountManager {
 					loadMap(root);
 				}
 			} catch (Exception e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not load accounts.json", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not load accounts.json", e);
 			}
 		}
 	}
@@ -136,7 +136,7 @@ public final class AccountManager {
 			a.updatedAt = System.currentTimeMillis();
 			accounts.put(a.uuid, a);
 			save();
-			ClaimMap.LOGGER.info("[claimmap] Bound legacy account {} to uuid {}", name, uuid);
+			ClaimMap.LOGGER.info("[timesmp] Bound legacy account {} to uuid {}", name, uuid);
 			return true;
 		}
 	}
@@ -155,7 +155,7 @@ public final class AccountManager {
 				Files.write(tmp, json.getBytes(StandardCharsets.UTF_8));
 				Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 			} catch (IOException e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not save accounts.json", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not save accounts.json", e);
 			}
 		}
 	}
@@ -290,7 +290,7 @@ public final class AccountManager {
 						a.salt = "";
 						a.updatedAt = System.currentTimeMillis();
 						save();
-						ClaimMap.LOGGER.info("[claimmap] Upgraded stored password hash for {}", a.name);
+						ClaimMap.LOGGER.info("[timesmp] Upgraded stored password hash for {}", a.name);
 					}
 					return a;
 				}

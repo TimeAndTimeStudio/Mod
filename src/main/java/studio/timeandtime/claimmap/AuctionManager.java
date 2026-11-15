@@ -149,13 +149,13 @@ public final class AuctionManager {
 	private void corrupt(String why) {
 		disabled = true;
 		auctions.clear();
-		ClaimMap.LOGGER.error("[claimmap] MARKET DISABLED — auctions.json: {}", why);
+		ClaimMap.LOGGER.error("[timesmp] MARKET DISABLED — auctions.json: {}", why);
 		try {
 			Path target = file.resolveSibling(file.getFileName() + ".corrupt-" + now.getAsLong());
 			Files.move(file, target, StandardCopyOption.REPLACE_EXISTING);
-			ClaimMap.LOGGER.error("[claimmap] Moved damaged file to {}", target);
+			ClaimMap.LOGGER.error("[timesmp] Moved damaged file to {}", target);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not move damaged auctions.json aside", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not move damaged auctions.json aside", e);
 		}
 	}
 
@@ -172,7 +172,7 @@ public final class AuctionManager {
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
 			Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not save auctions.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not save auctions.json", e);
 		}
 	}
 
@@ -622,7 +622,7 @@ public final class AuctionManager {
 								new Move(Acct.escrow(a.id), Acct.SYSTEM, fee, "auction.fee:" + a.id, a.id));
 				TxResult r = economy.apply(payout, true);
 				if (r != TxResult.OK) {
-					ClaimMap.LOGGER.error("[claimmap] Settle payment failed for {} ({}); retrying next tick",
+					ClaimMap.LOGGER.error("[timesmp] Settle payment failed for {} ({}); retrying next tick",
 							a.id, r);
 					return;
 				}
@@ -639,7 +639,7 @@ public final class AuctionManager {
 				a.itemDelivered = true;
 				save();
 			}
-			ClaimMap.LOGGER.info("[claimmap] Auction {} sold to {} for {}", a.id, a.highBidderName, a.highBid);
+			ClaimMap.LOGGER.info("[timesmp] Auction {} sold to {} for {}", a.id, a.highBidderName, a.highBid);
 		} else {
 			if (!a.itemDelivered) {
 				if (!deliverSeller(a)) return;

@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Claimed 500x500 cell regions. Persisted as JSON in
- * {@code config/claimmap/regions.json} (see plan.md, RegionManager).
+ * {@code config/timesmp/regions.json} (see plan.md, RegionManager).
  */
 public final class RegionManager {
 	public static final class CellData {
@@ -74,7 +74,7 @@ public final class RegionManager {
 					}
 				}
 			} catch (Exception e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not load regions.json", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not load regions.json", e);
 			}
 		}
 	}
@@ -91,7 +91,7 @@ public final class RegionManager {
 				Files.write(tmp, json.getBytes(StandardCharsets.UTF_8));
 				Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 			} catch (IOException e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not save regions.json", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not save regions.json", e);
 			}
 		}
 	}

@@ -94,7 +94,7 @@ public final class EconomyManager {
 				corrupt(economyFile, "ledger replay broke the money invariant");
 				return;
 			}
-			ClaimMap.LOGGER.info("[claimmap] Economy loaded: {} accounts, {} escrow pots, lastSeq={}, systemNet={}",
+			ClaimMap.LOGGER.info("[timesmp] Economy loaded: {} accounts, {} escrow pots, lastSeq={}, systemNet={}",
 					balances.size(), escrow.size(), lastSeq, systemNet);
 		}
 	}
@@ -159,7 +159,7 @@ public final class EconomyManager {
 			} catch (Exception e) {
 				if (i == lastNonEmpty) {
 					// Torn write from a crash: ignore the incomplete tail (R5/2.5).
-					ClaimMap.LOGGER.warn("[claimmap] Ignoring incomplete last ledger line ({} bytes)", line.length());
+					ClaimMap.LOGGER.warn("[timesmp] Ignoring incomplete last ledger line ({} bytes)", line.length());
 					continue;
 				}
 				corrupt(ledgerFile, "damaged ledger row at line " + (i + 1));
@@ -230,7 +230,7 @@ public final class EconomyManager {
 			return false;
 		}
 		if (sum != 0) {
-			ClaimMap.LOGGER.error("[claimmap] Money invariant broken: players+escrow+systemNet = {}", sum);
+			ClaimMap.LOGGER.error("[timesmp] Money invariant broken: players+escrow+systemNet = {}", sum);
 			return false;
 		}
 		return true;
@@ -238,13 +238,13 @@ public final class EconomyManager {
 
 	private void corrupt(Path file, String why) {
 		disabled = true;
-		ClaimMap.LOGGER.error("[claimmap] MARKET DISABLED — {}: {}", file.getFileName(), why);
+		ClaimMap.LOGGER.error("[timesmp] MARKET DISABLED — {}: {}", file.getFileName(), why);
 		try {
 			Path target = file.resolveSibling(file.getFileName() + ".corrupt-" + now.getAsLong());
 			Files.move(file, target, StandardCopyOption.REPLACE_EXISTING);
-			ClaimMap.LOGGER.error("[claimmap] Moved damaged file to {}", target);
+			ClaimMap.LOGGER.error("[timesmp] Moved damaged file to {}", target);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not move damaged {} aside", file.getFileName(), e);
+			ClaimMap.LOGGER.error("[timesmp] Could not move damaged {} aside", file.getFileName(), e);
 		}
 		balances.clear();
 		escrow.clear();
@@ -367,7 +367,7 @@ public final class EconomyManager {
 				TxResult r = apply(List.of(new Move(Acct.SYSTEM, Acct.player(u), start, "signup", "")), true);
 				if (r != TxResult.OK) {
 					balances.remove(u);
-					ClaimMap.LOGGER.error("[claimmap] Could not grant starting balance to {}: {}", u, r);
+					ClaimMap.LOGGER.error("[timesmp] Could not grant starting balance to {}: {}", u, r);
 					return false;
 				}
 			} else {
@@ -493,7 +493,7 @@ public final class EconomyManager {
 
 			// 7) snapshot is only a cache; a failure here is logged, not fatal
 			if (!writeSnapshot()) {
-				ClaimMap.LOGGER.error("[claimmap] Could not write economy.json; the ledger still holds the truth");
+				ClaimMap.LOGGER.error("[timesmp] Could not write economy.json; the ledger still holds the truth");
 			}
 			return TxResult.OK;
 		}
@@ -528,7 +528,7 @@ public final class EconomyManager {
 			}
 			return true;
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not append to ledger.jsonl", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not append to ledger.jsonl", e);
 			return false;
 		}
 	}
@@ -568,7 +568,7 @@ public final class EconomyManager {
 			Files.move(tmp, economyFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 			return true;
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not write economy.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not write economy.json", e);
 			return false;
 		}
 	}
@@ -597,7 +597,7 @@ public final class EconomyManager {
 				}
 				pruneBackups(24);
 			} catch (IOException e) {
-				ClaimMap.LOGGER.error("[claimmap] Backup failed", e);
+				ClaimMap.LOGGER.error("[timesmp] Backup failed", e);
 			}
 		}
 	}

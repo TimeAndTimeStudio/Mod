@@ -210,7 +210,7 @@ public final class ItemSources {
 			var chunk = ctx.level().getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, false);
 			return chunk instanceof LevelChunk levelChunk ? levelChunk : null;
 		} catch (RuntimeException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not read chunk {}/{}: {}", cx, cz, e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read chunk {}/{}: {}", cx, cz, e.getMessage());
 			return null;
 		}
 	}

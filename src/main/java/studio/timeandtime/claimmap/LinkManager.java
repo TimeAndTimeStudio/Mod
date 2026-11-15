@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>{@link #issueCode}/{@link #exchange} - legacy 6 digit in-game code.</li>
  * </ol>
  *
- * <p>Sessions are persisted (JSON only) to {@code config/claimmap/sessions.json}
+ * <p>Sessions are persisted (JSON only) to {@code config/timesmp/sessions.json}
  * so they survive restarts.
  */
 public final class LinkManager {
@@ -73,7 +73,7 @@ public final class LinkManager {
 				}
 			}
 		} catch (Exception e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not load sessions.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not load sessions.json", e);
 		}
 	}
 
@@ -143,7 +143,7 @@ public final class LinkManager {
 			Files.write(tmp, json.getBytes(StandardCharsets.UTF_8));
 			Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not save sessions.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not save sessions.json", e);
 		}
 	}
 

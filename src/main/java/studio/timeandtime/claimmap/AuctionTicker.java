@@ -24,7 +24,7 @@ public final class AuctionTicker {
 				auctions.closeExpired(System.currentTimeMillis());
 				market.retryPending();
 			} catch (RuntimeException e) {
-				ClaimMap.LOGGER.error("[claimmap] Auction settle tick failed", e);
+				ClaimMap.LOGGER.error("[timesmp] Auction settle tick failed", e);
 			}
 		});
 	}

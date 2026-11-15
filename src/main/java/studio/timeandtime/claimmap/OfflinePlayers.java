@@ -50,7 +50,7 @@ public final class OfflinePlayers {
 			return server.getPlayerList().loadPlayerData(
 					new NameAndId(uuid, name == null || name.isBlank() ? uuid.toString() : name));
 		} catch (RuntimeException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not read offline data for {}: {}", uuid, e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read offline data for {}: {}", uuid, e.getMessage());
 			return Optional.empty();
 		}
 	}
@@ -86,7 +86,7 @@ public final class OfflinePlayers {
 			tag.put(key, encoded);
 			return true;
 		} catch (RuntimeException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not encode {} for player data: {}", key, e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not encode {} for player data: {}", key, e.getMessage());
 			return false;
 		}
 	}
@@ -110,12 +110,12 @@ public final class OfflinePlayers {
 			Path backup = dir.resolve(uuid + ".dat_old");
 			if (!Util.safeReplaceOrMoveFile(real, tmp, backup, false)) {
 				Files.deleteIfExists(tmp);
-				ClaimMap.LOGGER.warn("[claimmap] Could not replace player data for {}", uuid);
+				ClaimMap.LOGGER.warn("[timesmp] Could not replace player data for {}", uuid);
 				return false;
 			}
 			return true;
 		} catch (IOException | RuntimeException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not save offline player data for {}", uuid, e);
+			ClaimMap.LOGGER.error("[timesmp] Could not save offline player data for {}", uuid, e);
 			return false;
 		}
 	}
@@ -127,7 +127,7 @@ public final class OfflinePlayers {
 		try {
 			return Optional.of(new Session(server, uuid, tag.get(), access));
 		} catch (RuntimeException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Refusing to edit offline data for {}: {}", uuid, e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Refusing to edit offline data for {}: {}", uuid, e.getMessage());
 			return Optional.empty();
 		}
 	}

@@ -76,7 +76,7 @@ public final class SalesTracker {
 				} catch (Exception ignored) {}
 			}
 		} catch (IOException e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not read sales.jsonl: {}", e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read sales.jsonl: {}", e.getMessage());
 		}
 	}
 
@@ -139,7 +139,7 @@ public final class SalesTracker {
 				Files.writeString(file, line, StandardCharsets.UTF_8,
 						StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
 			} catch (IOException e) {
-				ClaimMap.LOGGER.error("[claimmap] Could not append to sales.jsonl", e);
+				ClaimMap.LOGGER.error("[timesmp] Could not append to sales.jsonl", e);
 			}
 		}
 		return record;

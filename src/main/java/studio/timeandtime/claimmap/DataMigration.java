@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <p>The owner must never have to download, delete or recreate old files
  * (additional requirements, section A). Every existing data file is copied to
- * {@code config/claimmap/backups/pre-upgrade-<time>/} before the mod first
+ * {@code config/timesmp/backups/pre-upgrade-<time>/} before the mod first
  * writes anything. A marker in {@code backups/} prevents repeating the copy on
  * every start.
  */
@@ -76,11 +76,11 @@ public final class DataMigration {
 				}
 			}
 			Files.writeString(marker, Instant.now().toString());
-			ClaimMap.LOGGER.info("[claimmap] Copied existing files to {} before the first upgrade", target);
+			ClaimMap.LOGGER.info("[timesmp] Copied existing files to {} before the first upgrade", target);
 			return target;
 		} catch (IOException | RuntimeException e) {
 			// Never continue with a migration when the safety copy failed.
-			ClaimMap.LOGGER.error("[claimmap] Could not create the pre-upgrade backup in {}", dataDir, e);
+			ClaimMap.LOGGER.error("[timesmp] Could not create the pre-upgrade backup in {}", dataDir, e);
 			return null;
 		}
 	}

@@ -76,7 +76,7 @@ public final class ConsignmentManager {
 			} catch (Exception e) {
 				disabled = true;
 				entries.clear();
-				ClaimMap.LOGGER.error("[claimmap] CONSIGNMENTS DISABLED — consignments.json: {}", e.getMessage());
+				ClaimMap.LOGGER.error("[timesmp] CONSIGNMENTS DISABLED — consignments.json: {}", e.getMessage());
 				try {
 					Files.move(file, file.resolveSibling(file.getFileName() + ".corrupt-" + now.getAsLong()),
 							StandardCopyOption.REPLACE_EXISTING);
@@ -99,7 +99,7 @@ public final class ConsignmentManager {
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
 			Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not save consignments.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not save consignments.json", e);
 		}
 	}
 

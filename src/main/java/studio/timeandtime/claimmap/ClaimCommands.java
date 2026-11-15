@@ -666,7 +666,7 @@ public final class ClaimCommands {
 	private int runReload(CommandSourceStack src) {
 		config.load();
 		regions.load();
-		src.sendSuccess(() -> Component.literal("Reloaded claimmap config + regions."), false);
+		src.sendSuccess(() -> Component.literal("Reloaded timesmp config + regions."), false);
 		return 1;
 	}
 

@@ -171,7 +171,7 @@ public final class PriceService {
 			fileBlocked = readIdSet(root.getAsJsonArray("blocked"));
 			fileUnblocked = readIdSet(root.getAsJsonArray("unblocked"));
 		} catch (Exception e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not read price-overrides.json ({})", e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read price-overrides.json ({})", e.getMessage());
 			overrides = Map.of();
 			fileBlocked = Set.of();
 			fileUnblocked = Set.of();
@@ -228,7 +228,7 @@ public final class PriceService {
 				}
 			}
 		} catch (Exception e) {
-			ClaimMap.LOGGER.warn("[claimmap] Could not read price-dynamics.json ({})", e.getMessage());
+			ClaimMap.LOGGER.warn("[timesmp] Could not read price-dynamics.json ({})", e.getMessage());
 		}
 	}
 
@@ -264,7 +264,7 @@ public final class PriceService {
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
 			Files.move(tmp, dynamicsFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not write price-dynamics.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not write price-dynamics.json", e);
 		}
 	}
 
@@ -301,7 +301,7 @@ public final class PriceService {
 		try {
 			refreshNow();
 		} catch (Throwable t) {
-			ClaimMap.LOGGER.warn("[claimmap] Price refresh failed: {}", t.toString());
+			ClaimMap.LOGGER.warn("[timesmp] Price refresh failed: {}", t.toString());
 		}
 	}
 
@@ -364,7 +364,7 @@ public final class PriceService {
 		long nowMs = now.getAsLong();
 		if (nowMs - lastWarnMs >= WARN_EVERY_MS) {
 			lastWarnMs = nowMs;
-			ClaimMap.LOGGER.warn("[claimmap] Price refresh failed ({}); keeping the last good table ({} entries)",
+			ClaimMap.LOGGER.warn("[timesmp] Price refresh failed ({}); keeping the last good table ({} entries)",
 					reason, webPrices.size());
 		}
 	}
@@ -402,7 +402,7 @@ public final class PriceService {
 			out.put(normalize(e.getKey()), base);
 		}
 		if (skipped > 0) {
-			ClaimMap.LOGGER.warn("[claimmap] Price payload: skipped {} unusable entries", skipped);
+			ClaimMap.LOGGER.warn("[timesmp] Price payload: skipped {} unusable entries", skipped);
 		}
 		return out.isEmpty() ? Optional.empty() : Optional.of(out);
 	}
@@ -675,7 +675,7 @@ public final class PriceService {
 			root.add("unblocked", unblocked);
 			writeAtomic(overridesFile, GSON.toJson(root));
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not write price-overrides.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not write price-overrides.json", e);
 		}
 	}
 

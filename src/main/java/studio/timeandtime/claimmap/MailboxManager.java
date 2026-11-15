@@ -86,13 +86,13 @@ public final class MailboxManager {
 	private void corrupt(String why) {
 		disabled = true;
 		boxes.clear();
-		ClaimMap.LOGGER.error("[claimmap] MARKET DISABLED — mailbox.json: {}", why);
+		ClaimMap.LOGGER.error("[timesmp] MARKET DISABLED — mailbox.json: {}", why);
 		try {
 			Path target = file.resolveSibling(file.getFileName() + ".corrupt-" + now.getAsLong());
 			Files.move(file, target, StandardCopyOption.REPLACE_EXISTING);
-			ClaimMap.LOGGER.error("[claimmap] Moved damaged file to {}", target);
+			ClaimMap.LOGGER.error("[timesmp] Moved damaged file to {}", target);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not move damaged mailbox.json aside", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not move damaged mailbox.json aside", e);
 		}
 	}
 
@@ -123,7 +123,7 @@ public final class MailboxManager {
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
 			Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[claimmap] Could not save mailbox.json", e);
+			ClaimMap.LOGGER.error("[timesmp] Could not save mailbox.json", e);
 		}
 	}
 

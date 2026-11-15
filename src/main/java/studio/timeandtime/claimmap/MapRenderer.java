@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Renders the map using only chunks that have actually been loaded / explored
  * (no pre-generation). One PNG per 500x500 cell, stored in
- * {@code config/claimmap/tiles/} (plan.md, MapRenderer).
+ * {@code config/timesmp/tiles/} (plan.md, MapRenderer).
  */
 public final class MapRenderer {
 	private final ClaimMapConfig config;
@@ -140,7 +140,7 @@ public final class MapRenderer {
 					Path out = dir.resolve(e.getKey().replace(",", "_") + ".png");
 					ImageIO.write(t.img, "png", out.toFile());
 				} catch (IOException io) {
-					ClaimMap.LOGGER.error("[claimmap] Could not write tile {}", e.getKey(), io);
+					ClaimMap.LOGGER.error("[timesmp] Could not write tile {}", e.getKey(), io);
 				}
 			}
 		}
