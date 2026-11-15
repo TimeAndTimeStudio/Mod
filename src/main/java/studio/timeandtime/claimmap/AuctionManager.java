@@ -247,7 +247,7 @@ public final class AuctionManager {
 	/** Creates an admin-owned auction for a cell. The cell may be free or owned. */
 	public CreateOutcome createCellAuction(String cellId, long startPrice, Long buyout, int hours) {
 		int[] coords = parseCellId(cellId);
-		if (coords == null || startPrice < 1 || startPrice > EconomyManager.MAX_MONEY) {
+		if (coords == null || startPrice < 0 || startPrice > EconomyManager.MAX_MONEY) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
 		if (buyout != null && (buyout < startPrice || buyout > EconomyManager.MAX_MONEY)) {
@@ -333,7 +333,7 @@ public final class AuctionManager {
 
 	/** Minimum acceptable next bid (6.3). */
 	public long minBid(Auction a) {
-		if (a.highBid <= 0) return a.startPrice;
+		if (a.highBid <= 0) return Math.max(1L, a.startPrice);
 		long inc;
 		try {
 			long raw = Math.multiplyExact(a.highBid, (long) cfg.auctionMinIncrementPercent);

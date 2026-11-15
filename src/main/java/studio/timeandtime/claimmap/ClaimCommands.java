@@ -600,15 +600,43 @@ public final class ClaimCommands {
 		int bz = player.getBlockZ();
 		int cx = Math.floorDiv(bx, config.cellSize);
 		int cz = Math.floorDiv(bz, config.cellSize);
+		String id = cx + "," + cz;
 		String uuid = player.getUUID().toString();
+		if (regions.countClaimedBy(uuid) >= config.maxCellsPerPlayer) {
+			player.sendSystemMessage(Component.literal("§cคุณครอบครองที่ดินครบโควตา " + config.maxCellsPerPlayer + " ช่องแล้ว"));
+			return 0;
+		}
+		if (regions.isCommonArea(cx, cz)) {
+			player.sendSystemMessage(Component.literal("§cนี่คือพื้นที่เกิดส่วนกลาง ไม่สามารถซื้อได้"));
+			return 0;
+		}
+		if (regions.get(id) != null) {
+			player.sendSystemMessage(Component.literal("§cเขตนี้มีเจ้าของแล้ว (" + regions.ownerName(id) + ")"));
+			return 0;
+		}
+		int totalClaimed = regions.ownerMap().size();
+		long price = Math.min(1_000_000L, Math.max(100_000L, 100_000L + ((long) totalClaimed * 15_000L)));
+		long bal = economy.balance(player.getUUID());
+		if (bal < price) {
+			player.sendSystemMessage(Component.literal("§cเงินไม่พอซื้อที่ดิน ต้องการ " + price + " " + config.currencyName
+					+ " (คุณมี " + bal + " " + config.currencyName + ")"));
+			return 0;
+		}
+		TxResult tx = economy.withdraw(player.getUUID(), price, "land.purchase:" + id, id);
+		if (tx != TxResult.OK) {
+			player.sendSystemMessage(Component.literal("§cการหักเงินไม่สำเร็จ (" + tx + ")"));
+			return 0;
+		}
 		String name = player.getGameProfile().name();
 		RegionManager.ClaimResult r = regions.claim(cx, cz, uuid, name);
-		switch (r) {
-			case OK -> player.sendSystemMessage(Component.literal("Claimed cell " + cx + "," + cz));
-			case ALREADY_CLAIMED -> player.sendSystemMessage(Component.literal("Cell " + cx + "," + cz + " is already claimed by " + regions.ownerName(cx + "," + cz)));
-			case COMMON_AREA -> player.sendSystemMessage(Component.literal("This is the protected spawn area, you cannot claim it."));
-			case LIMIT_REACHED -> player.sendSystemMessage(Component.literal("You reached the cell claim limit (" + config.maxCellsPerPlayer + ")."));
+		if (r != RegionManager.ClaimResult.OK) {
+			economy.deposit(player.getUUID(), price, "land.refund:" + id, id);
+			player.sendSystemMessage(Component.literal("§cไม่สามารถจองเขตได้: " + r));
+			return 0;
 		}
+		player.sendSystemMessage(Component.literal("§aซื้อกรรมสิทธิ์เขต " + id + " สำเร็จ! จ่าย " + price + " "
+				+ config.currencyName + " (คงเหลือ " + economy.balance(player.getUUID()) + " " + config.currencyName
+				+ ", ถือครอง " + regions.countClaimedBy(uuid) + "/" + config.maxCellsPerPlayer + " ช่อง)"));
 		return 1;
 	}
 

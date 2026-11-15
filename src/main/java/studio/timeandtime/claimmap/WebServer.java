@@ -176,6 +176,10 @@ public final class WebServer {
 				requireMethod(ex, method, "GET");
 				handleCells(ex);
 			}
+			case "/api/cells/price" -> {
+				requireMethod(ex, method, "GET");
+				handleCellPrice(ex);
+			}
 			case "/api/wallet" -> {
 				requireMethod(ex, method, "GET");
 				handleWallet(ex);
@@ -632,6 +636,24 @@ public final class WebServer {
 		}
 	}
 
+	public long currentLandPrice() {
+		int totalClaimed = regions == null ? 0 : regions.ownerMap().size();
+		long price = 100_000L + ((long) totalClaimed * 15_000L);
+		return Math.min(1_000_000L, Math.max(100_000L, price));
+	}
+
+	private void handleCellPrice(HttpExchange ex) throws IOException {
+		long current = currentLandPrice();
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("price", current);
+		out.addProperty("basePrice", 100_000L);
+		out.addProperty("maxPrice", 1_000_000L);
+		out.addProperty("totalClaimed", regions == null ? 0 : regions.ownerMap().size());
+		out.addProperty("currency", config.currencyName);
+		Json.send(ex, 200, out);
+	}
+
 	/** /api/cells/{x},{z}[/claim|/members] and DELETE /api/cells/{x},{z} */
 	private void handleCellAction(HttpExchange ex, String method, String path) throws IOException {
 		String rest = path.substring("/api/cells/".length());
@@ -658,13 +680,36 @@ public final class WebServer {
 				requireMethod(ex, method, "POST");
 				Auth a = requireSession(ex);
 				int[] cell = parseCellId(id);
-				RegionManager.ClaimResult r = regions.claim(cell[0], cell[1], a.uuid(), a.name());
-				switch (r) {
-					case OK -> Json.send(ex, 200, true);
-					case ALREADY_CLAIMED -> throw new Json.ApiError(409, "already_claimed", "ช่องนี้ถูกจองแล้ว");
-					case COMMON_AREA -> throw new Json.ApiError(403, "forbidden", "เป็นพื้นที่ส่วนกลาง จองไม่ได้");
-					case LIMIT_REACHED -> throw new Json.ApiError(409, "limit_reached", "จองช่องครบจำนวนที่กำหนดแล้ว");
+				UUID playerUuid = UUID.fromString(a.uuid());
+				if (regions.countClaimedBy(a.uuid()) >= config.maxCellsPerPlayer) {
+					throw new Json.ApiError(409, "limit_reached", "คุณครอบครองที่ดินครบโควตา " + config.maxCellsPerPlayer + " ช่องแล้ว");
 				}
+				long landPrice = currentLandPrice();
+				long bal = economy.balance(playerUuid);
+				if (bal < landPrice) {
+					throw new Json.ApiError(409, "insufficient_funds",
+							"เงินไม่พอสำหรับการซื้อที่ดิน ต้องการ " + landPrice + " " + config.currencyName + " (คุณมี " + bal + " " + config.currencyName + ")");
+				}
+				TxResult tx = economy.withdraw(playerUuid, landPrice, "land.purchase:" + id, id);
+				if (tx != TxResult.OK) {
+					throw new Json.ApiError(409, "insufficient_funds", "การหักเงินไม่สำเร็จ (" + tx + ")");
+				}
+				RegionManager.ClaimResult r = regions.claim(cell[0], cell[1], a.uuid(), a.name());
+				if (r != RegionManager.ClaimResult.OK) {
+					economy.deposit(playerUuid, landPrice, "land.refund:" + id, id);
+					switch (r) {
+						case ALREADY_CLAIMED -> throw new Json.ApiError(409, "already_claimed", "ช่องนี้ถูกซื้อหรือมีเจ้าของแล้ว");
+						case COMMON_AREA -> throw new Json.ApiError(403, "forbidden", "เป็นพื้นที่ส่วนกลาง ไม่สามารถซื้อได้");
+						case LIMIT_REACHED -> throw new Json.ApiError(409, "limit_reached", "ครอบครองที่ดินครบโควตาแล้ว");
+						default -> throw new Json.ApiError(500, "internal_error", "ไม่สามารถซื้อที่ดินได้");
+					}
+				}
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("pricePaid", landPrice);
+				out.addProperty("balance", economy.balance(playerUuid));
+				out.addProperty("nextPrice", currentLandPrice());
+				Json.send(ex, 200, out);
 			}
 			case "members" -> {
 				requireMethod(ex, method, "POST");
@@ -1664,8 +1709,8 @@ public final class WebServer {
 		if (consignmentId == null || consignmentId.isBlank()) {
 			throw new Json.ApiError(400, "bad_request", "ต้องเลือกของฝากจากผู้เล่น");
 		}
-		if (start == null || start < 1 || start > EconomyManager.MAX_MONEY) {
-			throw new Json.ApiError(400, "invalid_amount", "ราคาเริ่มต้นไม่ถูกต้อง");
+		if (start == null || start < 0 || start > EconomyManager.MAX_MONEY) {
+			throw new Json.ApiError(400, "invalid_amount", "ราคาเริ่มต้นไม่ถูกต้อง (ต้องไม่ติดลบ)");
 		}
 		Long buyout = buyoutValue == null || buyoutValue <= 0 ? null : buyoutValue;
 		int hours = hoursValue == null ? 0 : (int) Math.max(0, Math.min(24 * 7, hoursValue));
@@ -1703,8 +1748,8 @@ public final class WebServer {
 		if (cellId == null || cellId.isBlank()) {
 			throw new Json.ApiError(400, "bad_request", "ต้องระบุเขตที่จะประมูล เช่น 0,0");
 		}
-		if (start == null || start < 1 || start > EconomyManager.MAX_MONEY) {
-			throw new Json.ApiError(400, "invalid_amount", "ราคาเริ่มต้นไม่ถูกต้อง");
+		if (start == null || start < 0 || start > EconomyManager.MAX_MONEY) {
+			throw new Json.ApiError(400, "invalid_amount", "ราคาเริ่มต้นไม่ถูกต้อง (ต้องไม่ติดลบ)");
 		}
 		if (!AdminService.validReason(reason)) {
 			throw new Json.ApiError(400, "bad_request", "ต้องระบุเหตุผล 3-200 ตัวอักษร");

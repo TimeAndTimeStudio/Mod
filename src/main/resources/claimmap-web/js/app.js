@@ -705,14 +705,15 @@ async function pageMap(view) {
     const [cx, cz] = selected.split(',').map(Number);
     const owner = cells[selected];
     const mine = owner === state.me?.name;
+    const currentPriceText = state.landPrice ? money(state.landPrice) + ' ' + (state.currency || 'เหรียญ') : '100,000 เหรียญ';
     info.append(el('div', { class: 'item', style: 'border-top:0' },
       el('div', { class: 'item-main' },
         el('span', { class: 'item-title' }, `ช่อง ${selected}`),
-        el('span', { class: 'item-meta' }, `${owner ? 'เจ้าของ ' + owner : 'ยังไม่มีเจ้าของ'} · X ${cx * 500}–${cx * 500 + 499} · Z ${cz * 500}–${cz * 500 + 499}`)),
+        el('span', { class: 'item-meta' }, `${owner ? 'เจ้าของ ' + owner : 'ยังไม่มีเจ้าของ (ราคาซื้อ: ' + currentPriceText + ')'} · X ${cx * 500}–${cx * 500 + 499} · Z ${cz * 500}–${cz * 500 + 499}`)),
       el('div', { class: 'item-side' },
-        !owner ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, 'จองช่องนี้') : null,
+        !owner ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, `ซื้อที่ดิน (${currentPriceText})`) : null,
         (mine || state.me?.admin) && owner ? el('button', { class: 'btn danger', type: 'button', onclick: () => removeCell(selected) }, 'ปล่อยช่อง') : null,
-        state.me?.admin ? el('button', { class: 'btn secondary', type: 'button', onclick: () => adminAuctionCellDialog(selected) }, 'ประมูลเขต') : null)));
+        state.me?.admin ? el('button', { class: 'btn secondary', type: 'button', onclick: () => adminAuctionCellDialog(selected) }, 'ประมูลเขต (เริ่มที่ 0)') : null)));
     if (owner && (mine || state.me?.admin)) {
       const form = el('div', { class: 'item-form' });
       const dd = dropdown({ label: 'โอนให้', options: (state.names || []).filter((n) => n !== owner), placeholder: 'เลือกผู้เล่น', searchable: true, onChange: () => {} });
@@ -722,11 +723,33 @@ async function pageMap(view) {
     }
   }
   async function reload() {
-    try { cells = await api('GET', '/api/cells'); draw(); renderInfo(); }
+    try {
+      const [cellsData, priceData] = await Promise.all([
+        api('GET', '/api/cells'),
+        api('GET', '/api/cells/price').catch(() => ({ price: 100000 })),
+      ]);
+      cells = cellsData;
+      state.landPrice = priceData.price || 100000;
+      draw();
+      renderInfo();
+    }
     catch (error) { clear(info); info.append(errorState(error)); }
   }
   async function claimCell(id) {
-    try { await api('POST', `/api/cells/${id}/claim`, {}); toast('จองช่องแล้ว'); await reload(); }
+    const price = state.landPrice || 100000;
+    const ok = await confirmDialog({
+      title: 'ซื้อที่ดินเขต ' + id,
+      body: `ราคาซื้อ ${money(price)} ${state.currency || 'เหรียญ'} (โควตาสูงสุด 4 ช่องต่อคน)`,
+      confirm: 'ยืนยันซื้อที่ดิน',
+    });
+    if (!ok) return;
+    try {
+      const res = await api('POST', `/api/cells/${id}/claim`, {});
+      toast(`ซื้อกรรมสิทธิ์เขต ${id} สำเร็จ! จ่าย ${money(res.pricePaid || price)} ${state.currency || 'เหรียญ'}`);
+      if (res.balance != null) state.balance = res.balance;
+      renderShell();
+      await reload();
+    }
     catch (error) { toastError(error); }
   }
   async function removeCell(id) {
@@ -743,17 +766,17 @@ async function pageMap(view) {
   async function adminAuctionCellDialog(id) {
     const dialog = $('#confirm');
     clear(dialog);
-    const startInput = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric' });
-    const buyoutInput = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric', placeholder: 'ซื้อทันที (100k)' });
+    const startInput = el('input', { class: 'input', type: 'text', value: '0', inputmode: 'numeric' });
+    const buyoutInput = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ (เช่น 100000)' });
     const hoursInput = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric' });
-    const reasonInput = el('input', { class: 'input', type: 'text', value: 'เปิดขาย/ประมูลที่ดินใหม่ 100k', maxLength: '200' });
+    const reasonInput = el('input', { class: 'input', type: 'text', value: 'เปิดประมูลเขตที่ดินเริ่มต้น 0', maxLength: '200' });
     const error = el('p', { class: 'err', role: 'alert' });
     const form = el('form', { method: 'dialog', class: 'dialog-body' },
       el('h2', {}, 'เปิดประมูลเขต ' + id),
-      el('p', { class: 'hint' }, 'ผู้ชนะการประมูลจะได้รับสิทธิ์เป็นเจ้าของเขตนี้แทน'),
+      el('p', { class: 'hint' }, 'เริ่มต้นที่ 0 ได้ · ผู้ชนะการประมูลจะได้รับสิทธิ์เป็นเจ้าของเขตนี้'),
       el('div', { class: 'grid2' },
-        el('div', { class: 'field' }, el('label', {}, 'ราคาเริ่มต้น'), startInput),
-        el('div', { class: 'field' }, el('label', {}, 'ซื้อทันที'), buyoutInput)),
+        el('div', { class: 'field' }, el('label', {}, 'ราคาเริ่มต้น (ตั้งแต่ 0)'), startInput),
+        el('div', { class: 'field' }, el('label', {}, 'ซื้อทันที (ไม่บังคับ)'), buyoutInput)),
       el('div', { class: 'grid2' },
         el('div', { class: 'field' }, el('label', {}, 'ชั่วโมง'), hoursInput),
         el('div', { class: 'field' }, el('label', {}, 'เหตุผล'), reasonInput)),
@@ -765,7 +788,7 @@ async function pageMap(view) {
       if (event.submitter?.value === 'cancel') return;
       event.preventDefault();
       error.textContent = '';
-      if (num(startInput.value) < 1) { error.textContent = 'ราคาเริ่มต้นต้องมากกว่า 0'; return; }
+      if (num(startInput.value) < 0) { error.textContent = 'ราคาเริ่มต้นต้องไม่ติดลบ (ตั้งแต่ 0 ขึ้นไป)'; return; }
       if (reasonInput.value.trim().length < 3) { error.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
       try {
         await api('POST', '/api/admin/cell-auctions', {
@@ -2013,21 +2036,22 @@ async function adminAuctions(box) {
 
 async function adminCellAuctions(box) {
   const cellId = el('input', { class: 'input', type: 'text', placeholder: 'เช่น 0,0', maxLength: '32' });
-  const start = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric' });
-  const buyout = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric', placeholder: 'ซื้อทันที (100k)' });
+  const start = el('input', { class: 'input', type: 'text', value: '0', inputmode: 'numeric' });
+  const buyout = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ (เช่น 100000)' });
   const hours = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric' });
-  const reason = el('input', { class: 'input', type: 'text', value: 'เปิดขาย/ประมูลที่ดินใหม่ 100k', maxLength: '200' });
+  const reason = el('input', { class: 'input', type: 'text', value: 'เปิดประมูลเขตที่ดินเริ่มต้น 0', maxLength: '200' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { class: 'stack', novalidate: true },
-    el('p', { class: 'hint' }, 'เปิดประมูลกรรมสิทธิ์เขต 1 ช่อง · ถ้าเขตมีเจ้าของอยู่ ผู้ชนะจะได้กรรมสิทธิ์แทน'),
+    el('p', { class: 'hint' }, 'เปิดประมูลกรรมสิทธิ์เขต 1 ช่อง (เริ่มต้นที่ 0 ได้) · ถ้าเขตมีเจ้าของอยู่ ผู้ชนะจะได้กรรมสิทธิ์แทน'),
     el('div', { class: 'grid2' }, el('div', { class: 'field' }, el('label', {}, 'เขต'), cellId), el('div', { class: 'field' }, el('label', {}, 'เหตุผล'), reason)),
-    el('div', { class: 'grid2' }, el('div', { class: 'field' }, el('label', {}, 'ราคาเริ่มต้น'), start), el('div', { class: 'field' }, el('label', {}, 'ซื้อทันที'), buyout)),
+    el('div', { class: 'grid2' }, el('div', { class: 'field' }, el('label', {}, 'ราคาเริ่มต้น (ตั้งแต่ 0)'), start), el('div', { class: 'field' }, el('label', {}, 'ซื้อทันที (ไม่บังคับ)'), buyout)),
     el('div', { class: 'field' }, el('label', {}, 'ชั่วโมง'), hours), error,
     el('button', { class: 'btn primary', type: 'submit' }, 'เปิดประมูลเขต'));
   form.addEventListener('submit', async (event) => {
     event.preventDefault(); error.textContent = '';
     if (!cellId.value.trim()) { error.textContent = 'ระบุเขต เช่น 0,0'; return; }
     if (!/^-?\d+,-?\d+$/.test(cellId.value.trim())) { error.textContent = 'รูปแบบเขตต้องเป็น cx,cz'; return; }
+    if (num(start.value) < 0) { error.textContent = 'ราคาเริ่มต้นต้องไม่ติดลบ (ตั้งแต่ 0 ขึ้นไป)'; return; }
     if (reason.value.trim().length < 3) { error.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
     try {
       await api('POST', '/api/admin/cell-auctions', {
