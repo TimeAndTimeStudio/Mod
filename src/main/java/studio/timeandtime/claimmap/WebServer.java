@@ -845,41 +845,9 @@ public final class WebServer {
 		Json.send(ex, 200, out);
 	}
 
-	/** POST /api/shop/buy {item, qty} — items always go to the mailbox. */
+	/** POST /api/shop/buy {item, qty} — disabled: server is pure sell-to-server. */
 	private void handleShopBuy(HttpExchange ex) throws IOException {
-		Auth a = requireSession(ex);
-		requireShopEnabled();
-		UUID uuid = sessionUuid(a);
-		JsonObject body = Json.readObject(ex);
-		String item = Json.str(body, "item");
-		Long qtyValue = Json.integer(body, "qty");
-		if (item == null || item.isBlank()) throw new Json.ApiError(400, "invalid_item", "ต้องระบุไอเท็ม");
-		if (qtyValue == null || qtyValue < 1 || qtyValue > config.shopMaxQtyPerTx) {
-			throw new Json.ApiError(400, "invalid_quantity", "จำนวนไม่ถูกต้อง (1-" + config.shopMaxQtyPerTx + ")");
-		}
-		int qty = qtyValue.intValue();
-		var server = ClaimMap.getServer();
-		if (server == null) throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมยังไม่พร้อม");
-
-		String ref = "w" + Long.toString(System.currentTimeMillis(), 36) + "_" + Integer.toString(uuid.hashCode(), 36);
-		ShopManager.BuyPlan plan;
-		try {
-			plan = GameBridge.call(server, () -> shop.prepareBuy(uuid, item, qty, ref, server.registryAccess()),
-					GameBridge.DEFAULT_TIMEOUT_MS);
-		} catch (GameBridge.GameUnavailableException e) {
-			throw new Json.ApiError(503, "game_unavailable", "เซิร์ฟเวอร์เกมไม่ตอบสนอง กรุณาลองใหม่");
-		}
-		if (plan.result() != ShopManager.Result.OK) throw shopError(plan.result());
-
-		ShopManager.BuyOutcome outcome = shop.commitBuy(uuid, plan);
-		if (outcome.result() != ShopManager.Result.OK) throw shopError(outcome.result());
-		JsonObject out = new JsonObject();
-		out.addProperty("ok", true);
-		out.addProperty("bought", outcome.bought());
-		out.addProperty("spent", outcome.spent());
-		out.addProperty("balance", outcome.balance());
-		out.addProperty("mailboxCount", outcome.mailboxCount());
-		Json.send(ex, 200, out);
+		throw new Json.ApiError(403, "server_buy_disabled", "ระบบเปิดรับซื้อไอเท็มจากผู้เล่นเท่านั้น เซิร์ฟเวอร์ไม่มีการขายไอเท็มให้ผู้เล่น");
 	}
 
 	/**

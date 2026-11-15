@@ -349,35 +349,8 @@ public final class ClaimCommands {
 	private int runBuy(CommandSourceStack src, String item, String qtyText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		int qty;
-		try {
-			qty = Integer.parseInt(qtyText);
-		} catch (NumberFormatException e) {
-			player.sendSystemMessage(Component.literal("จำนวนต้องเป็นจำนวนเต็ม"));
-			return 0;
-		}
-		var server = ClaimMap.getServer();
-		if (server == null) return 0;
-		UUID uuid = player.getUUID();
-		String ref = "cmd" + Long.toString(System.currentTimeMillis(), 36);
-		ShopManager.BuyPlan plan = shop.prepareBuy(uuid, item, qty, ref, server.registryAccess());
-		if (plan.result() != ShopManager.Result.OK) {
-			player.sendSystemMessage(Component.literal("ซื้อไม่ได้: " + sellErrorText(plan.result())));
-			return 0;
-		}
-		ShopManager.BuyOutcome o = shop.commitBuy(uuid, plan);
-		if (o.result() != ShopManager.Result.OK) {
-			player.sendSystemMessage(Component.literal("ซื้อไม่ได้: " + sellErrorText(o.result())));
-			return 0;
-		}
-		player.sendSystemMessage(Component.literal("ซื้อ " + o.bought() + " ชิ้น ใช้ " + o.spent() + " "
-				+ config.currencyName + " (คงเหลือ " + o.balance() + ")"));
-		shop.claim(player);
-		int left = mailbox.count(uuid);
-		player.sendSystemMessage(Component.literal(left > 0
-				? "ของบางส่วนอยู่ในกล่องของ พิมพ์ /mail claim (คงเหลือ " + left + " รายการ)"
-				: "ของเข้ากระเป๋าแล้ว"));
-		return 1;
+		player.sendSystemMessage(Component.literal("§cระบบร้านค้าเปิดรับซื้อไอเท็มจากผู้เล่นเท่านั้น (ไม่มีการเสกขายของจากเซิร์ฟเวอร์) คุณสามารถซื้อของจากผู้เล่นอื่นได้ที่หน้าเว็บตลาด"));
+		return 0;
 	}
 
 	private int runMailList(CommandSourceStack src) {

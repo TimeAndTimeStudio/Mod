@@ -35,7 +35,7 @@ public final class ClaimMapConfig {
 	/** Comma separated list of admin names. */
 	public String admins = "";
 	public int cellSize = 500;
-	public int maxCellsPerPlayer = 3;
+	public int maxCellsPerPlayer = 4;
 	/** Radius (in cells) around 0,0 treated as a common / spawn area (unclaimable). */
 	public int spawnProtectedCells = 3;
 	/** Map sampling step in blocks; one pixel per {@code renderScale} block. */

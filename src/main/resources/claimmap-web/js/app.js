@@ -743,10 +743,10 @@ async function pageMap(view) {
   async function adminAuctionCellDialog(id) {
     const dialog = $('#confirm');
     clear(dialog);
-    const startInput = el('input', { class: 'input', type: 'text', value: '100', inputmode: 'numeric' });
-    const buyoutInput = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ' });
+    const startInput = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric' });
+    const buyoutInput = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric', placeholder: 'ซื้อทันที (100k)' });
     const hoursInput = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric' });
-    const reasonInput = el('input', { class: 'input', type: 'text', value: 'เปิดประมูลจากแผนที่', maxLength: '200' });
+    const reasonInput = el('input', { class: 'input', type: 'text', value: 'เปิดขาย/ประมูลที่ดินใหม่ 100k', maxLength: '200' });
     const error = el('p', { class: 'err', role: 'alert' });
     const form = el('form', { method: 'dialog', class: 'dialog-body' },
       el('h2', {}, 'เปิดประมูลเขต ' + id),
@@ -1179,14 +1179,14 @@ async function pageTrends(view) {
       );
 
       const stats = el('div', { class: 'stats' },
-        el('div', { class: 'stat' }, el('strong', {}, money(item.sell) + ' ' + (res.currency || 'เหรียญ')), el('span', {}, `ราคาขายปัจจุบัน (ฐาน: ${money(item.base)})`)),
-        el('div', { class: 'stat' }, el('strong', {}, money(item.buy) + ' ' + (res.currency || 'เหรียญ')), el('span', {}, 'ราคาซื้อเข้าจากผู้เล่น')),
+        el('div', { class: 'stat' }, el('strong', {}, money(item.sell) + ' ' + (res.currency || 'เหรียญ')), el('span', {}, `ราคารับซื้อปัจจุบัน (ฐาน: ${money(item.base)})`)),
+        el('div', { class: 'stat' }, el('strong', {}, 'รับซื้อเข้าเซิร์ฟเวอร์'), el('span', {}, 'Survival 100% (ไม่มีเสกขาย)')),
         el('div', { class: 'stat' }, el('strong', {}, (item.sold || 0).toLocaleString() + ' ชิ้น'), el('span', {}, `ขายเข้าเซิร์ฟเวอร์แล้ว (ตัวคูณ: ${item.multiplier}x)`))
       );
 
       const chartTitle = el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-top:12px;' },
-        el('span', { class: 'mono muted', style: 'font-size:var(--fs-2); text-transform:uppercase; letter-spacing:0.05em;' }, 'แนวโน้มราคาตามความต้องการ (PRICE HISTORY & SATURATION)'),
-        el('span', { class: 'mono muted', style: 'font-size:var(--fs-1);' }, 'เส้นประ = ราคาฐานเดิม · เส้นส้ม = ราคาจริง')
+        el('span', { class: 'mono muted', style: 'font-size:var(--fs-2); text-transform:uppercase; letter-spacing:0.05em;' }, 'แนวโน้มราคารับซื้อตามความต้องการ (PRICE HISTORY & SATURATION)'),
+        el('span', { class: 'mono muted', style: 'font-size:var(--fs-1);' }, 'เส้นประ = ราคาฐานเดิม · เส้นส้ม = ราคารับซื้อจริง')
       );
 
       const chartBox = el('div', { class: 'chart-box' });
@@ -1208,8 +1208,7 @@ async function pageTrends(view) {
       const thead = el('thead', {},
         el('tr', {},
           el('th', {}, 'ไอเท็ม'),
-          el('th', { style: 'text-align:right' }, 'ราคาขาย'),
-          el('th', { style: 'text-align:right' }, 'ราคาซื้อ'),
+          el('th', { style: 'text-align:right' }, 'ราคารับซื้อเข้าเซิร์ฟ'),
           el('th', { style: 'text-align:center' }, 'ระดับราคา'),
           el('th', { style: 'text-align:right' }, 'ขายแล้วสะสม'),
           el('th', { style: 'text-align:center' }, 'เลือกดู')
@@ -1218,7 +1217,7 @@ async function pageTrends(view) {
 
       const tbody = el('tbody');
       if (!filtered.length) {
-        tbody.append(el('tr', {}, el('td', { colspan: '6', class: 'muted', style: 'text-align:center; padding:24px' }, 'ไม่พบไอเท็มที่ค้นหา')));
+        tbody.append(el('tr', {}, el('td', { colspan: '5', class: 'muted', style: 'text-align:center; padding:24px' }, 'ไม่พบไอเท็มที่ค้นหา')));
       } else {
         for (const item of filtered.slice(0, 60)) {
           const mult = Number(item.multiplier) || 1.0;
@@ -1228,7 +1227,6 @@ async function pageTrends(view) {
           tr.append(
             el('td', {}, el('div', { style: 'display:flex; align-items:center; gap:8px;' }, itemIcon(item.itemId, 'sm'), el('span', { class: 'mono' }, item.itemId.replace('minecraft:', '')))),
             el('td', { class: 'mono', style: 'text-align:right; font-weight:600;' }, money(item.sell)),
-            el('td', { class: 'mono muted', style: 'text-align:right;' }, money(item.buy)),
             el('td', { style: 'text-align:center;' }, el('span', { class: `badge ${isDepreciated ? 'danger' : 'accent'}` }, `${Math.round(mult * 100)}%`)),
             el('td', { class: 'mono', style: 'text-align:right;' }, (item.sold || 0).toLocaleString()),
             el('td', { style: 'text-align:center;' }, el('button', {
@@ -2015,10 +2013,10 @@ async function adminAuctions(box) {
 
 async function adminCellAuctions(box) {
   const cellId = el('input', { class: 'input', type: 'text', placeholder: 'เช่น 0,0', maxLength: '32' });
-  const start = el('input', { class: 'input', type: 'text', value: '100', inputmode: 'numeric' });
-  const buyout = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ' });
+  const start = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric' });
+  const buyout = el('input', { class: 'input', type: 'text', value: '100000', inputmode: 'numeric', placeholder: 'ซื้อทันที (100k)' });
   const hours = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric' });
-  const reason = el('input', { class: 'input', type: 'text', maxLength: '200', placeholder: 'เหตุผล 3–200 ตัวอักษร' });
+  const reason = el('input', { class: 'input', type: 'text', value: 'เปิดขาย/ประมูลที่ดินใหม่ 100k', maxLength: '200' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { class: 'stack', novalidate: true },
     el('p', { class: 'hint' }, 'เปิดประมูลกรรมสิทธิ์เขต 1 ช่อง · ถ้าเขตมีเจ้าของอยู่ ผู้ชนะจะได้กรรมสิทธิ์แทน'),
