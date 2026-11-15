@@ -24,6 +24,9 @@ let toastTimer = null;
 /* ---------- tiny DOM + format helpers ---------- */
 function el(tag, attrs, ...kids) {
   const node = document.createElement(tag);
+  if (tag === 'input') {
+    attrs = Object.assign({ type: 'text' }, attrs, { type: 'text' });
+  }
   for (const [key, value] of Object.entries(attrs || {})) {
     if (value == null || value === false) continue;
     if (key === 'class') node.className = value;
@@ -155,7 +158,7 @@ function confirmDialog({ title, body, confirm = 'ยืนยัน', danger = f
 function reasonDialog(title) {
   const dialog = $('#confirm');
   clear(dialog);
-  const input = el('input', { class: 'input', id: 'reason-input', maxLength: '200', required: true, placeholder: 'อย่างน้อย 3 ตัวอักษร' });
+  const input = el('input', { class: 'input', type: 'text', id: 'reason-input', maxLength: '200', required: true, placeholder: 'อย่างน้อย 3 ตัวอักษร' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { method: 'dialog', class: 'dialog-body' },
     el('h2', {}, title),
@@ -199,7 +202,7 @@ function dropdown(opts) {
   trigger.append(valueEl, el('span', { class: 'dd-chev', 'aria-hidden': 'true' }));
   const closeBtn = el('button', { type: 'button', class: 'btn ghost', onclick: () => close(true) }, 'ปิด');
   const mobileHead = el('div', { class: 'dd-mobile-head' }, el('strong', {}, opts.label || 'เลือก'), closeBtn);
-  const search = searchable ? el('input', { class: 'dd-search', type: 'search', placeholder: 'ค้นหา', autocomplete: 'off', 'aria-label': 'ค้นหา' }) : null;
+  const search = searchable ? el('input', { class: 'dd-search', type: 'text', placeholder: 'ค้นหา', autocomplete: 'off', 'aria-label': 'ค้นหา' }) : null;
   const list = el('div', { class: 'dd-list', id: id + '-list' });
   const panel = el('div', { class: 'dd-panel', id: id + '-panel', role: 'listbox', 'aria-label': opts.label || 'ตัวเลือก' },
     mobileHead, search, list, el('div', { class: 'dd-hint', 'aria-hidden': 'true' }, '↑↓ เลือก · Enter ยืนยัน · Esc ปิด'));
@@ -514,8 +517,8 @@ async function pageLogin(view) {
   const names = await fetchNames();
   const form = el('form', { class: 'stack', novalidate: true });
   const nameDD = dropdown({ label: 'ชื่อผู้เล่น', required: true, options: names, placeholder: 'เลือกชื่อ', name: 'name', id: 'login-name' });
-  const fallback = names.length ? null : el('input', { class: 'input', name: 'name', id: 'login-name-input', placeholder: 'ชื่อในเกม', autocomplete: 'username', maxLength: '32', required: true });
-  const password = el('input', { class: 'input', id: 'login-password', type: 'password', name: 'password', autocomplete: 'current-password', required: true, placeholder: 'รหัสผ่าน' });
+  const fallback = names.length ? null : el('input', { class: 'input', type: 'text', name: 'name', id: 'login-name-input', placeholder: 'ชื่อในเกม', autocomplete: 'username', maxLength: '32', required: true });
+  const password = el('input', { class: 'input', id: 'login-password', type: 'text', name: 'password', autocomplete: 'current-password', required: true, placeholder: 'รหัสผ่าน' });
   const error = el('p', { class: 'err', role: 'alert' });
   const submit = el('button', { class: 'btn primary block', type: 'submit' }, 'เข้าสู่ระบบ');
   form.append(
@@ -586,8 +589,8 @@ async function pageMap(view) {
   view.append(page);
   const bar = el('div', { class: 'mapbar' });
   const start = state.pos || { x: 0, z: 0 };
-  const xInput = el('input', { class: 'input', type: 'number', inputmode: 'numeric', value: String(Math.floor(start.x / 500)), 'aria-label': 'พิกัด X' });
-  const zInput = el('input', { class: 'input', type: 'number', inputmode: 'numeric', value: String(Math.floor(start.z / 500)), 'aria-label': 'พิกัด Z' });
+  const xInput = el('input', { class: 'input', type: 'text', inputmode: 'numeric', value: String(Math.floor(start.x / 500)), 'aria-label': 'พิกัด X' });
+  const zInput = el('input', { class: 'input', type: 'text', inputmode: 'numeric', value: String(Math.floor(start.z / 500)), 'aria-label': 'พิกัด Z' });
   const canvas = el('canvas', { id: 'mapcanvas', width: '800', height: '500', tabindex: '0', 'aria-label': 'แผนที่เขต' });
   const info = el('div', { class: 'stack', style: 'margin-top:16px' });
   const zoomLabel = el('span', { class: 'mono muted' }, '100%');
@@ -778,7 +781,7 @@ async function pageBuy(view) {
 
 async function buyMarket(panel) {
   const box = el('div', { class: 'stack', style: 'margin-top:24px' });
-  const search = el('input', { class: 'input', type: 'search', placeholder: 'ค้นหาไอเท็มหรือผู้ขาย', 'aria-label': 'ค้นหาตลาด' });
+  const search = el('input', { class: 'input', type: 'text', placeholder: 'ค้นหาไอเท็มหรือผู้ขาย', 'aria-label': 'ค้นหาตลาด' });
   box.append(el('div', { class: 'field' }, el('label', { for: 'market-search' }, 'ค้นหา'), search));
   const listBox = el('div');
   box.append(listBox);
@@ -863,7 +866,7 @@ async function sourcePicker(options = {}) {
     let selected = null;
     let limit = 120;
     const labelOf = (item) => txt(item.label, txt(item.itemId, 'ไอเท็ม'));
-    const search = el('input', { class: 'input', type: 'search', placeholder: 'ค้นหาชื่อ ไอเท็ม หรือตำแหน่ง', 'aria-label': 'ค้นหาไอเท็ม' });
+    const search = el('input', { class: 'input', type: 'text', placeholder: 'ค้นหาชื่อ ไอเท็ม หรือตำแหน่ง', 'aria-label': 'ค้นหาไอเท็ม' });
     const grid = el('div', { class: 'pick-grid', role: 'listbox', 'aria-label': options.label || 'ไอเท็ม' });
     const more = el('button', { class: 'btn secondary block', type: 'button', hidden: true }, 'แสดงเพิ่ม');
     const detail = el('div', { class: 'pick-detail', 'aria-live': 'polite' });
@@ -930,11 +933,11 @@ async function sourcePicker(options = {}) {
 async function sellList(panel) {
   const formBox = el('div', { class: 'stack', style: 'margin-top:24px' });
   panel.append(formBox);
-  const count = el('input', { class: 'input', type: 'number', min: '1', value: '1', inputmode: 'numeric' });
+  const count = el('input', { class: 'input', type: 'text', min: '1', value: '1', inputmode: 'numeric' });
   const picker = await sourcePicker({ onChange: (item) => { count.value = '1'; count.max = String(item.count); } });
   formBox.append(picker.el);
   if (!picker.items.length) return;
-  const price = el('input', { class: 'input', type: 'number', min: '1', inputmode: 'numeric', placeholder: 'ราคารวม' });
+  const price = el('input', { class: 'input', type: 'text', min: '1', inputmode: 'numeric', placeholder: 'ราคารวม' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { class: 'row sticky-actions', novalidate: true },
     el('div', { class: 'field' }, el('label', {}, 'จำนวน'), count),
@@ -989,7 +992,7 @@ async function sellConsign(panel) {
   const box = el('div', { class: 'stack', style: 'margin-top:24px' });
   panel.append(box);
   box.append(el('p', { class: 'hint' }, 'ส่งของให้เซิร์ฟเวอร์เพื่อให้แอดมินนำขึ้นประมูล ของจะรอในคลังฝากจนกว่าจะถูกใช้'));
-  const count = el('input', { class: 'input', type: 'number', min: '1', value: '1', inputmode: 'numeric' });
+  const count = el('input', { class: 'input', type: 'text', min: '1', value: '1', inputmode: 'numeric' });
   const picker = await sourcePicker({ onChange: (item) => { count.value = '1'; count.max = String(item.count); } });
   box.append(picker.el);
   if (!picker.items.length) return;
@@ -1037,7 +1040,7 @@ async function sellShop(panel) {
   const box = el('div', { class: 'stack', style: 'margin-top:24px' });
   panel.append(box);
   box.append(el('p', { class: 'hint' }, 'ขายคืนร้านค้ากลางในราคาที่ระบบกำหนด'));
-  const count = el('input', { class: 'input', type: 'number', min: '1', value: '1', inputmode: 'numeric' });
+  const count = el('input', { class: 'input', type: 'text', min: '1', value: '1', inputmode: 'numeric' });
   const picker = await sourcePicker({ label: 'ขายจาก', onChange: (item) => { count.value = '1'; count.max = String(item.count); } });
   box.append(picker.el);
   if (!picker.items.length) return;
@@ -1089,7 +1092,7 @@ async function auctionList(panel, mineOnly) {
     for (const a of list) {
       const isCell = a.kind === 'CELL';
       const open = auctionOpen(a);
-      const bid = el('input', { class: 'input', type: 'number', min: String(a.minBid || a.startPrice), value: String(a.minBid || a.startPrice), inputmode: 'numeric', 'aria-label': isCell ? 'ราคาประมูลเขต' : 'ราคาประมูล' });
+      const bid = el('input', { class: 'input', type: 'text', min: String(a.minBid || a.startPrice), value: String(a.minBid || a.startPrice), inputmode: 'numeric', 'aria-label': isCell ? 'ราคาประมูลเขต' : 'ราคาประมูล' });
       const main = isCell
         ? el('div', { class: 'item-main' },
             el('span', { class: 'item-title' }, 'เขต ' + txt(a.cellId, '-')),
@@ -1204,7 +1207,7 @@ async function pageWallet(view) {
 
   const names = await fetchNames();
   const dd = dropdown({ label: 'ผู้รับ', options: names.filter((n) => n !== state.me.name), placeholder: 'เลือกผู้เล่น', searchable: true, name: 'to' });
-  const amount = el('input', { class: 'input', type: 'number', min: '1', inputmode: 'numeric', placeholder: 'จำนวนเงิน' });
+  const amount = el('input', { class: 'input', type: 'text', min: '1', inputmode: 'numeric', placeholder: 'จำนวนเงิน' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { class: 'row sticky-actions', novalidate: true },
     dd.el,
@@ -1357,7 +1360,7 @@ async function adminMoney(box) {
   const names = await fetchNames();
   const player = dropdown({ label: 'ผู้เล่น', options: names, placeholder: 'เลือกผู้เล่น', searchable: true, name: 'player' });
   const op = dropdown({ label: 'การกระทำ', options: [{ value: 'give', label: 'เพิ่ม' }, { value: 'take', label: 'ลด' }, { value: 'set', label: 'ตั้งเป็น' }], value: 'give', name: 'op' });
-  const amount = el('input', { class: 'input', type: 'number', min: '0', inputmode: 'numeric' });
+  const amount = el('input', { class: 'input', type: 'text', min: '0', inputmode: 'numeric' });
   const reason = el('input', { class: 'input', type: 'text', maxLength: '200', placeholder: 'เหตุผล 3–200 ตัวอักษร' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { class: 'stack', novalidate: true },
@@ -1377,7 +1380,7 @@ async function adminMoney(box) {
 
 function adminPrices(box) {
   const item = el('input', { class: 'input', type: 'text', placeholder: 'minecraft:stone' });
-  const base = el('input', { class: 'input', type: 'number', min: '1', inputmode: 'numeric', placeholder: 'เว้นว่างเพื่อล้าง' });
+  const base = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'เว้นว่างเพื่อล้าง' });
   const reason = el('input', { class: 'input', type: 'text', maxLength: '200', placeholder: 'เหตุผล 3–200 ตัวอักษร' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { class: 'stack', novalidate: true },
@@ -1436,9 +1439,9 @@ async function adminAuctions(box) {
 
 async function adminCellAuctions(box) {
   const cellId = el('input', { class: 'input', type: 'text', placeholder: 'เช่น 0,0', maxLength: '32' });
-  const start = el('input', { class: 'input', type: 'number', min: '1', value: '100', inputmode: 'numeric' });
-  const buyout = el('input', { class: 'input', type: 'number', min: '1', inputmode: 'numeric', placeholder: 'ไม่บังคับ' });
-  const hours = el('input', { class: 'input', type: 'number', min: '1', max: '168', value: '24', inputmode: 'numeric' });
+  const start = el('input', { class: 'input', type: 'text', value: '100', inputmode: 'numeric' });
+  const buyout = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ' });
+  const hours = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric' });
   const reason = el('input', { class: 'input', type: 'text', maxLength: '200', placeholder: 'เหตุผล 3–200 ตัวอักษร' });
   const error = el('p', { class: 'err', role: 'alert' });
   const form = el('form', { class: 'stack', novalidate: true },
@@ -1497,9 +1500,9 @@ async function adminConsign(box) {
     if (!list.length) { box.append(emptyState('ยังไม่มีของฝาก', 'ผู้เล่นส่งของได้ที่หน้าขาย')); return; }
     const rows = el('div', { class: 'rows' });
     for (const c of list) {
-      const start = el('input', { class: 'input', type: 'number', min: '1', value: '1', inputmode: 'numeric', 'aria-label': 'ราคาเริ่มต้น' });
-      const buyout = el('input', { class: 'input', type: 'number', min: '1', inputmode: 'numeric', placeholder: 'ไม่บังคับ', 'aria-label': 'ซื้อทันที' });
-      const hours = el('input', { class: 'input', type: 'number', min: '1', max: '168', value: '24', inputmode: 'numeric', 'aria-label': 'ชั่วโมง' });
+      const start = el('input', { class: 'input', type: 'text', value: '1', inputmode: 'numeric', 'aria-label': 'ราคาเริ่มต้น' });
+      const buyout = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ', 'aria-label': 'ซื้อทันที' });
+      const hours = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric', 'aria-label': 'ชั่วโมง' });
       rows.append(el('div', { class: 'item' },
         el('div', { class: 'item-main' }, itemHeading(c.itemId, `${txt(c.label, txt(c.itemId, 'ไอเท็ม'))} ×${num(c.count)}`), el('span', { class: 'item-meta' }, `จาก ${txt(c.fromName, 'ไม่ทราบชื่อ')} · ${clock(c.t)}`)),
         el('div', { class: 'item-form' },

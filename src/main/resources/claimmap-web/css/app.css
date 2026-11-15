@@ -117,15 +117,21 @@ button { touch-action: manipulation; }
   text-transform: uppercase; color: var(--muted);
 }
 .req { color: var(--accent); }
-.input, textarea.input, select.input {
+input, .input, textarea.input, select.input {
   width: 100%; min-height: 48px; padding: 0 12px;
   background: var(--surface); border: 1px solid var(--line); color: var(--text);
   font-size: 16px; appearance: none;
 }
 textarea.input { min-height: 96px; padding: 12px; resize: vertical; }
 .input::placeholder { color: #8A8A8A; }
-.input:focus { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
-.input:focus:not(:focus-visible) { outline: none; }
+input:focus, input:focus-visible,
+.input:focus, .input:focus-visible,
+textarea.input:focus, textarea.input:focus-visible,
+select.input:focus, select.input:focus-visible {
+  border-color: var(--accent);
+  outline: none !important;
+  box-shadow: none !important;
+}
 .input[aria-invalid="true"] { border-color: var(--accent); }
 .input:disabled { opacity: .4; cursor: not-allowed; }
 .helper { color: var(--muted); font-size: var(--fs-2); }
@@ -323,7 +329,7 @@ dialog::backdrop { background: #000; opacity: .75; }
   width: 100%; min-height: 40px; padding: 0 12px; background: var(--surface);
   border: 0; border-bottom: 1px solid var(--line); color: var(--text); font-size: 16px;
 }
-.dd-search:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dd-search:focus, .dd-search:focus-visible { outline: none !important; border-bottom-color: var(--accent); }
 .dd-list { min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; border-top: 1px solid var(--line); }
 .dd-list::-webkit-scrollbar { width: 6px; }
 .dd-option {
