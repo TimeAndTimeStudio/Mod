@@ -12,17 +12,15 @@ import net.minecraft.server.permissions.Permissions;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import studio.timeandtime.claimmap.AuthGate;
 import studio.timeandtime.claimmap.ClaimMap;
+import studio.timeandtime.claimmap.CommandFilter;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Filters commands sent to regular players so they only see mod commands
@@ -43,36 +41,6 @@ public abstract class CommandsMixin {
 		throw new AssertionError();
 	}
 
-	@Unique
-	private static final Set<String> ALLOWED_MOD_COMMANDS = Set.of(
-			"pass", "bal", "pay", "sell", "buy", "mail", "ah",
-			"claim", "claimmap", "main", "spawn", "world",
-			"tp", "tpa", "tpaccept", "tpdeny", "tpacancel"
-	);
-
-	@Unique
-	private static final Set<String> ALLOWED_WHISPER_COMMANDS = Set.of(
-			"msg", "tell", "w"
-	);
-
-	@Unique
-	static boolean isAllowedCommand(String name, ClaimMap mod) {
-		if (name == null || name.isBlank()) return false;
-		String lower = name.toLowerCase(Locale.ROOT);
-		if (ALLOWED_WHISPER_COMMANDS.contains(lower) || ALLOWED_MOD_COMMANDS.contains(lower)) {
-			return true;
-		}
-		// Dynamic world commands from WorldManager
-		if (mod != null && mod.worldManager() != null) {
-			for (var info : mod.worldManager().snapshot()) {
-				if (info.name().equalsIgnoreCase(lower)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
 	@Inject(method = "sendCommands", at = @At("HEAD"), cancellable = true)
 	private void claimmap$filterCommands(ServerPlayer player, CallbackInfo ci) {
 		if (player == null) return;
@@ -90,7 +58,7 @@ public abstract class CommandsMixin {
 
 		RootCommandNode<CommandSourceStack> filteredRoot = new RootCommandNode<>();
 		for (CommandNode<CommandSourceStack> child : fullRoot.getChildren()) {
-			if (isAllowedCommand(child.getName(), mod)) {
+			if (CommandFilter.isAllowedCommand(child.getName(), mod)) {
 				filteredRoot.addChild(child);
 			}
 		}
@@ -119,7 +87,7 @@ public abstract class CommandsMixin {
 		if (trimmed.startsWith("/")) trimmed = trimmed.substring(1);
 		int space = trimmed.indexOf(' ');
 		String rootName = space > 0 ? trimmed.substring(0, space) : trimmed;
-		if (!isAllowedCommand(rootName, mod)) {
+		if (!CommandFilter.isAllowedCommand(rootName, mod)) {
 			player.sendSystemMessage(Component.literal("§cคำสั่งนี้ไม่อนุญาตสำหรับผู้เล่นทั่วไป"));
 			ci.cancel();
 		}
