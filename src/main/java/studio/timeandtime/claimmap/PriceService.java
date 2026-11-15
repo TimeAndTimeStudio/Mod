@@ -31,6 +31,8 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +49,14 @@ import java.util.function.LongSupplier;
 public final class PriceService {
 	/** Buy/sell pair for one item. */
 	public record PricePair(long buy, long sell) {
+	}
+
+	public record PriceHistoryPoint(long t, long price, int sold) {
+	}
+
+	public record ItemPriceDetail(String id, long nominalBase, long effectiveBase,
+			long buyPrice, long sellPrice, double multiplier, int soldUnits,
+			boolean blocked, boolean overridden) {
 	}
 
 	/** Parses one price cell: integer coins per item, rounded HALF_UP, bounds-checked. */
@@ -69,9 +79,13 @@ public final class PriceService {
 	private final Path dir;
 	private final Path cacheFile;
 	private final Path overridesFile;
+	private final Path dynamicsFile;
 	private final ClaimMapConfig cfg;
 	private final LongSupplier now;
 	private final HttpClient http;
+
+	private final Map<String, Integer> soldUnits = new ConcurrentHashMap<>();
+	private final Map<String, List<PriceHistoryPoint>> history = new ConcurrentHashMap<>();
 
 	private volatile Map<String, Long> webPrices = Map.of();
 	private volatile Map<String, Long> overrides = Map.of();
@@ -89,6 +103,7 @@ public final class PriceService {
 		this.dir = dir;
 		this.cacheFile = dir.resolve("prices-cache.json");
 		this.overridesFile = dir.resolve("price-overrides.json");
+		this.dynamicsFile = dir.resolve("price-dynamics.json");
 		this.cfg = cfg;
 		this.now = now;
 		this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
@@ -103,6 +118,7 @@ public final class PriceService {
 		synchronized (Market.LOCK) {
 			readCacheFile();
 			readOverridesFile();
+			readDynamicsFile();
 		}
 		ClaimMap.LOGGER.info("[claimmap] Prices loaded: {} web entries, {} overrides, {} blocked",
 				webPrices.size(), overrides.size(), blockedCount());
@@ -163,6 +179,72 @@ public final class PriceService {
 			}
 		}
 		return Set.copyOf(out);
+	}
+
+	private void readDynamicsFile() {
+		if (!Files.exists(dynamicsFile)) return;
+		try {
+			JsonObject root = JsonParser.parseString(Files.readString(dynamicsFile, StandardCharsets.UTF_8)).getAsJsonObject();
+			if (root.has("sold") && root.get("sold").isJsonObject()) {
+				JsonObject soldObj = root.getAsJsonObject("sold");
+				for (Map.Entry<String, JsonElement> e : soldObj.entrySet()) {
+					if (e.getValue().isJsonPrimitive()) {
+						soldUnits.put(normalize(e.getKey()), e.getValue().getAsInt());
+					}
+				}
+			}
+			if (root.has("history") && root.get("history").isJsonObject()) {
+				JsonObject histObj = root.getAsJsonObject("history");
+				for (Map.Entry<String, JsonElement> e : histObj.entrySet()) {
+					if (e.getValue().isJsonArray()) {
+						List<PriceHistoryPoint> points = new CopyOnWriteArrayList<>();
+						for (JsonElement item : e.getValue().getAsJsonArray()) {
+							if (item.isJsonObject()) {
+								JsonObject p = item.getAsJsonObject();
+								long t = p.has("t") ? p.get("t").getAsLong() : 0L;
+								long pr = p.has("price") ? p.get("price").getAsLong() : 0L;
+								int s = p.has("sold") ? p.get("sold").getAsInt() : 0;
+								points.add(new PriceHistoryPoint(t, pr, s));
+							}
+						}
+						history.put(normalize(e.getKey()), points);
+					}
+				}
+			}
+		} catch (Exception e) {
+			ClaimMap.LOGGER.warn("[claimmap] Could not read price-dynamics.json ({})", e.getMessage());
+		}
+	}
+
+	public void writeDynamicsFile() {
+		JsonObject root = new JsonObject();
+		JsonObject soldObj = new JsonObject();
+		for (Map.Entry<String, Integer> e : soldUnits.entrySet()) {
+			soldObj.addProperty(e.getKey(), e.getValue());
+		}
+		root.add("sold", soldObj);
+		JsonObject histObj = new JsonObject();
+		for (Map.Entry<String, List<PriceHistoryPoint>> e : history.entrySet()) {
+			JsonArray arr = new JsonArray();
+			for (PriceHistoryPoint p : e.getValue()) {
+				JsonObject po = new JsonObject();
+				po.addProperty("t", p.t());
+				po.addProperty("price", p.price());
+				po.addProperty("sold", p.sold());
+				arr.add(po);
+			}
+			histObj.add(e.getKey(), arr);
+		}
+		root.add("history", histObj);
+		try {
+			Path parent = dynamicsFile.getParent();
+			if (parent != null) Files.createDirectories(parent);
+			Path tmp = dynamicsFile.resolveSibling(dynamicsFile.getFileName() + ".tmp");
+			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
+			Files.move(tmp, dynamicsFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} catch (IOException e) {
+			ClaimMap.LOGGER.error("[claimmap] Could not write price-dynamics.json", e);
+		}
 	}
 
 	// ---- refresh ------------------------------------------------------------
@@ -296,12 +378,57 @@ public final class PriceService {
 
 	// ---- queries ------------------------------------------------------------
 
-	public OptionalLong base(String itemId) {
+	public void recordSale(String rawItem, int qty) {
+		String id = normalize(rawItem);
+		if (id.isEmpty() || qty <= 0) return;
+		soldUnits.merge(id, qty, Integer::sum);
+		long curSell = sellPrice(id).orElse(1L);
+		List<PriceHistoryPoint> list = history.computeIfAbsent(id, k -> new CopyOnWriteArrayList<>());
+		list.add(new PriceHistoryPoint(now.getAsLong(), curSell, qty));
+		while (list.size() > 50) {
+			list.remove(0);
+		}
+		writeDynamicsFile();
+	}
+
+	public void recordBuy(String rawItem, int qty) {
+		String id = normalize(rawItem);
+		if (id.isEmpty() || qty <= 0) return;
+		soldUnits.compute(id, (k, v) -> v == null ? 0 : Math.max(0, v - qty));
+		writeDynamicsFile();
+	}
+
+	public double multiplier(String rawItem) {
+		String id = normalize(rawItem);
+		int sold = soldUnits.getOrDefault(id, 0);
+		if (sold <= 0) return 1.0;
+		// Smooth saturation curve: e.g. at 100 sold ~87%, at 500 sold ~57%, at 1000 sold ~40%, minimum floor 0.20 (20%)
+		return Math.max(0.20, 1.0 / (1.0 + (sold * 0.0015)));
+	}
+
+	public int getSoldUnits(String rawItem) {
+		return soldUnits.getOrDefault(normalize(rawItem), 0);
+	}
+
+	public List<PriceHistoryPoint> getHistory(String rawItem) {
+		List<PriceHistoryPoint> list = history.get(normalize(rawItem));
+		return list == null ? List.of() : List.copyOf(list);
+	}
+
+	public OptionalLong nominalBase(String itemId) {
 		String id = normalize(itemId);
 		Long o = overrides.get(id);
 		if (o != null) return OptionalLong.of(o);
 		Long w = webPrices.get(id);
 		return w == null ? OptionalLong.empty() : OptionalLong.of(w);
+	}
+
+	public OptionalLong base(String itemId) {
+		OptionalLong nom = nominalBase(itemId);
+		if (nom.isEmpty()) return OptionalLong.empty();
+		double mult = multiplier(itemId);
+		long eff = Math.max(1L, Math.round(nom.getAsLong() * mult));
+		return OptionalLong.of(eff);
 	}
 
 	public OptionalLong buyPrice(String itemId) {
@@ -334,11 +461,34 @@ public final class PriceService {
 		Map<String, PricePair> out = new LinkedHashMap<>();
 		for (String id : keys) {
 			if (isBlocked(id)) continue;
-			long base = ov.getOrDefault(id, web.getOrDefault(id, 0L));
-			if (base < 1) continue;
+			OptionalLong b = base(id);
+			if (b.isEmpty() || b.getAsLong() < 1) continue;
+			long base = b.getAsLong();
 			out.put(id, new PricePair(
 					PriceMath.buyPrice(base, cfg.sellPercent, cfg.buyPercent),
 					PriceMath.sellPrice(base, cfg.sellPercent)));
+		}
+		return out;
+	}
+
+	public List<ItemPriceDetail> detailsSnapshot() {
+		Map<String, Long> ov = overrides;
+		Map<String, Long> web = webPrices;
+		TreeSet<String> keys = new TreeSet<>();
+		keys.addAll(web.keySet());
+		keys.addAll(ov.keySet());
+		List<ItemPriceDetail> out = new ArrayList<>();
+		for (String id : keys) {
+			boolean blocked = isBlocked(id);
+			boolean overridden = ov.containsKey(id);
+			long nom = ov.getOrDefault(id, web.getOrDefault(id, 0L));
+			if (nom < 1) continue;
+			double mult = multiplier(id);
+			long eff = Math.max(1L, Math.round(nom * mult));
+			long buy = PriceMath.buyPrice(eff, cfg.sellPercent, cfg.buyPercent);
+			long sell = PriceMath.sellPrice(eff, cfg.sellPercent);
+			int sold = soldUnits.getOrDefault(id, 0);
+			out.add(new ItemPriceDetail(id, nom, eff, buy, sell, mult, sold, blocked, overridden));
 		}
 		return out;
 	}

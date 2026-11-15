@@ -57,6 +57,7 @@ public class ClaimMap implements ModInitializer {
 	private PlayerItemStore playerItems;
 	private AuditLog audit;
 	private AdminService admin;
+	private SalesTracker salesTracker;
 	private studio.timeandtime.claimmap.world.WorldManager worldManager;
 	private AuthGate authGate;
 	private WebServer web;
@@ -80,6 +81,7 @@ public class ClaimMap implements ModInitializer {
 		economy = new EconomyManager(config.dataDir(), config, System::currentTimeMillis);
 		economy.load();
 		authGate = new AuthGate(config, accounts, links, economy);
+		seedDefaultPricesIfMissing(config.dataDir().resolve("prices-cache.json"));
 		prices = new PriceService(config.dataDir(), config, System::currentTimeMillis);
 		prices.loadCache();
 		mailbox = new MailboxManager(config.mailboxFile(), System::currentTimeMillis, config.mailboxMaxEntries);
@@ -94,8 +96,11 @@ public class ClaimMap implements ModInitializer {
 		playerItems = new PlayerItemStore(config.playerItemsDir());
 		playerMarket = new PlayerMarket(config.dataDir(), config, economy, mailbox, System::currentTimeMillis);
 		playerMarket.load();
+		salesTracker = new SalesTracker(config.dataDir(), System::currentTimeMillis);
 		shop = new ShopManager(config, economy, mailbox, prices, System::currentTimeMillis);
 		shop.attachAuctions(auctions);
+		shop.attachSalesTracker(salesTracker);
+		shop.attachAccounts(accounts);
 		audit = new AuditLog(config.dataDir(), System::currentTimeMillis);
 		admin = new AdminService(config, economy, accounts, links, prices, auctions, mailbox, shop, audit,
 				consignments,
@@ -103,10 +108,11 @@ public class ClaimMap implements ModInitializer {
 					MinecraftServer s = server;
 					return s != null && s.getPlayerList().getPlayer(uuid) != null;
 				});
+		admin.attachSalesTracker(salesTracker);
 		protection = new Protection(regions);
 		PlayerPositions.init(config.dataDir());
 		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions,
-				playerMarket, consignments, admin, playerItems, worldManager);
+				playerMarket, consignments, admin, playerItems, worldManager, salesTracker);
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
 			if (worldManager != null) worldManager.tick();
@@ -183,5 +189,18 @@ public class ClaimMap implements ModInitializer {
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			if (worldManager != null) worldManager.closeStorage();
 		});
+	}
+
+	private static void seedDefaultPricesIfMissing(java.nio.file.Path cacheFile) {
+		if (java.nio.file.Files.exists(cacheFile)) return;
+		try (var in = ClaimMap.class.getResourceAsStream("/default-prices.json")) {
+			if (in != null) {
+				java.nio.file.Files.createDirectories(cacheFile.getParent());
+				java.nio.file.Files.copy(in, cacheFile);
+				LOGGER.info("[claimmap] Seeded initial prices-cache.json from default-prices.json");
+			}
+		} catch (Exception e) {
+			LOGGER.warn("[claimmap] Could not seed default-prices.json: {}", e.getMessage());
+		}
 	}
 }

@@ -1,5 +1,8 @@
 package studio.timeandtime.claimmap.world;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -36,6 +39,7 @@ import studio.timeandtime.claimmap.ClaimMapConfig;
 import studio.timeandtime.claimmap.mixin.ServerLevelsAccessor;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -43,10 +47,14 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -76,14 +84,22 @@ public final class WorldManager {
 	private volatile boolean stopping;
 	private int tickCounter;
 
+	public record MainWorldPos(double x, double y, double z, float yaw, float pitch) {
+	}
+
+	private final Map<UUID, MainWorldPos> mainWorldPositions = new ConcurrentHashMap<>();
+	private volatile Path positionsFile;
+
 	public record WorldInfo(String name, String folder, WorldState state, boolean loaded, int players,
 			boolean present, boolean commandAvailable, String commandConflict, String error) {
 	}
 
 	public WorldManager(ClaimMapConfig config) {
 		this.config = config;
-		CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) ->
-				registerAdminCommand(dispatcher));
+		CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
+			registerAdminCommand(dispatcher);
+			registerPlayerCommands(dispatcher);
+		});
 	}
 
 	public String inventoryPolicy() {
@@ -113,8 +129,69 @@ public final class WorldManager {
 		} catch (IOException e) {
 			LOGGER.error("[worlds] Could not create {}: {}", directory, e.getMessage());
 		}
+		this.positionsFile = directory.resolve(".main_world_positions.json");
+		loadMainWorldPositions();
 		scanLocked();
+		if (worlds.isEmpty()) {
+			tryCreateDefaultWorld("resource");
+			scanLocked();
+		}
 		LOGGER.info("[worlds] Using {} ({} world(s), shared inventory)", directory, worlds.size());
+	}
+
+	private void tryCreateDefaultWorld(String name) {
+		try {
+			Path worldFolder = directory.resolve(name);
+			if (Files.exists(worldFolder)) return;
+			Files.createDirectories(worldFolder);
+			Path mainLevelDat = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("level.dat");
+			if (Files.exists(mainLevelDat)) {
+				Files.copy(mainLevelDat, worldFolder.resolve("level.dat"));
+				LOGGER.info("[worlds] Created default testing world '{}'", name);
+			}
+		} catch (Exception e) {
+			LOGGER.warn("[worlds] Could not create default world '{}': {}", name, e.getMessage());
+		}
+	}
+
+	private void loadMainWorldPositions() {
+		if (positionsFile == null || !Files.exists(positionsFile)) return;
+		try {
+			JsonObject root = JsonParser.parseString(Files.readString(positionsFile, StandardCharsets.UTF_8)).getAsJsonObject();
+			for (Map.Entry<String, JsonElement> e : root.entrySet()) {
+				if (!e.getValue().isJsonObject()) continue;
+				JsonObject o = e.getValue().getAsJsonObject();
+				UUID u = UUID.fromString(e.getKey());
+				mainWorldPositions.put(u, new MainWorldPos(
+						o.get("x").getAsDouble(),
+						o.get("y").getAsDouble(),
+						o.get("z").getAsDouble(),
+						o.has("yaw") ? o.get("yaw").getAsFloat() : 0f,
+						o.has("pitch") ? o.get("pitch").getAsFloat() : 0f
+				));
+			}
+		} catch (Exception e) {
+			LOGGER.warn("[worlds] Could not read main world positions: {}", e.getMessage());
+		}
+	}
+
+	private void saveMainWorldPositions() {
+		if (positionsFile == null) return;
+		try {
+			JsonObject root = new JsonObject();
+			for (Map.Entry<UUID, MainWorldPos> e : mainWorldPositions.entrySet()) {
+				JsonObject o = new JsonObject();
+				o.addProperty("x", e.getValue().x());
+				o.addProperty("y", e.getValue().y());
+				o.addProperty("z", e.getValue().z());
+				o.addProperty("yaw", e.getValue().yaw());
+				o.addProperty("pitch", e.getValue().pitch());
+				root.add(e.getKey().toString(), o);
+			}
+			Files.writeString(positionsFile, root.toString(), StandardCharsets.UTF_8);
+		} catch (Exception e) {
+			LOGGER.warn("[worlds] Could not save main world positions: {}", e.getMessage());
+		}
 	}
 
 	public void tick() {
@@ -433,14 +510,94 @@ public final class WorldManager {
 	private void teleportLocked(ServerPlayer player, WorldDefinition def) {
 		ServerLevel destination = def.level;
 		if (destination == null) throw new IllegalStateException("โลกยังโหลดไม่เสร็จ");
-		BlockPos pos = spawnPos(destination);
-		double y = destination.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ()) + 1.0;
-		Vec3 target = new Vec3(pos.getX() + 0.5, Math.max(y, destination.getMinY() + 1), pos.getZ() + 0.5);
+
+		// If player is leaving the main overworld, remember where they were so they return here
+		if (player.level() == server.overworld()) {
+			mainWorldPositions.put(player.getUUID(), new MainWorldPos(
+					player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot()));
+			saveMainWorldPositions();
+		}
+
+		// Randomize X and Z every time!
+		ThreadLocalRandom rnd = ThreadLocalRandom.current();
+		int range = 2500;
+		int rx = 0;
+		int rz = 0;
+		int ry = 64;
+		boolean safe = false;
+		for (int attempt = 0; attempt < 25; attempt++) {
+			rx = rnd.nextInt(-range, range + 1);
+			rz = rnd.nextInt(-range, range + 1);
+			destination.getChunk(rx >> 4, rz >> 4);
+			ry = destination.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, rx, rz) + 1;
+			if (ry > destination.getMinY() + 5) {
+				BlockPos under = new BlockPos(rx, ry - 1, rz);
+				net.minecraft.world.level.block.state.BlockState bs = destination.getBlockState(under);
+				if (!bs.isAir() && !bs.liquid()) {
+					safe = true;
+					break;
+				}
+			}
+		}
+		if (!safe) {
+			BlockPos pos = spawnPos(destination);
+			rx = pos.getX(); rz = pos.getZ(); ry = pos.getY();
+		}
+
+		Vec3 target = new Vec3(rx + 0.5, Math.max(ry, destination.getMinY() + 1), rz + 0.5);
 		TeleportTransition transition = new TeleportTransition(destination, target, Vec3.ZERO,
-				0f, 0f, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
+				player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
 		ServerPlayer moved = player.teleport(transition);
 		if (moved == null) throw new IllegalStateException("ย้ายผู้เล่นไม่สำเร็จ");
-		moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " แล้ว"));
+		moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") แล้ว"));
+	}
+
+	public void teleportToMainWorld(ServerPlayer player) {
+		MinecraftServer s = server;
+		if (s == null) throw new IllegalStateException("เซิร์ฟเวอร์ยังไม่พร้อม");
+		ServerLevel mainWorld = s.overworld();
+		if (player.level() == mainWorld) {
+			player.sendSystemMessage(Component.literal("คุณอยู่ในโลกหลักอยู่แล้ว"));
+			return;
+		}
+		MainWorldPos saved = mainWorldPositions.get(player.getUUID());
+		Vec3 target;
+		float yaw = 0f;
+		float pitch = 0f;
+		if (saved != null) {
+			target = new Vec3(saved.x(), saved.y(), saved.z());
+			yaw = saved.yaw();
+			pitch = saved.pitch();
+		} else {
+			BlockPos sp = spawnPos(mainWorld);
+			target = new Vec3(sp.getX() + 0.5, sp.getY(), sp.getZ() + 0.5);
+		}
+		TeleportTransition transition = new TeleportTransition(mainWorld, target, Vec3.ZERO,
+				yaw, pitch, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
+		ServerPlayer moved = player.teleport(transition);
+		if (moved == null) throw new IllegalStateException("ย้ายผู้เล่นไม่สำเร็จ");
+		moved.sendSystemMessage(Component.literal(saved != null ? "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว" : "กลับสู่จุดเกิดโลกหลักแล้ว"));
+	}
+
+	public WorldInfo createWorld(String name) throws Exception {
+		return onServer(() -> {
+			String cleanName = name.toLowerCase(Locale.ROOT).trim();
+			if (!WorldScanner.SAFE_NAME.matcher(cleanName).matches()) {
+				throw new IllegalArgumentException("ชื่อโลกไม่ถูกต้อง (ต้องเป็น a-z, 0-9, _ หรือ - และยาวไม่เกิน 32)");
+			}
+			Path worldFolder = directory.resolve(cleanName);
+			if (Files.exists(worldFolder)) {
+				throw new IllegalStateException("มีโฟลเดอร์โลกชื่อ " + cleanName + " อยู่แล้ว");
+			}
+			Files.createDirectories(worldFolder);
+			Path mainLevelDat = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("level.dat");
+			if (Files.exists(mainLevelDat)) {
+				Files.copy(mainLevelDat, worldFolder.resolve("level.dat"));
+			}
+			scanLocked();
+			WorldDefinition def = require(cleanName);
+			return info(def);
+		});
 	}
 
 	private BlockPos spawnPos(ServerLevel level) {
@@ -463,6 +620,9 @@ public final class WorldManager {
 				.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN));
 		root.then(Commands.literal("list").executes(ctx -> listCommand(ctx.getSource())));
 		root.then(Commands.literal("scan").executes(ctx -> scanCommand(ctx.getSource())));
+		root.then(Commands.literal("create")
+				.then(Commands.argument("name", StringArgumentType.word())
+						.executes(ctx -> createCommand(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));
 		root.then(Commands.literal("load")
 				.then(Commands.argument("name", StringArgumentType.word())
 						.executes(ctx -> loadCommand(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));
@@ -522,6 +682,63 @@ public final class WorldManager {
 		def.commandAvailable = true;
 		def.commandConflict = null;
 		sendCommands();
+	}
+
+	private void registerPlayerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+		dispatcher.register(Commands.literal("main").executes(ctx -> {
+			ServerPlayer p = ctx.getSource().getPlayer();
+			if (p == null) {
+				ctx.getSource().sendFailure(Component.literal("คำสั่งนี้ใช้ได้เฉพาะผู้เล่น"));
+				return 0;
+			}
+			teleportToMainWorld(p);
+			return 1;
+		}));
+
+		dispatcher.register(Commands.literal("spawn").executes(ctx -> {
+			ServerPlayer p = ctx.getSource().getPlayer();
+			if (p == null) {
+				ctx.getSource().sendFailure(Component.literal("คำสั่งนี้ใช้ได้เฉพาะผู้เล่น"));
+				return 0;
+			}
+			teleportToMainWorld(p);
+			return 1;
+		}));
+
+		dispatcher.register(Commands.literal("world")
+				.then(Commands.argument("name", StringArgumentType.word())
+						.executes(ctx -> {
+							ServerPlayer p = ctx.getSource().getPlayer();
+							if (p == null) {
+								ctx.getSource().sendFailure(Component.literal("คำสั่งนี้ใช้ได้เฉพาะผู้เล่น"));
+								return 0;
+							}
+							String name = StringArgumentType.getString(ctx, "name").toLowerCase(Locale.ROOT);
+							if (name.equals("main") || name.equals("world") || name.equals("overworld")) {
+								teleportToMainWorld(p);
+								return 1;
+							}
+							try {
+								WorldDefinition def = require(name);
+								loadLocked(def);
+								teleportLocked(p, def);
+								return 1;
+							} catch (Exception e) {
+								ctx.getSource().sendFailure(Component.literal(e.getMessage()));
+								return 0;
+							}
+						})));
+	}
+
+	private int createCommand(CommandSourceStack source, String name) {
+		try {
+			WorldInfo info = createWorld(name);
+			source.sendSuccess(() -> Component.literal("สร้างโลก " + info.name() + " สำเร็จแล้ว พิมพ์ /" + info.name() + " เพื่อย้ายไป"), true);
+			return 1;
+		} catch (Exception e) {
+			source.sendFailure(Component.literal("สร้างโลกไม่สำเร็จ: " + e.getMessage()));
+			return 0;
+		}
 	}
 
 	private void unregisterWorldCommand(WorldDefinition def) {

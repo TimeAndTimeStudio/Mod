@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
  */
 public final class WorldScanner {
 	/** Safe subset of names that can be used as a Brigadier literal. */
-	private static final Pattern SAFE_NAME = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,31}$");
+	public static final Pattern SAFE_NAME = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,31}$");
 
 	public record Candidate(String folderName, String name, Path folder, boolean valid, String reason) {
 	}

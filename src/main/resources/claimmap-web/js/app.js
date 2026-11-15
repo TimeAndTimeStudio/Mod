@@ -369,6 +369,7 @@ const NAV = [
   { id: 'map', label: 'แผนที่' },
   { id: 'buy', label: 'ซื้อ' },
   { id: 'sell', label: 'ขาย' },
+  { id: 'trends', label: 'กราฟราคา' },
   { id: 'auction', label: 'ประมูล' },
   { id: 'wallet', label: 'เงิน' },
   { id: 'mailbox', label: 'กล่อง' },
@@ -470,7 +471,7 @@ async function fetchNames() {
 }
 
 /* ---------- router ---------- */
-const PAGES = { home: pageHome, map: pageMap, buy: pageBuy, sell: pageSell, auction: pageAuction, wallet: pageWallet, mailbox: pageMailbox, about: pageAbout, admin: pageAdmin, login: pageLogin };
+const PAGES = { home: pageHome, map: pageMap, buy: pageBuy, sell: pageSell, trends: pageTrends, auction: pageAuction, wallet: pageWallet, mailbox: pageMailbox, about: pageAbout, admin: pageAdmin, login: pageLogin };
 
 function render() {
   closeOpenDD(false);
@@ -710,7 +711,8 @@ async function pageMap(view) {
         el('span', { class: 'item-meta' }, `${owner ? 'เจ้าของ ' + owner : 'ยังไม่มีเจ้าของ'} · X ${cx * 500}–${cx * 500 + 499} · Z ${cz * 500}–${cz * 500 + 499}`)),
       el('div', { class: 'item-side' },
         !owner ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, 'จองช่องนี้') : null,
-        (mine || state.me?.admin) && owner ? el('button', { class: 'btn danger', type: 'button', onclick: () => removeCell(selected) }, 'ปล่อยช่อง') : null)));
+        (mine || state.me?.admin) && owner ? el('button', { class: 'btn danger', type: 'button', onclick: () => removeCell(selected) }, 'ปล่อยช่อง') : null,
+        state.me?.admin ? el('button', { class: 'btn secondary', type: 'button', onclick: () => adminAuctionCellDialog(selected) }, 'ประมูลเขต') : null)));
     if (owner && (mine || state.me?.admin)) {
       const form = el('div', { class: 'item-form' });
       const dd = dropdown({ label: 'โอนให้', options: (state.names || []).filter((n) => n !== owner), placeholder: 'เลือกผู้เล่น', searchable: true, onChange: () => {} });
@@ -737,6 +739,51 @@ async function pageMap(view) {
     if (!await confirmDialog({ title: 'โอนเขต ' + id, body: `โอนให้ ${to}`, confirm: 'โอนเขต' })) return;
     try { await api('POST', `/api/cells/${id}/transfer`, { to }); toast('โอนเขตแล้ว'); await reload(); }
     catch (error) { toastError(error); }
+  }
+  async function adminAuctionCellDialog(id) {
+    const dialog = $('#confirm');
+    clear(dialog);
+    const startInput = el('input', { class: 'input', type: 'text', value: '100', inputmode: 'numeric' });
+    const buyoutInput = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'ไม่บังคับ' });
+    const hoursInput = el('input', { class: 'input', type: 'text', value: '24', inputmode: 'numeric' });
+    const reasonInput = el('input', { class: 'input', type: 'text', value: 'เปิดประมูลจากแผนที่', maxLength: '200' });
+    const error = el('p', { class: 'err', role: 'alert' });
+    const form = el('form', { method: 'dialog', class: 'dialog-body' },
+      el('h2', {}, 'เปิดประมูลเขต ' + id),
+      el('p', { class: 'hint' }, 'ผู้ชนะการประมูลจะได้รับสิทธิ์เป็นเจ้าของเขตนี้แทน'),
+      el('div', { class: 'grid2' },
+        el('div', { class: 'field' }, el('label', {}, 'ราคาเริ่มต้น'), startInput),
+        el('div', { class: 'field' }, el('label', {}, 'ซื้อทันที'), buyoutInput)),
+      el('div', { class: 'grid2' },
+        el('div', { class: 'field' }, el('label', {}, 'ชั่วโมง'), hoursInput),
+        el('div', { class: 'field' }, el('label', {}, 'เหตุผล'), reasonInput)),
+      error,
+      el('div', { class: 'dialog-actions' },
+        el('button', { class: 'btn secondary', value: 'cancel', type: 'submit' }, 'ยกเลิก'),
+        el('button', { class: 'btn primary', value: 'ok', type: 'submit' }, 'เปิดประมูล')));
+    form.addEventListener('submit', async (event) => {
+      if (event.submitter?.value === 'cancel') return;
+      event.preventDefault();
+      error.textContent = '';
+      if (num(startInput.value) < 1) { error.textContent = 'ราคาเริ่มต้นต้องมากกว่า 0'; return; }
+      if (reasonInput.value.trim().length < 3) { error.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
+      try {
+        await api('POST', '/api/admin/cell-auctions', {
+          cellId: id,
+          startPrice: num(startInput.value),
+          buyout: buyoutInput.value.trim() ? num(buyoutInput.value) : null,
+          hours: num(hoursInput.value) || 24,
+          reason: reasonInput.value.trim(),
+        });
+        toast('เปิดประมูลเขต ' + id + ' แล้ว');
+        dialog.close('ok');
+        await reload();
+      } catch (err) {
+        error.textContent = errText(err);
+      }
+    });
+    dialog.append(form);
+    dialog.showModal();
   }
 
   let down = null;
@@ -1070,6 +1117,269 @@ async function sellShop(panel) {
   });
 }
 
+/* ---------- trends ---------- */
+async function pageTrends(view) {
+  if (requireAuth(view)) return;
+  const page = el('div', { class: 'page' });
+  page.append(pageHead('trends', 'กราฟราคาตลาด', 'สถิติการเคลื่อนไหวของราคาและระดับความต้องการของตลาดเซิร์ฟเวอร์'));
+  view.append(page);
+
+  const container = el('div', { class: 'stack', style: 'margin-top:24px' });
+  page.append(container);
+  loading(container);
+
+  try {
+    const res = await api('GET', '/api/prices/trends');
+    const items = res.items || [];
+    clear(container);
+
+    if (!items.length) {
+      container.append(emptyState('ไม่มีข้อมูลแนวโน้มราคา', 'ยังไม่มีข้อมูลการซื้อขายหรือราคาที่เปิดใช้งานในระบบ'));
+      return;
+    }
+
+    // Sort items initially by sold volume descending
+    items.sort((a, b) => (b.sold || 0) - (a.sold || 0));
+
+    let selectedId = items[0].itemId;
+
+    const topFilter = el('div', { class: 'grid2', style: 'align-items:flex-end;' });
+    const searchInput = el('input', {
+      type: 'text',
+      class: 'input',
+      placeholder: 'ค้นหาชื่อไอเท็ม (เช่น diamond, iron)...',
+      'aria-label': 'ค้นหาไอเท็ม'
+    });
+    topFilter.append(
+      el('div', { class: 'field' }, el('label', {}, 'ค้นหาไอเท็มในตลาด'), searchInput),
+      el('div', { style: 'padding-bottom:10px;' }, el('span', { class: 'mono muted' }, `ไอเท็มทั้งหมด: ${items.length} รายการ`))
+    );
+
+    const detailBox = el('div', { class: 'stack', style: 'gap:16px; margin-top:20px;' });
+
+    const tableWrap = el('div', { class: 'table-wrap' });
+    const table = el('table', { class: 'data-table' });
+    tableWrap.append(table);
+
+    function renderDetail(item) {
+      clear(detailBox);
+      const mult = Number(item.multiplier) || 1.0;
+      const isDepreciated = mult < 0.99;
+      const pct = Math.round(mult * 100);
+
+      const header = el('div', { class: 'card-head', style: 'display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;' },
+        el('div', { style: 'display:flex; align-items:center; gap:12px;' },
+          itemIcon(item.itemId),
+          el('div', {},
+            el('h3', { class: 'card-title' }, txt(item.itemId.replace('minecraft:', '').replace(/_/g, ' '))),
+            el('span', { class: 'mono muted', style: 'font-size:var(--fs-2)' }, item.itemId)
+          )
+        ),
+        el('span', { class: `badge ${isDepreciated ? 'danger' : 'accent'}` }, isDepreciated ? `ราคาปรับลง (${pct}%)` : 'ราคาปกติ (100%)')
+      );
+
+      const stats = el('div', { class: 'stats' },
+        el('div', { class: 'stat' }, el('strong', {}, money(item.sell) + ' ' + (res.currency || 'เหรียญ')), el('span', {}, `ราคาขายปัจจุบัน (ฐาน: ${money(item.base)})`)),
+        el('div', { class: 'stat' }, el('strong', {}, money(item.buy) + ' ' + (res.currency || 'เหรียญ')), el('span', {}, 'ราคาซื้อเข้าจากผู้เล่น')),
+        el('div', { class: 'stat' }, el('strong', {}, (item.sold || 0).toLocaleString() + ' ชิ้น'), el('span', {}, `ขายเข้าเซิร์ฟเวอร์แล้ว (ตัวคูณ: ${item.multiplier}x)`))
+      );
+
+      const chartTitle = el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-top:12px;' },
+        el('span', { class: 'mono muted', style: 'font-size:var(--fs-2); text-transform:uppercase; letter-spacing:0.05em;' }, 'แนวโน้มราคาตามความต้องการ (PRICE HISTORY & SATURATION)'),
+        el('span', { class: 'mono muted', style: 'font-size:var(--fs-1);' }, 'เส้นประ = ราคาฐานเดิม · เส้นส้ม = ราคาจริง')
+      );
+
+      const chartBox = el('div', { class: 'chart-box' });
+      const canvas = el('canvas', { class: 'chart-canvas' });
+      chartBox.append(canvas);
+
+      detailBox.append(header, stats, chartTitle, chartBox);
+
+      requestAnimationFrame(() => {
+        drawTrendChart(canvas, item.history || [], item.base, item.sell);
+      });
+    }
+
+    function renderTable(filterTerm = '') {
+      clear(table);
+      const q = filterTerm.trim().toLowerCase();
+      const filtered = items.filter(i => !q || i.itemId.toLowerCase().includes(q));
+
+      const thead = el('thead', {},
+        el('tr', {},
+          el('th', {}, 'ไอเท็ม'),
+          el('th', { style: 'text-align:right' }, 'ราคาขาย'),
+          el('th', { style: 'text-align:right' }, 'ราคาซื้อ'),
+          el('th', { style: 'text-align:center' }, 'ระดับราคา'),
+          el('th', { style: 'text-align:right' }, 'ขายแล้วสะสม'),
+          el('th', { style: 'text-align:center' }, 'เลือกดู')
+        )
+      );
+
+      const tbody = el('tbody');
+      if (!filtered.length) {
+        tbody.append(el('tr', {}, el('td', { colspan: '6', class: 'muted', style: 'text-align:center; padding:24px' }, 'ไม่พบไอเท็มที่ค้นหา')));
+      } else {
+        for (const item of filtered.slice(0, 60)) {
+          const mult = Number(item.multiplier) || 1.0;
+          const isDepreciated = mult < 0.99;
+          const isSelected = item.itemId === selectedId;
+          const tr = el('tr', { style: isSelected ? 'background:rgba(255,77,0,0.08);' : '' });
+          tr.append(
+            el('td', {}, el('div', { style: 'display:flex; align-items:center; gap:8px;' }, itemIcon(item.itemId, 'sm'), el('span', { class: 'mono' }, item.itemId.replace('minecraft:', '')))),
+            el('td', { class: 'mono', style: 'text-align:right; font-weight:600;' }, money(item.sell)),
+            el('td', { class: 'mono muted', style: 'text-align:right;' }, money(item.buy)),
+            el('td', { style: 'text-align:center;' }, el('span', { class: `badge ${isDepreciated ? 'danger' : 'accent'}` }, `${Math.round(mult * 100)}%`)),
+            el('td', { class: 'mono', style: 'text-align:right;' }, (item.sold || 0).toLocaleString()),
+            el('td', { style: 'text-align:center;' }, el('button', {
+              type: 'button',
+              class: 'btn-ghost sm',
+              onclick: () => {
+                selectedId = item.itemId;
+                renderDetail(item);
+                renderTable(searchInput.value);
+              }
+            }, 'ดูกราฟ'))
+          );
+          tbody.append(tr);
+        }
+      }
+      table.append(thead, tbody);
+    }
+
+    searchInput.addEventListener('input', () => {
+      renderTable(searchInput.value);
+    });
+
+    const activeItem = items.find(i => i.itemId === selectedId) || items[0];
+    renderDetail(activeItem);
+    renderTable();
+
+    container.append(topFilter, detailBox, el('h3', { class: 'section-title', style: 'margin-top:28px;' }, 'ตารางราคาไอเท็มทั้งหมด'), tableWrap);
+
+  } catch (err) {
+    clear(container);
+    container.append(errorState(err));
+  }
+}
+
+function drawTrendChart(canvas, history, basePrice, currentSell) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = rect.width || 600;
+  const h = rect.height || 260;
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const points = (history && history.length) ? [...history] : [];
+  if (points.length === 0) {
+    points.push({ t: Date.now() - 3600000, price: basePrice || currentSell, sold: 0 });
+    points.push({ t: Date.now(), price: currentSell || basePrice, sold: 0 });
+  } else if (points.length === 1) {
+    points.unshift({ t: points[0].t - 3600000, price: basePrice, sold: 0 });
+  }
+
+  const padL = 60, padR = 24, padT = 24, padB = 36;
+  const plotW = Math.max(10, w - padL - padR);
+  const plotH = Math.max(10, h - padT - padB);
+
+  let minP = Infinity, maxP = -Infinity;
+  let minT = points[0].t, maxT = points[points.length - 1].t;
+  if (minT === maxT) maxT = minT + 1;
+
+  for (const p of points) {
+    if (p.price < minP) minP = p.price;
+    if (p.price > maxP) maxP = p.price;
+  }
+  if (basePrice) {
+    if (basePrice < minP) minP = basePrice;
+    if (basePrice > maxP) maxP = basePrice;
+  }
+
+  const spanP = (maxP - minP) || (minP * 0.2) || 10;
+  minP = Math.max(0, minP - spanP * 0.1);
+  maxP = maxP + spanP * 0.1;
+
+  function toX(t) { return padL + ((t - minT) / (maxT - minT)) * plotW; }
+  function toY(p) { return padT + (1 - (p - minP) / (maxP - minP)) * plotH; }
+
+  // Draw background horizontal grid lines
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#262626';
+  ctx.fillStyle = '#8A8A8A';
+  ctx.font = '11px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  const gridSteps = 4;
+  for (let i = 0; i <= gridSteps; i++) {
+    const val = minP + (i / gridSteps) * (maxP - minP);
+    const y = toY(val);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w - padR, y);
+    ctx.stroke();
+    ctx.fillText(val.toFixed(val >= 10 ? 0 : 2), padL - 8, y);
+  }
+
+  // Time labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(shortClock(minT), padL, h - padB + 8);
+  ctx.fillText(shortClock(maxT), w - padR, h - padB + 8);
+  if (points.length > 2) {
+    const midT = Math.floor((minT + maxT) / 2);
+    ctx.fillText(shortClock(midT), toX(midT), h - padB + 8);
+  }
+
+  // Base price reference line
+  if (basePrice) {
+    const baseY = toY(basePrice);
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = '#555555';
+    ctx.beginPath();
+    ctx.moveTo(padL, baseY);
+    ctx.lineTo(w - padR, baseY);
+    ctx.stroke();
+    ctx.fillStyle = '#777777';
+    ctx.textAlign = 'left';
+    ctx.fillText('ฐาน: ' + basePrice.toFixed(0), padL + 6, baseY - 8);
+    ctx.restore();
+  }
+
+  // Trend line
+  ctx.save();
+  ctx.strokeStyle = '#FF4D00';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    const px = toX(points[i].t);
+    const py = toY(points[i].price);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // Data point dots
+  for (const pt of points) {
+    const px = toX(pt.t);
+    const py = toY(pt.price);
+    ctx.fillStyle = '#0A0A0A';
+    ctx.strokeStyle = '#FF4D00';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /* ---------- auction ---------- */
 async function pageAuction(view) {
   const page = el('div', { class: 'page' });
@@ -1302,7 +1612,7 @@ async function pageAdmin(view) {
   page.append(pageHead('admin', 'แอดมิน', 'จัดการเศรษฐกิจ เขต และรายการประมูล'));
   view.append(page);
   const tabs = [
-    ['overview', 'ภาพรวม'], ['money', 'เงิน'], ['prices', 'ราคา'], ['auctions', 'ประมูล'], ['cellAuctions', 'ประมูลเขต'], ['consign', 'ของฝาก'], ['cells', 'เขต'], ['accounts', 'บัญชี'], ['worlds', 'โลก'], ['audit', 'บันทึก'],
+    ['overview', 'ภาพรวม'], ['money', 'เงิน'], ['prices', 'ราคา'], ['sales', 'ประวัติขาย'], ['auctions', 'ประมูล'], ['cellAuctions', 'ประมูลเขต'], ['consign', 'ของฝาก'], ['cells', 'เขต'], ['accounts', 'บัญชี'], ['worlds', 'โลก'], ['audit', 'บันทึก'],
   ];
   tabbed(page, tabs.map(([id, label]) => ({ id, label })), state.adminTab, (panel, id) => {
     state.adminTab = id;
@@ -1316,12 +1626,14 @@ function adminPanel(panel, id) {
   if (id === 'overview') adminOverview(box);
   else if (id === 'money') adminMoney(box);
   else if (id === 'prices') adminPrices(box);
+  else if (id === 'sales') adminSales(box);
   else if (id === 'auctions') adminAuctions(box);
   else if (id === 'cellAuctions') adminCellAuctions(box);
   else if (id === 'consign') adminConsign(box);
-  else if (id === 'cells') adminCells(box);	else if (id === 'accounts') adminAccounts(box);
-	else if (id === 'worlds') adminWorlds(box);
-	else adminAudit(box);
+  else if (id === 'cells') adminCells(box);
+  else if (id === 'accounts') adminAccounts(box);
+  else if (id === 'worlds') adminWorlds(box);
+  else adminAudit(box);
 }
 
 async function adminOverview(box) {
@@ -1378,38 +1690,302 @@ async function adminMoney(box) {
   box.append(form);
 }
 
-function adminPrices(box) {
-  const item = el('input', { class: 'input', type: 'text', placeholder: 'minecraft:stone' });
-  const base = el('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'เว้นว่างเพื่อล้าง' });
-  const reason = el('input', { class: 'input', type: 'text', maxLength: '200', placeholder: 'เหตุผล 3–200 ตัวอักษร' });
-  const error = el('p', { class: 'err', role: 'alert' });
-  const form = el('form', { class: 'stack', novalidate: true },
-    el('div', { class: 'field' }, el('label', {}, 'ไอเท็ม'), item),
-    el('div', { class: 'grid2' }, el('div', { class: 'field' }, el('label', {}, 'ราคาฐาน'), base), el('div', { class: 'field' }, el('label', {}, 'เหตุผล'), reason)),
-    error,
-    el('div', { class: 'row' },
-      el('button', { class: 'btn primary', type: 'submit' }, 'ตั้งราคา'),
-      el('button', { class: 'btn secondary', type: 'button', onclick: () => priceAction(true) }, 'บล็อก'),
-      el('button', { class: 'btn secondary', type: 'button', onclick: () => priceAction(false) }, 'ปลดบล็อก'),
-      el('button', { class: 'btn secondary', type: 'button', onclick: refreshPrices }, 'ดึงราคาใหม่')));
-  async function priceAction(blocked) {
-    error.textContent = '';
-    if (reason.value.trim().length < 3) { error.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
-    try { await api('POST', '/api/admin/prices/block', { item: item.value.trim(), blocked, reason: reason.value.trim() }); toast(blocked ? 'บล็อกแล้ว' : 'ปลดบล็อกแล้ว'); }
-    catch (err) { error.textContent = errText(err); }
+async function adminPrices(box) {
+  loading(box);
+  try {
+    const data = await api('GET', '/api/admin/prices');
+    clear(box);
+    const items = data.items || [];
+    let filter = 'all';
+    let search = '';
+    let page = 0;
+    const pageSize = 20;
+
+    const topBar = el('div', { class: 'stack', style: 'margin-bottom:16px' });
+    const searchInput = el('input', { class: 'input', type: 'text', placeholder: 'ค้นหาไอเท็ม (เช่น diamond, iron, stone)...', 'aria-label': 'ค้นหาราคา' });
+
+    const filterRow = el('div', { class: 'row', style: 'justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;' });
+    const btnGroup = el('div', { class: 'row', style: 'gap:8px;' },
+      el('button', { class: 'btn primary', type: 'button', onclick: () => { filter = 'all'; page = 0; draw(); } }, 'ทั้งหมด'),
+      el('button', { class: 'btn secondary', type: 'button', onclick: () => { filter = 'overridden'; page = 0; draw(); } }, 'แก้ไขเอง'),
+      el('button', { class: 'btn secondary', type: 'button', onclick: () => { filter = 'blocked'; page = 0; draw(); } }, 'บล็อก'));
+
+    const actionGroup = el('div', { class: 'row', style: 'gap:8px;' },
+      el('button', { class: 'btn secondary', type: 'button', onclick: openCustomPriceModal }, '+ กำหนดราคา'),
+      el('button', { class: 'btn secondary', type: 'button', onclick: refreshPrices }, 'ดึงราคาใหม่'));
+
+    filterRow.append(btnGroup, actionGroup);
+    topBar.append(
+      el('div', { class: 'field' }, el('label', {}, 'ค้นหาและจัดการตารางราคา'), searchInput),
+      filterRow
+    );
+
+    const tableWrap = el('div', { class: 'table-wrap' });
+    const table = el('table', { class: 'data-table' });
+    tableWrap.append(table);
+
+    const paginationRow = el('div', { class: 'row', style: 'margin-top:16px; justify-content:space-between; align-items:center;' });
+    const pageInfo = el('span', { class: 'mono muted' });
+    const prevBtn = el('button', { class: 'btn secondary', type: 'button', onclick: () => { if (page > 0) { page--; draw(); } } }, '← ก่อนหน้า');
+    const nextBtn = el('button', { class: 'btn secondary', type: 'button', onclick: () => { page++; draw(); } }, 'ถัดไป →');
+    paginationRow.append(prevBtn, pageInfo, nextBtn);
+
+    box.append(topBar, tableWrap, paginationRow);
+
+    function filteredItems() {
+      const q = search.trim().toLowerCase();
+      return items.filter(it => {
+        if (filter === 'overridden' && !it.overridden) return false;
+        if (filter === 'blocked' && !it.blocked) return false;
+        if (q && !it.itemId.toLowerCase().includes(q)) return false;
+        return true;
+      });
+    }
+
+    function draw() {
+      btnGroup.children[0].className = filter === 'all' ? 'btn primary' : 'btn secondary';
+      btnGroup.children[1].className = filter === 'overridden' ? 'btn primary' : 'btn secondary';
+      btnGroup.children[2].className = filter === 'blocked' ? 'btn primary' : 'btn secondary';
+
+      const list = filteredItems();
+      const maxPages = Math.max(1, Math.ceil(list.length / pageSize));
+      if (page >= maxPages) page = maxPages - 1;
+      const start = page * pageSize;
+      const visible = list.slice(start, start + pageSize);
+
+      prevBtn.disabled = page === 0;
+      nextBtn.disabled = page >= maxPages - 1;
+      pageInfo.textContent = `หน้า ${page + 1} จาก ${maxPages} (${list.length} รายการ)`;
+
+      clear(table);
+      const thead = el('thead', {},
+        el('tr', {},
+          el('th', {}, 'ไอเท็ม'),
+          el('th', {}, 'ราคาฐานเดิม'),
+          el('th', {}, 'ราคาฐานจริง (ลดตามยอดขาย)'),
+          el('th', {}, 'ซื้อ / ขาย'),
+          el('th', {}, 'ยอดขายสะสม'),
+          el('th', {}, 'สถานะ'),
+          el('th', { style: 'text-align:right;' }, 'จัดการ')));
+      const tbody = el('tbody');
+
+      if (!visible.length) {
+        tbody.append(el('tr', {}, el('td', { colspan: 7, style: 'text-align:center; padding:32px;' }, 'ไม่พบไอเท็มที่ค้นหา')));
+      } else {
+        for (const it of visible) {
+          const dropPercent = Math.round((1 - it.multiplier) * 100);
+          const dropBadge = dropPercent > 0 ? el('span', { class: 'badge danger', style: 'margin-left:6px;' }, `-${dropPercent}%`) : null;
+          const statusBadge = it.blocked ? el('span', { class: 'badge danger' }, 'บล็อก') :
+              it.overridden ? el('span', { class: 'badge accent' }, 'แก้ไข') :
+              el('span', { class: 'badge muted' }, 'ปกติ');
+
+          const tr = el('tr', {},
+            el('td', {},
+              el('div', { class: 'row', style: 'align-items:center; gap:8px;' },
+                itemIcon(it.itemId),
+                el('div', {},
+                  el('div', { style: 'font-weight:600;' }, it.itemId.replace('minecraft:', '')),
+                  el('div', { class: 'mono muted', style: 'font-size:var(--fs-1);' }, it.itemId)))),
+            el('td', { class: 'mono' }, money(it.base)),
+            el('td', { class: 'mono' }, money(it.effectiveBase), dropBadge),
+            el('td', { class: 'mono' }, `${money(it.buy)} / ${money(it.sell)}`),
+            el('td', { class: 'mono' }, `${money(it.sold || 0)} ชิ้น`),
+            el('td', {}, statusBadge),
+            el('td', { style: 'text-align:right;' },
+              el('div', { class: 'row', style: 'justify-content:flex-end; gap:6px;' },
+                el('button', { class: 'btn secondary', style: 'min-height:32px; padding:0 8px;', type: 'button', onclick: () => editPriceModal(it) }, 'ตั้งราคา'),
+                it.overridden ? el('button', { class: 'btn ghost', style: 'min-height:32px; padding:0 8px;', type: 'button', onclick: () => resetPrice(it) }, 'รีเซ็ต') : null,
+                el('button', { class: it.blocked ? 'btn primary' : 'btn danger', style: 'min-height:32px; padding:0 8px;', type: 'button', onclick: () => toggleBlock(it) }, it.blocked ? 'ปลดบล็อก' : 'บล็อก'))));
+          tbody.append(tr);
+        }
+      }
+      table.append(thead, tbody);
+    }
+
+    searchInput.addEventListener('input', () => {
+      search = searchInput.value;
+      page = 0;
+      draw();
+    });
+
+    async function refreshPrices() {
+      try {
+        const r = await api('POST', '/api/admin/prices/refresh', {});
+        toast(r.ok ? 'ดึงราคาและอัปเดตเรียบร้อย' : (r.message || 'ดึงไม่สำเร็จ'));
+        adminPrices(box);
+      } catch (err) { toastError(err); }
+    }
+
+    async function editPriceModal(it) {
+      const dialog = $('#confirm');
+      clear(dialog);
+      const baseInput = el('input', { class: 'input', type: 'text', value: String(it.base), inputmode: 'numeric' });
+      const reasonInput = el('input', { class: 'input', type: 'text', value: 'ปรับปรุงราคาโดยแอดมิน', maxLength: '200' });
+      const errEl = el('p', { class: 'err', role: 'alert' });
+      const form = el('form', { method: 'dialog', class: 'dialog-body' },
+        el('h2', {}, 'ตั้งราคา: ' + it.itemId),
+        el('div', { class: 'row', style: 'align-items:center; gap:8px; margin-bottom:12px;' }, itemIcon(it.itemId, 'lg'), el('span', { class: 'mono muted' }, `ราคาฐานเดิม: ${money(it.base)}`)),
+        el('div', { class: 'field' }, el('label', {}, 'ราคาฐานใหม่ (เหรียญ)'), baseInput),
+        el('div', { class: 'field' }, el('label', {}, 'เหตุผล'), reasonInput),
+        errEl,
+        el('div', { class: 'dialog-actions' },
+          el('button', { class: 'btn secondary', value: 'cancel', type: 'submit' }, 'ยกเลิก'),
+          el('button', { class: 'btn primary', value: 'ok', type: 'submit' }, 'บันทึก')));
+      form.addEventListener('submit', async (event) => {
+        if (event.submitter?.value === 'cancel') return;
+        event.preventDefault();
+        errEl.textContent = '';
+        if (num(baseInput.value) < 1) { errEl.textContent = 'ราคาต้องมากกว่า 0'; return; }
+        if (reasonInput.value.trim().length < 3) { errEl.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
+        try {
+          await api('POST', '/api/admin/prices/override', { item: it.itemId, base: num(baseInput.value), reason: reasonInput.value.trim() });
+          toast('บันทึกราคา ' + it.itemId + ' แล้ว');
+          dialog.close('ok');
+          adminPrices(box);
+        } catch (e) { errEl.textContent = errText(e); }
+      });
+      dialog.append(form);
+      dialog.showModal();
+    }
+
+    async function openCustomPriceModal() {
+      const dialog = $('#confirm');
+      clear(dialog);
+      const itemInput = el('input', { class: 'input', type: 'text', placeholder: 'minecraft:iron_ingot' });
+      const baseInput = el('input', { class: 'input', type: 'text', placeholder: 'เช่น 50', inputmode: 'numeric' });
+      const reasonInput = el('input', { class: 'input', type: 'text', value: 'เพิ่มราคาใหม่', maxLength: '200' });
+      const errEl = el('p', { class: 'err', role: 'alert' });
+      const form = el('form', { method: 'dialog', class: 'dialog-body' },
+        el('h2', {}, 'กำหนดราคาไอเท็มใหม่'),
+        el('div', { class: 'field' }, el('label', {}, 'ไอเท็ม (ID)'), itemInput),
+        el('div', { class: 'field' }, el('label', {}, 'ราคาฐาน (เหรียญ)'), baseInput),
+        el('div', { class: 'field' }, el('label', {}, 'เหตุผล'), reasonInput),
+        errEl,
+        el('div', { class: 'dialog-actions' },
+          el('button', { class: 'btn secondary', value: 'cancel', type: 'submit' }, 'ยกเลิก'),
+          el('button', { class: 'btn primary', value: 'ok', type: 'submit' }, 'บันทึก')));
+      form.addEventListener('submit', async (event) => {
+        if (event.submitter?.value === 'cancel') return;
+        event.preventDefault();
+        errEl.textContent = '';
+        if (!itemInput.value.trim()) { errEl.textContent = 'ต้องระบุไอเท็ม'; return; }
+        if (num(baseInput.value) < 1) { errEl.textContent = 'ราคาต้องมากกว่า 0'; return; }
+        if (reasonInput.value.trim().length < 3) { errEl.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
+        try {
+          await api('POST', '/api/admin/prices/override', { item: itemInput.value.trim(), base: num(baseInput.value), reason: reasonInput.value.trim() });
+          toast('กำหนดราคาเรียบร้อย');
+          dialog.close('ok');
+          adminPrices(box);
+        } catch (e) { errEl.textContent = errText(e); }
+      });
+      dialog.append(form);
+      dialog.showModal();
+    }
+
+    async function resetPrice(it) {
+      if (!await confirmDialog({ title: 'รีเซ็ตราคา: ' + it.itemId, body: 'ล้างค่า override และกลับไปใช้ราคาฐานเริ่มต้น', confirm: 'รีเซ็ต' })) return;
+      try {
+        await api('POST', '/api/admin/prices/override', { item: it.itemId, base: null, reason: 'รีเซ็ต override' });
+        toast('รีเซ็ตราคาแล้ว');
+        adminPrices(box);
+      } catch (e) { toastError(e); }
+    }
+
+    async function toggleBlock(it) {
+      const action = it.blocked ? 'ปลดบล็อก' : 'บล็อก';
+      if (!await confirmDialog({ title: action + ': ' + it.itemId, body: `${action}ไม่ให้ซื้อขายไอเท็มนี้ในตลาดและร้านค้า`, confirm: action, danger: !it.blocked })) return;
+      try {
+        await api('POST', '/api/admin/prices/block', { item: it.itemId, blocked: !it.blocked, reason: action + 'โดยแอดมิน' });
+        toast(action + 'แล้ว');
+        adminPrices(box);
+      } catch (e) { toastError(e); }
+    }
+
+    draw();
+  } catch (err) {
+    clear(box);
+    box.append(errorState(err));
   }
-  async function refreshPrices() {
-    try { const data = await api('POST', '/api/admin/prices/refresh', {}); toast(data.ok ? 'ดึงราคาแล้ว' : data.message || 'ดึงไม่สำเร็จ'); }
-    catch (err) { toastError(err); }
+}
+
+async function adminSales(box) {
+  loading(box);
+  try {
+    const data = await api('GET', '/api/admin/sales?limit=150');
+    clear(box);
+    const summary = data.summary || {};
+    const sales = data.sales || [];
+
+    box.append(el('div', { class: 'stats' },
+      el('div', { class: 'stat' }, el('strong', {}, money(summary.totalSoldItems || 0)), el('span', {}, 'ชิ้นที่ถูกขายรวม')),
+      el('div', { class: 'stat' }, el('strong', {}, money(summary.totalCoinsPaid || 0)), el('span', {}, 'เงินที่จ่ายให้ผู้เล่น (เหรียญ)')),
+      el('div', { class: 'stat' }, el('strong', {}, money(summary.totalTransactions || 0)), el('span', {}, 'จำนวนธุรกรรมขาย')),
+      el('div', { class: 'stat' }, el('strong', {}, String((summary.topItems || []).length)), el('span', {}, 'ชนิดไอเท็มที่มีการขาย'))));
+
+    const filterBox = el('div', { class: 'grid2', style: 'margin-top:24px;' });
+    const playerInput = el('input', { class: 'input', type: 'text', placeholder: 'ค้นหาชื่อผู้เล่น...', 'aria-label': 'ค้นหาผู้เล่น' });
+    const itemInput = el('input', { class: 'input', type: 'text', placeholder: 'ค้นหาชื่อไอเท็ม...', 'aria-label': 'ค้นหาไอเท็ม' });
+    filterBox.append(
+      el('div', { class: 'field' }, el('label', {}, 'กรองตามผู้เล่น'), playerInput),
+      el('div', { class: 'field' }, el('label', {}, 'กรองตามไอเท็ม'), itemInput)
+    );
+    box.append(filterBox);
+
+    const tableWrap = el('div', { class: 'table-wrap' });
+    const table = el('table', { class: 'data-table' });
+    tableWrap.append(table);
+    box.append(tableWrap);
+
+    function draw() {
+      clear(table);
+      const qPlayer = playerInput.value.trim().toLowerCase();
+      const qItem = itemInput.value.trim().toLowerCase();
+
+      const filtered = sales.filter(s => {
+        if (qPlayer && !s.player.toLowerCase().includes(qPlayer)) return false;
+        if (qItem && !s.itemId.toLowerCase().includes(qItem) && !s.label.toLowerCase().includes(qItem)) return false;
+        return true;
+      });
+
+      const thead = el('thead', {},
+        el('tr', {},
+          el('th', {}, 'เวลา'),
+          el('th', {}, 'ผู้เล่น'),
+          el('th', {}, 'ไอเท็ม'),
+          el('th', {}, 'จำนวน'),
+          el('th', {}, 'ได้เงิน'),
+          el('th', {}, 'ราคาต่อชิ้น'),
+          el('th', {}, 'แหล่งที่มา')));
+      const tbody = el('tbody');
+
+      if (!filtered.length) {
+        tbody.append(el('tr', {}, el('td', { colspan: 7, style: 'text-align:center; padding:32px;' }, 'ยังไม่มีประวัติการขายตรงตามเงื่อนไข')));
+      } else {
+        for (const s of filtered) {
+          const tr = el('tr', {},
+            el('td', { class: 'mono muted' }, shortClock(s.t)),
+            el('td', { style: 'font-weight:600;' }, s.player),
+            el('td', {},
+              el('div', { class: 'row', style: 'align-items:center; gap:8px;' },
+                itemIcon(s.itemId),
+                el('span', {}, s.label || s.itemId))),
+            el('td', { class: 'mono' }, `×${money(s.count)}`),
+            el('td', { class: 'mono', style: 'color:var(--accent); font-weight:600;' }, `+${money(s.earned)}`),
+            el('td', { class: 'mono muted' }, `${money(s.unitPrice)}/ชิ้น`),
+            el('td', { class: 'mono muted' }, s.source || 'shop'));
+          tbody.append(tr);
+        }
+      }
+      table.append(thead, tbody);
+    }
+
+    playerInput.addEventListener('input', draw);
+    itemInput.addEventListener('input', draw);
+    draw();
+  } catch (err) {
+    clear(box);
+    box.append(errorState(err));
   }
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault(); error.textContent = '';
-    if (reason.value.trim().length < 3) { error.textContent = 'ต้องมีเหตุผลอย่างน้อย 3 ตัวอักษร'; return; }
-    try { await api('POST', '/api/admin/prices/override', { item: item.value.trim(), base: base.value === '' ? null : num(base.value), reason: reason.value.trim() }); toast('ตั้งราคาแล้ว'); }
-    catch (err) { error.textContent = errText(err); }
-  });
-  box.append(el('p', { class: 'hint', style: 'margin-bottom:16px' },
-    'ใช้กำหนดราคาฐาน (base) ของไอเท็ม บล็อก/ปลดบล็อกการซื้อขาย และสั่งดึงราคาจากแหล่งกลางใหม่ · เว้นราคาฐานว่างเพื่อล้าง override'), form);
 }
 
 async function adminAuctions(box) {

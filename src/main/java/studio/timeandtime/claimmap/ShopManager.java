@@ -81,10 +81,30 @@ public final class ShopManager {
 	}
 
 	private volatile AuctionManager auctions;
+	private volatile SalesTracker salesTracker;
+	private volatile AccountManager accounts;
 
 	/** Market-wide kill switch: a corrupt auctions.json also stops the shop (R6). */
 	public void attachAuctions(AuctionManager auctions) {
 		this.auctions = auctions;
+	}
+
+	public void attachSalesTracker(SalesTracker salesTracker) {
+		this.salesTracker = salesTracker;
+	}
+
+	public void attachAccounts(AccountManager accounts) {
+		this.accounts = accounts;
+	}
+
+	private String playerName(UUID uuid) {
+		if (uuid == null) return "Unknown";
+		AccountManager a = accounts;
+		if (a != null) {
+			java.util.Optional<String> name = a.nameOf(uuid);
+			if (name.isPresent()) return name.get();
+		}
+		return uuid.toString().substring(0, 8);
 	}
 
 	public boolean isDisabled() {
@@ -189,6 +209,7 @@ public final class ShopManager {
 				added.add(entry.id());
 			}
 			recordUsage(buyer, plan.itemId(), plan.qty());
+			prices.recordBuy(plan.itemId(), plan.qty());
 			return new BuyOutcome(Result.OK, plan.qty(), plan.total(), economy.balance(buyer),
 					mailbox.count(buyer));
 		}
@@ -286,6 +307,11 @@ public final class ShopManager {
 				return new SellOutcome(credit == TxResult.FROZEN ? Result.FROZEN : Result.IO_ERROR, 0, 0,
 						economy.balance(uuid));
 			}
+			prices.recordSale(itemId, qty);
+			SalesTracker st = salesTracker;
+			if (st != null) {
+				st.record(uuid, playerName(uuid), itemId, itemId, qty, total, unit.getAsLong(), "inventory");
+			}
 			return new SellOutcome(Result.OK, qty, total, economy.balance(uuid));
 		}
 	}
@@ -327,6 +353,11 @@ public final class ShopManager {
 				source.set(before);
 				return new SellOutcome(credit == TxResult.FROZEN ? Result.FROZEN : Result.IO_ERROR, 0, 0,
 						economy.balance(uuid));
+			}
+			prices.recordSale(itemId, qty);
+			SalesTracker st = salesTracker;
+			if (st != null) {
+				st.record(uuid, playerName(uuid), itemId, itemId, qty, total, unit.getAsLong(), "inventory");
 			}
 			return new SellOutcome(Result.OK, qty, total, economy.balance(uuid));
 		}

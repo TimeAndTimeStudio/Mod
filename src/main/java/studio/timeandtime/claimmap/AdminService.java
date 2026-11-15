@@ -38,6 +38,7 @@ public final class AdminService {
 	private final AuditLog audit;
 	private final ConsignmentManager consignments;
 	private final Predicate<UUID> online;
+	private volatile SalesTracker salesTracker;
 
 	public AdminService(ClaimMapConfig config, EconomyManager economy, AccountManager accounts, LinkManager links,
 			PriceService prices, AuctionManager auctions, MailboxManager mailbox, ShopManager shop,
@@ -53,6 +54,14 @@ public final class AdminService {
 		this.audit = audit;
 		this.consignments = consignments;
 		this.online = online;
+	}
+
+	public void attachSalesTracker(SalesTracker salesTracker) {
+		this.salesTracker = salesTracker;
+	}
+
+	public SalesTracker salesTracker() {
+		return salesTracker;
 	}
 
 	/** A reason is required for every state-changing action: 3–200 chars. */

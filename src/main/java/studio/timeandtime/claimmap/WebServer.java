@@ -52,6 +52,7 @@ public final class WebServer {
 	private final AdminService admin;
 	private final PlayerItemStore playerItems;
 	private final WorldManager worlds;
+	private final SalesTracker salesTracker;
 	private static final Pattern STATIC_PATH =
 			Pattern.compile("^/(css|js|icons|img)/[A-Za-z0-9_./-]+$|^/favicon\\.png$");
 	private final LoginThrottle throttle = new LoginThrottle();
@@ -68,6 +69,15 @@ public final class WebServer {
 			ShopManager shop, AuctionManager auctions, PlayerMarket playerMarket,
 			ConsignmentManager consignments, AdminService admin, PlayerItemStore playerItems,
 			WorldManager worlds) {
+		this(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions,
+				playerMarket, consignments, admin, playerItems, worlds, null);
+	}
+
+	public WebServer(ClaimMapConfig config, RegionManager regions, MapRenderer maps, LinkManager links,
+			AccountManager accounts, EconomyManager economy, PriceService prices, MailboxManager mailbox,
+			ShopManager shop, AuctionManager auctions, PlayerMarket playerMarket,
+			ConsignmentManager consignments, AdminService admin, PlayerItemStore playerItems,
+			WorldManager worlds, SalesTracker salesTracker) {
 		this.config = config;
 		this.regions = regions;
 		this.maps = maps;
@@ -83,6 +93,7 @@ public final class WebServer {
 		this.admin = admin;
 		this.playerItems = playerItems;
 		this.worlds = worlds;
+		this.salesTracker = salesTracker;
 	}
 
 	public void start() {
@@ -176,6 +187,18 @@ public final class WebServer {
 			case "/api/prices" -> {
 				requireMethod(ex, method, "GET");
 				handlePrices(ex);
+			}
+			case "/api/prices/trends" -> {
+				requireMethod(ex, method, "GET");
+				handlePriceTrends(ex);
+			}
+			case "/api/admin/prices" -> {
+				requireMethod(ex, method, "GET");
+				handleAdminPricesList(ex);
+			}
+			case "/api/admin/sales" -> {
+				requireMethod(ex, method, "GET");
+				handleAdminSales(ex);
 			}
 			case "/api/shop" -> {
 				requireMethod(ex, method, "GET");
@@ -1549,6 +1572,22 @@ public final class WebServer {
 		}
 	}
 
+	private String queryParam(HttpExchange ex, String name) {
+		String q = ex.getRequestURI().getQuery();
+		if (q == null) return null;
+		String prefix = name + "=";
+		for (String part : q.split("&")) {
+			if (part.startsWith(prefix)) {
+				try {
+					return java.net.URLDecoder.decode(part.substring(prefix.length()), java.nio.charset.StandardCharsets.UTF_8);
+				} catch (Exception e) {
+					return part.substring(prefix.length());
+				}
+			}
+		}
+		return null;
+	}
+
 	private int queryLimit(HttpExchange ex, int def) {
 		String q = ex.getRequestURI().getQuery();
 		if (q == null) return def;
@@ -1972,6 +2011,109 @@ public final class WebServer {
 			items.add(e.getKey(), p);
 		}
 		out.add("items", items);
+		Json.send(ex, 200, out);
+	}
+
+	private void handlePriceTrends(HttpExchange ex) throws IOException {
+		requireSession(ex);
+		List<PriceService.ItemPriceDetail> details = prices.detailsSnapshot();
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("currency", config.currencyName);
+		JsonArray arr = new JsonArray();
+		for (PriceService.ItemPriceDetail d : details) {
+			if (d.blocked()) continue;
+			if (!ItemRegistryAdapter.exists(d.id())) continue;
+			JsonObject item = new JsonObject();
+			item.addProperty("itemId", d.id());
+			item.addProperty("base", d.nominalBase());
+			item.addProperty("effectiveBase", d.effectiveBase());
+			item.addProperty("buy", d.buyPrice());
+			item.addProperty("sell", d.sellPrice());
+			item.addProperty("multiplier", Math.round(d.multiplier() * 100.0) / 100.0);
+			item.addProperty("sold", d.soldUnits());
+			JsonArray hist = new JsonArray();
+			for (PriceService.PriceHistoryPoint p : prices.getHistory(d.id())) {
+				JsonObject po = new JsonObject();
+				po.addProperty("t", p.t());
+				po.addProperty("price", p.price());
+				po.addProperty("sold", p.sold());
+				hist.add(po);
+			}
+			item.add("history", hist);
+			arr.add(item);
+		}
+		out.add("items", arr);
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminPricesList(HttpExchange ex) throws IOException {
+		requireAdmin(ex, "/api/admin/prices");
+		List<PriceService.ItemPriceDetail> details = prices.detailsSnapshot();
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		out.addProperty("currency", config.currencyName);
+		out.addProperty("stale", prices.staleForApi());
+		out.addProperty("updatedAt", prices.updatedAt());
+		JsonArray arr = new JsonArray();
+		for (PriceService.ItemPriceDetail d : details) {
+			if (!ItemRegistryAdapter.exists(d.id())) continue;
+			JsonObject item = new JsonObject();
+			item.addProperty("itemId", d.id());
+			item.addProperty("base", d.nominalBase());
+			item.addProperty("effectiveBase", d.effectiveBase());
+			item.addProperty("buy", d.buyPrice());
+			item.addProperty("sell", d.sellPrice());
+			item.addProperty("multiplier", Math.round(d.multiplier() * 100.0) / 100.0);
+			item.addProperty("sold", d.soldUnits());
+			item.addProperty("blocked", d.blocked());
+			item.addProperty("overridden", d.overridden());
+			arr.add(item);
+		}
+		out.add("items", arr);
+		Json.send(ex, 200, out);
+	}
+
+	private void handleAdminSales(HttpExchange ex) throws IOException {
+		requireAdmin(ex, "/api/admin/sales");
+		int limit = queryLimit(ex, 100);
+		String fPlayer = queryParam(ex, "player");
+		String fItem = queryParam(ex, "item");
+		SalesTracker st = salesTracker != null ? salesTracker : admin.salesTracker();
+		JsonObject out = new JsonObject();
+		out.addProperty("ok", true);
+		if (st == null) {
+			out.add("sales", new JsonArray());
+			out.add("summary", new JsonObject());
+			Json.send(ex, 200, out);
+			return;
+		}
+		SalesTracker.SalesSummary summary = st.summary();
+		JsonObject sumObj = new JsonObject();
+		sumObj.addProperty("totalSoldItems", summary.totalSoldItems());
+		sumObj.addProperty("totalCoinsPaid", summary.totalCoinsPaid());
+		sumObj.addProperty("totalTransactions", summary.totalTransactions());
+		com.google.gson.Gson gson = new com.google.gson.Gson();
+		sumObj.add("topItems", (com.google.gson.JsonElement) gson.toJsonTree(summary.topItems()));
+		sumObj.add("topSellers", (com.google.gson.JsonElement) gson.toJsonTree(summary.topSellers()));
+		out.add("summary", sumObj);
+
+		JsonArray salesArr = new JsonArray();
+		for (SalesTracker.SaleRecord r : st.tail(limit, fPlayer, fItem)) {
+			JsonObject s = new JsonObject();
+			s.addProperty("id", r.id());
+			s.addProperty("t", r.t());
+			s.addProperty("player", r.player());
+			s.addProperty("uuid", r.uuid());
+			s.addProperty("itemId", r.itemId());
+			s.addProperty("label", r.label());
+			s.addProperty("count", r.count());
+			s.addProperty("earned", r.earned());
+			s.addProperty("unitPrice", r.unitPrice());
+			s.addProperty("source", r.source());
+			salesArr.add(s);
+		}
+		out.add("sales", salesArr);
 		Json.send(ex, 200, out);
 	}
 
