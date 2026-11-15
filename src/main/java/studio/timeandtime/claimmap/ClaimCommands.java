@@ -622,7 +622,9 @@ public final class ClaimCommands {
 			return 0;
 		}
 		int totalClaimed = regions.ownerMap().size();
-		long price = Math.min(1_000_000L, Math.max(100_000L, 100_000L + ((long) totalClaimed * 15_000L)));
+		long price = ClaimMap.instance() != null && ClaimMap.instance().landPrices() != null
+				? ClaimMap.instance().landPrices().currentPrice()
+				: Math.min(1_000_000L, Math.max(100_000L, 100_000L + ((long) totalClaimed * 15_000L)));
 		long bal = economy.balance(player.getUUID());
 		if (bal < price) {
 			player.sendSystemMessage(Component.literal("§cเงินไม่พอซื้อที่ดิน ต้องการ " + price + " " + config.currencyName
@@ -640,6 +642,9 @@ public final class ClaimCommands {
 			economy.deposit(player.getUUID(), price, "land.refund:" + id, id);
 			player.sendSystemMessage(Component.literal("§cไม่สามารถจองเขตได้: " + r));
 			return 0;
+		}
+		if (ClaimMap.instance() != null && ClaimMap.instance().landPrices() != null) {
+			ClaimMap.instance().landPrices().onCellPurchased();
 		}
 		player.sendSystemMessage(Component.literal("§aซื้อกรรมสิทธิ์เขต " + id + " สำเร็จ! จ่าย " + price + " "
 				+ config.currencyName + " (คงเหลือ " + economy.balance(player.getUUID()) + " " + config.currencyName

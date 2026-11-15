@@ -53,6 +53,11 @@ public final class WebServer {
 	private final PlayerItemStore playerItems;
 	private final WorldManager worlds;
 	private final SalesTracker salesTracker;
+	private LandPriceService landPrices;
+
+	public void attachLandPrices(LandPriceService landPrices) {
+		this.landPrices = landPrices;
+	}
 	private static final Pattern STATIC_PATH =
 			Pattern.compile("^/(css|js|icons|img)/[A-Za-z0-9_./-]+$|^/favicon\\.png$");
 	private final LoginThrottle throttle = new LoginThrottle();
@@ -645,6 +650,7 @@ public final class WebServer {
 	}
 
 	public long currentLandPrice() {
+		if (landPrices != null) return landPrices.currentPrice();
 		int totalClaimed = regions == null ? 0 : regions.ownerMap().size();
 		long price = 100_000L + ((long) totalClaimed * 15_000L);
 		return Math.min(1_000_000L, Math.max(100_000L, price));
@@ -711,6 +717,9 @@ public final class WebServer {
 						case LIMIT_REACHED -> throw new Json.ApiError(409, "limit_reached", "ครอบครองที่ดินครบโควตาแล้ว");
 						default -> throw new Json.ApiError(500, "internal_error", "ไม่สามารถซื้อที่ดินได้");
 					}
+				}
+				if (landPrices != null) {
+					landPrices.onCellPurchased();
 				}
 				JsonObject out = new JsonObject();
 				out.addProperty("ok", true);

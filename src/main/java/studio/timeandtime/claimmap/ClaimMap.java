@@ -44,6 +44,10 @@ public class ClaimMap implements ModInitializer {
 		return worldManager;
 	}
 
+	public LandPriceService landPrices() {
+		return landPrices;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
@@ -64,6 +68,7 @@ public class ClaimMap implements ModInitializer {
 	private SalesTracker salesTracker;
 	private TeleportManager teleports;
 	private studio.timeandtime.claimmap.world.WorldManager worldManager;
+	private LandPriceService landPrices;
 	private AuthGate authGate;
 	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
@@ -118,6 +123,8 @@ public class ClaimMap implements ModInitializer {
 		PlayerPositions.init(config.dataDir());
 		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions,
 				playerMarket, consignments, admin, playerItems, worldManager, salesTracker);
+		landPrices = new LandPriceService(config.dataDir().resolve("land-price.json"), regions.ownerMap().size());
+		web.attachLandPrices(landPrices);
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
 			if (worldManager != null) worldManager.tick();
