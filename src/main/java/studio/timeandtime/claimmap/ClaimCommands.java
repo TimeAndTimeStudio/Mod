@@ -615,7 +615,7 @@ public final class ClaimCommands {
 	private int runHelpGui(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (authGate != null && !authGate.isAllowed(player)) {
+		if (authGate != null && !authGate.isAuthed(player.getUUID())) {
 			src.sendFailure(Component.literal("§cกรุณาเข้าสู่ระบบก่อน: /pass login <รหัสผ่าน>"));
 			return 0;
 		}

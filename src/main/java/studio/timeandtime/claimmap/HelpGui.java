@@ -194,7 +194,7 @@ public final class HelpGui {
 						}
 					} else if (slotIndex == 16) { // /sell
 						if (prices != null && shop != null && config != null && auctions != null && economy != null) {
-							SellGui.open(sp, prices, shop, config.currencyName, auctions, economy);
+							SellGui.open(sp, shop, auctions, prices, economy, config.currencyName);
 						}
 					} else if (slotIndex == 28) { // /price
 						if (prices != null && shop != null && config != null) {
