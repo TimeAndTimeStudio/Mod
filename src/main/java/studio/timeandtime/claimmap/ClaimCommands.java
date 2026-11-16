@@ -190,7 +190,7 @@ public final class ClaimCommands {
 									.then(Commands.argument("hours", StringArgumentType.word())
 											.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
 													StringArgumentType.getString(ctx, "startPrice"),
-													StringArgumentType.getString(ctx, "hours"))))))));
+													StringArgumentType.getString(ctx, "hours")))))));
 
 			var timesmpNode = dispatcher.register(Commands.literal("timesmp")
 					.executes(ctx -> runClaimMapGui(ctx.getSource()))
