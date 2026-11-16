@@ -24,7 +24,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.util.datafix.DataFixers;
+import net.minecraft.world.level.DataPackConfig;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -35,7 +38,9 @@ import net.minecraft.world.level.storage.WorldData;
 import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.timeandtime.claimmap.ClaimMap;
 import studio.timeandtime.claimmap.ClaimMapConfig;
+import studio.timeandtime.claimmap.WorldSpawnProtection;
 import studio.timeandtime.claimmap.mixin.ServerLevelsAccessor;
 
 import java.io.IOException;
@@ -111,6 +116,50 @@ public final class WorldManager {
 		return "shared";
 	}
 
+	public static boolean isLobby(Level level) {
+		if (level == null) return false;
+		return level.dimension().location().getPath().equalsIgnoreCase("lobby")
+				&& level.dimension().location().getNamespace().equalsIgnoreCase(DIMENSION_NAMESPACE);
+	}
+
+	public boolean hasLobbyWorld() {
+		synchronized (worlds) {
+			WorldDefinition def = worlds.get("lobby");
+			return def != null && def.present();
+		}
+	}
+
+	public ServerLevel getLobbyLevel() {
+		synchronized (worlds) {
+			WorldDefinition def = worlds.get("lobby");
+			if (def != null && def.present()) {
+				if (!def.loaded()) {
+					try {
+						loadLocked(def);
+					} catch (Exception e) {
+						LOGGER.error("[worlds] Could not auto-load lobby: {}", e.getMessage());
+					}
+				}
+				return def.level;
+			}
+			return null;
+		}
+	}
+
+	private void checkAndPreloadLobby() {
+		synchronized (worlds) {
+			WorldDefinition def = worlds.get("lobby");
+			if (def != null && def.present() && !def.loaded()) {
+				try {
+					loadLocked(def);
+					LOGGER.info("[worlds] Found 'lobby' world - loaded and ready as starting lobby!");
+				} catch (Exception e) {
+					LOGGER.error("[worlds] Failed to auto-load 'lobby' world: {}", e.getMessage());
+				}
+			}
+		}
+	}
+
 	public String directory() {
 		Path dir = directory;
 		return dir == null ? config.worldDirectory : dir.toString();
@@ -141,6 +190,7 @@ public final class WorldManager {
 			tryCreateDefaultWorld("resource");
 			scanLocked();
 		}
+		checkAndPreloadLobby();
 		LOGGER.info("[worlds] Using {} ({} world(s), shared inventory)", directory, worlds.size());
 	}
 
@@ -212,6 +262,7 @@ public final class WorldManager {
 		for (WorldDefinition def : new ArrayList<>(worlds.values())) {
 			ServerLevel level = def.level;
 			if (!def.loaded() || level == null) continue;
+			if ("lobby".equalsIgnoreCase(def.name())) continue;
 			if (!level.players().isEmpty()) {
 				def.lastEmptyTick = 0L;
 				continue;
@@ -378,6 +429,7 @@ public final class WorldManager {
 			unregisterWorldCommand(def);
 			LOGGER.info("[worlds] Removed missing world {}", def.name());
 		}
+		checkAndPreloadLobby();
 	}
 
 	private WorldDefinition require(String name) {
@@ -426,6 +478,29 @@ public final class WorldManager {
 			access = storageSource.createAccess("worlds/" + def.folderName());
 			WorldStoragePaths.markManaged(access);
 
+			Path datapacksDir = def.folder().resolve("datapacks");
+			if (!Files.exists(datapacksDir)) {
+				try {
+					Files.createDirectories(datapacksDir);
+				} catch (Exception ignored) {}
+			}
+
+			List<String> discoveredPacks = new ArrayList<>();
+			if (Files.isDirectory(datapacksDir)) {
+				try (var stream = Files.list(datapacksDir)) {
+					for (Path p : stream.toList()) {
+						String fname = p.getFileName().toString();
+						if (Files.isDirectory(p) && Files.exists(p.resolve("pack.mcmeta"))) {
+							discoveredPacks.add("file/" + fname);
+						} else if (Files.isRegularFile(p) && fname.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+							discoveredPacks.add("file/" + fname);
+						}
+					}
+				} catch (Exception e) {
+					LOGGER.warn("[worlds] Could not scan datapacks in {}: {}", datapacksDir, e.getMessage());
+				}
+			}
+
 			Dynamic<?> tag = access.getUnfixedDataTagWithFallback();
 			int dataVersion = NbtUtils.getDataVersion(tag);
 			if (DataFixers.getFileFixer().requiresFileFixing(dataVersion)) {
@@ -433,8 +508,23 @@ public final class WorldManager {
 				tag = access.getUnfixedDataTagWithFallback();
 			}
 			Registry<LevelStem> stems = s.registryAccess().lookupOrThrow(Registries.LEVEL_STEM);
+			WorldDataConfiguration dataConfig = LevelStorageSource.readDataConfig(tag);
+			if (!discoveredPacks.isEmpty()) {
+				List<String> enabled = new ArrayList<>(dataConfig.dataPacks().getEnabled());
+				for (String packName : discoveredPacks) {
+					if (!enabled.contains(packName)) {
+						enabled.add(packName);
+					}
+				}
+				dataConfig = new WorldDataConfiguration(
+						new DataPackConfig(enabled, dataConfig.dataPacks().getDisabled()),
+						dataConfig.enabledFeatures()
+				);
+				LOGGER.info("[worlds] Discovered {} custom datapack(s) for world '{}'", discoveredPacks.size(), def.name());
+			}
+
 			LevelDataAndDimensions loaded = LevelStorageSource.getLevelDataAndDimensions(access, tag,
-					LevelStorageSource.readDataConfig(tag), stems, s.registryAccess());
+					dataConfig, stems, s.registryAccess());
 			WorldData data = loaded.worldDataAndGenSettings().data();
 			LevelStem stem = loaded.dimensions().dimensions().getValue(LevelStem.OVERWORLD);
 			if (stem == null) stem = stems.getValue(LevelStem.OVERWORLD);
@@ -529,6 +619,20 @@ public final class WorldManager {
 			saveMainWorldPositions();
 		}
 
+		if ("lobby".equalsIgnoreCase(def.name())) {
+			BlockPos sp = spawnPos(destination);
+			Vec3 target = new Vec3(sp.getX() + 0.5, sp.getY(), sp.getZ() + 0.5);
+			TeleportTransition transition = new TeleportTransition(destination, target, Vec3.ZERO,
+					player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
+			ServerPlayer moved = player.teleport(transition);
+			if (moved == null) throw new IllegalStateException("ย้ายผู้เล่นไม่สำเร็จ");
+			if (!moved.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
+				moved.setGameMode(GameType.ADVENTURE);
+			}
+			moved.sendSystemMessage(Component.literal("ย้ายไปโลก Lobby (พิมพ์ /main เพื่อไปโลกหลัก) แล้ว"));
+			return;
+		}
+
 		// Randomize X and Z every time!
 		ThreadLocalRandom rnd = ThreadLocalRandom.current();
 		int range = 2500;
@@ -560,6 +664,9 @@ public final class WorldManager {
 				player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
 		ServerPlayer moved = player.teleport(transition);
 		if (moved == null) throw new IllegalStateException("ย้ายผู้เล่นไม่สำเร็จ");
+		if (moved.gameMode.getGameModeForPlayer() == GameType.ADVENTURE) {
+			moved.setGameMode(GameType.SURVIVAL);
+		}
 		moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") แล้ว"));
 	}
 
@@ -586,19 +693,30 @@ public final class WorldManager {
 		Vec3 target;
 		float yaw = 0f;
 		float pitch = 0f;
+		boolean firstTime = (saved == null);
 		if (saved != null) {
 			target = new Vec3(saved.x(), saved.y(), saved.z());
 			yaw = saved.yaw();
 			pitch = saved.pitch();
 		} else {
-			BlockPos sp = spawnPos(mainWorld);
-			target = new Vec3(sp.getX() + 0.5, sp.getY(), sp.getZ() + 0.5);
+			BlockPos safePos = WorldSpawnProtection.findSafeSpawnLocation(mainWorld, -5000, 5000, -5000, 5000);
+			target = new Vec3(safePos.getX() + 0.5, safePos.getY(), safePos.getZ() + 0.5);
+			mainWorldPositions.put(player.getUUID(), new MainWorldPos(target.x, target.y, target.z, 0f, 0f));
+			saveMainWorldPositions();
 		}
 		TeleportTransition transition = new TeleportTransition(mainWorld, target, Vec3.ZERO,
 				yaw, pitch, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
 		ServerPlayer moved = player.teleport(transition);
 		if (moved == null) throw new IllegalStateException("ย้ายผู้เล่นไม่สำเร็จ");
-		moved.sendSystemMessage(Component.literal(saved != null ? "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว" : "กลับสู่จุดเกิดโลกหลักแล้ว"));
+		if (moved.gameMode.getGameModeForPlayer() == GameType.ADVENTURE) {
+			moved.setGameMode(GameType.SURVIVAL);
+		}
+		if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
+			ClaimMap.instance().spawnProtection().grantProtection(moved);
+		}
+		moved.sendSystemMessage(Component.literal(firstTime
+				? "ยินดีต้อนรับสู่โลกหลัก (พิกัดสุ่ม " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ")"
+				: "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว"));
 	}
 
 	public WorldInfo createWorld(String name) throws Exception {

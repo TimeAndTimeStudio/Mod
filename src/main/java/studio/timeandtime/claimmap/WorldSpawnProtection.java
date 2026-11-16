@@ -65,6 +65,17 @@ public final class WorldSpawnProtection {
 			final boolean firstTime = isNew;
 			server.execute(() -> {
 				if (!player.isAlive()) return;
+				var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
+				boolean hasLobby = wm != null && wm.hasLobbyWorld();
+				if (hasLobby) {
+					ServerLevel lobby = wm.getLobbyLevel();
+					if (lobby != null) {
+						if (firstTime || player.level() == lobby) {
+							teleportToLobbySpawn(player, lobby, firstTime);
+							return;
+						}
+					}
+				}
 				if (firstTime) {
 					ServerLevel overworld = server.overworld();
 					randomSpawnPlayer(player, overworld, true);
@@ -77,6 +88,17 @@ public final class WorldSpawnProtection {
 		// 2. On Player Respawn:
 		ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
 			if (newPlayer.getRespawnConfig() == null) {
+				var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
+				boolean hasLobby = wm != null && wm.hasLobbyWorld();
+				if (hasLobby) {
+					ServerLevel lobby = wm.getLobbyLevel();
+					if (lobby != null) {
+						newPlayer.level().getServer().execute(() -> {
+							teleportToLobbySpawn(newPlayer, lobby, false);
+						});
+						return;
+					}
+				}
 				// No bed or anchor: random spawn in Overworld
 				ServerLevel overworld = newPlayer.level().getServer().overworld();
 				newPlayer.level().getServer().execute(() -> {
@@ -90,13 +112,27 @@ public final class WorldSpawnProtection {
 
 		// 3. On Dimension / World Change:
 		ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) -> {
+			boolean enteringLobby = studio.timeandtime.claimmap.world.WorldManager.isLobby(destination);
+			boolean leavingLobby = studio.timeandtime.claimmap.world.WorldManager.isLobby(origin);
+			if (enteringLobby) {
+				if (!player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN)) {
+					player.setGameMode(net.minecraft.world.level.GameType.ADVENTURE);
+				}
+			} else if (leavingLobby) {
+				if (player.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.ADVENTURE) {
+					player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+				}
+			}
 			grantProtection(player);
 		});
 
-		// 4. Damage Cancellation while protected:
+		// 4. Damage Cancellation while protected or in lobby:
 		ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
 			if (entity instanceof ServerPlayer player) {
 				if (isProtected(player.getUUID())) {
+					return false;
+				}
+				if (studio.timeandtime.claimmap.world.WorldManager.isLobby(player.level())) {
 					return false;
 				}
 			}
@@ -119,6 +155,34 @@ public final class WorldSpawnProtection {
 					}
 				}
 			}
+		}
+		if (ClaimMap.getServer() != null) {
+			for (ServerPlayer player : ClaimMap.getServer().getPlayerList().getPlayers()) {
+				if (studio.timeandtime.claimmap.world.WorldManager.isLobby(player.level())) {
+					if (player.getFoodData().getFoodLevel() < 20) {
+						player.getFoodData().setFoodLevel(20);
+					}
+				}
+			}
+		}
+	}
+
+	public static void teleportToLobbySpawn(ServerPlayer player, ServerLevel lobby, boolean firstTime) {
+		BlockPos sp = lobby.getRespawnData().pos();
+		if (sp == null) sp = BlockPos.ZERO;
+		int x = sp.getX();
+		int z = sp.getZ();
+		int y = lobby.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) + 1;
+		if (y < lobby.getMinY() + 1) y = 64;
+
+		player.teleportTo(lobby, x + 0.5, y, z + 0.5, Set.of(), player.getYRot(), player.getXRot(), true);
+		if (!player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN)) {
+			player.setGameMode(net.minecraft.world.level.GameType.ADVENTURE);
+		}
+		if (firstTime) {
+			player.sendSystemMessage(Component.literal("§a[Lobby] ยินดีต้อนรับสู่เซิร์ฟเวอร์! พิมพ์ §f/main §aเพื่อเดินทางเข้าสู่โลกหลัก"));
+		} else {
+			player.sendSystemMessage(Component.literal("§a[Lobby] คุณกลับมาที่ Lobby (พิมพ์ §f/main §aเพื่อไปโลกหลัก)"));
 		}
 	}
 

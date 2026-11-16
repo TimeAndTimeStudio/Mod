@@ -75,6 +75,9 @@ public final class Protection {
 	// ---- helpers ------------------------------------------------------------
 
 	private boolean allowed(Level level, Player player, BlockPos pos) {
+		if (level != null && studio.timeandtime.claimmap.world.WorldManager.isLobby(level)) {
+			return isAdmin(player);
+		}
 		if (level != null && level.getServer() != null && level != level.getServer().overworld()) {
 			return true; // Claim system and protection only exist in the main overworld!
 		}
