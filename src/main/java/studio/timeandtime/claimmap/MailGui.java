@@ -98,6 +98,7 @@ public final class MailGui {
 				Component.literal("§0กล่องรับของของคุณ (/mail)"),
 				6,
 				false,
+				true,
 				container,
 				lockedSlots,
 				(slotIndex, button, input, sp) -> {
