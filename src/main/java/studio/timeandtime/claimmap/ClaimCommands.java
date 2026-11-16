@@ -1100,7 +1100,7 @@ public final class ClaimCommands {
 	}
 
 	public static boolean teleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
-		var level = player.serverLevel();
+		if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) return false;
 		int minX = cx * config.cellSize;
 		int minZ = cz * config.cellSize;
 		int margin = Math.min(2, Math.max(0, (config.cellSize - 2) / 2));
