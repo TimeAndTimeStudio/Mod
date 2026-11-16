@@ -761,6 +761,10 @@ public final class ClaimCommands {
 	private int runClaimMapGui(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
+		if (player.level() != src.getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return 0;
+		}
 		int cx = Math.floorDiv(player.getBlockX(), config.cellSize);
 		int cz = Math.floorDiv(player.getBlockZ(), config.cellSize);
 		ClaimMapGui.open(player, regions, config, economy, cx, cz);
@@ -873,6 +877,10 @@ public final class ClaimCommands {
 	private int runClaimAuctionHere(CommandSourceStack src, String startText, String hoursText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
+		if (player.level() != src.getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return 0;
+		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
 		int cx = Math.floorDiv(bx, config.cellSize);
@@ -1038,6 +1046,10 @@ public final class ClaimCommands {
 	private int runClaim(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
+		if (player.level() != src.getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบจองและซื้อเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return 0;
+		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
 		int cx = Math.floorDiv(bx, config.cellSize);
@@ -1103,6 +1115,10 @@ public final class ClaimCommands {
 	private int runHere(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
+		if (player.level() != src.getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return 0;
+		}
 		String id = regions.cellIdAt(player.getBlockX(), player.getBlockZ());
 		RegionManager.CellData c = regions.get(id);
 		String owner = c == null ? "free" : c.ownerName;
@@ -1121,6 +1137,10 @@ public final class ClaimCommands {
 	private int runClaimTransferHere(CommandSourceStack src, String targetName) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
+		if (player.level() != src.getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return 0;
+		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
 		int cx = Math.floorDiv(bx, config.cellSize);
@@ -1160,6 +1180,10 @@ public final class ClaimCommands {
 	private int runClaimAddHere(CommandSourceStack src, String targetName) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
+		if (player.level() != src.getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return 0;
+		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
 		int cx = Math.floorDiv(bx, config.cellSize);
@@ -1201,6 +1225,10 @@ public final class ClaimCommands {
 	private int runClaimRemoveHere(CommandSourceStack src, String targetName) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
+		if (player.level() != src.getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return 0;
+		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
 		int cx = Math.floorDiv(bx, config.cellSize);
@@ -1277,7 +1305,8 @@ public final class ClaimCommands {
 	}
 
 	private static boolean doTeleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
-		if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) return false;
+		ServerLevel level = player.level().getServer() != null ? player.level().getServer().overworld() : (player.level() instanceof ServerLevel sl ? sl : null);
+		if (level == null) return false;
 		int minX = cx * config.cellSize;
 		int minZ = cz * config.cellSize;
 		int margin = Math.min(2, Math.max(0, (config.cellSize - 2) / 2));

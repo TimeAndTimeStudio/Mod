@@ -177,7 +177,7 @@ public final class HelpGui {
 						Component.literal("§f/tpa accept §7- กดยอมรับคำขอวาร์ป (รอ 5 วิ)"),
 						Component.literal("§f/tpa deny §7- ปฏิเสธคำขอวาร์ป"),
 						Component.literal("§f/tpa cancel §7- ยกเลิกคำขอวาร์ป"),
-						Component.literal("§f/spawn §7หรือ §f/main §7- วาร์ปกลับจุดเกิด/โลกหลัก (รอ 5 วิ)"),
+						Component.literal("§f/main §7- วาร์ปกลับโลกหลัก ณ ตำแหน่งเดิม (รอ 5 วิ)"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§b[คลิก] §7เพื่อเปิดเมนูวาร์ปและเลือกผู้เล่นทันที")
 				)

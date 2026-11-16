@@ -642,29 +642,6 @@ public final class WorldManager {
 				.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN));
 		root.then(Commands.literal("list").executes(ctx -> listCommand(ctx.getSource())));
 		root.then(Commands.literal("scan").executes(ctx -> scanCommand(ctx.getSource())));
-		root.then(Commands.literal("create")
-				.then(Commands.argument("name", StringArgumentType.word())
-						.executes(ctx -> createCommand(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));
-		root.then(Commands.literal("load")
-				.then(Commands.argument("name", StringArgumentType.word())
-						.executes(ctx -> loadCommand(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));
-		root.then(Commands.literal("unload")
-				.then(Commands.argument("name", StringArgumentType.word())
-						.executes(ctx -> unloadCommand(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));
-		root.then(Commands.literal("tp")
-				.then(Commands.argument("name", StringArgumentType.word())
-						.executes(ctx -> tpCommand(ctx.getSource(), StringArgumentType.getString(ctx, "name"),
-								ctx.getSource().getPlayer()))
-						.then(Commands.argument("player", EntityArgument.player())
-								.executes(ctx -> {
-									try {
-										return tpCommand(ctx.getSource(), StringArgumentType.getString(ctx, "name"),
-												EntityArgument.getPlayer(ctx, "player"));
-									} catch (Exception e) {
-										ctx.getSource().sendFailure(Component.literal(e.getMessage()));
-										return 0;
-									}
-								}))));
 		dispatcher.register(root);
 	}
 
@@ -681,8 +658,7 @@ public final class WorldManager {
 			def.commandAvailable = false;
 			def.commandConflict = "ชื่อซ้ำกับคำสั่งที่มีอยู่";
 			if (!alreadyReported) {
-				LOGGER.warn("[worlds] /{} conflicts with an existing command; use /worlds tp {} instead",
-						def.name(), def.name());
+				LOGGER.warn("[worlds] /{} conflicts with an existing command", def.name());
 			}
 			return;
 		}
@@ -708,16 +684,6 @@ public final class WorldManager {
 
 	private void registerPlayerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
 		dispatcher.register(Commands.literal("main").executes(ctx -> {
-			ServerPlayer p = ctx.getSource().getPlayer();
-			if (p == null) {
-				ctx.getSource().sendFailure(Component.literal("คำสั่งนี้ใช้ได้เฉพาะผู้เล่น"));
-				return 0;
-			}
-			teleportToMainWorld(p);
-			return 1;
-		}));
-
-		dispatcher.register(Commands.literal("spawn").executes(ctx -> {
 			ServerPlayer p = ctx.getSource().getPlayer();
 			if (p == null) {
 				ctx.getSource().sendFailure(Component.literal("คำสั่งนี้ใช้ได้เฉพาะผู้เล่น"));
@@ -805,23 +771,6 @@ public final class WorldManager {
 		try {
 			unload(name);
 			source.sendSuccess(() -> Component.literal("ปิดโลก " + name + " แล้ว"), false);
-			return 1;
-		} catch (Exception e) {
-			source.sendFailure(Component.literal(e.getMessage()));
-			return 0;
-		}
-	}
-
-	private int tpCommand(CommandSourceStack source, String name, ServerPlayer player) {
-		if (player == null) {
-			source.sendFailure(Component.literal("ต้องระบุผู้เล่นหรือรันในเกม"));
-			return 0;
-		}
-		try {
-			WorldDefinition def = require(name);
-			loadLocked(def);
-			teleportLocked(player, def);
-			source.sendSuccess(() -> Component.literal("ย้าย " + player.getGameProfile().name() + " ไป " + name), false);
 			return 1;
 		} catch (Exception e) {
 			source.sendFailure(Component.literal(e.getMessage()));

@@ -13,7 +13,7 @@ public final class CommandFilter {
 
 	public static final Set<String> ALLOWED_MOD_COMMANDS = Set.of(
 			"pass", "bal", "pay", "sell", "buy", "mail", "ah",
-			"claim", "claimmap", "timesmp", "main", "spawn", "world",
+			"claim", "claimmap", "timesmp", "main", "world",
 			"tp", "tpa", "tpaccept", "tpdeny", "tpacancel"
 	);
 

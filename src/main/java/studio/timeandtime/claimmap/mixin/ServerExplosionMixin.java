@@ -1,6 +1,7 @@
 package studio.timeandtime.claimmap.mixin;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Creeper;
@@ -17,7 +18,8 @@ import java.util.List;
 
 /**
  * Ensures creeper explosions damage entities normally, but do not destroy blocks
- * inside claimed regions (cells). Outside claimed regions, blocks break normally.
+ * inside claimed regions (cells) in the overworld. In other worlds or outside claims,
+ * blocks break normally.
  */
 @Mixin(ServerExplosion.class)
 public abstract class ServerExplosionMixin {
@@ -27,8 +29,14 @@ public abstract class ServerExplosionMixin {
 	@Shadow
 	public abstract LivingEntity getIndirectSourceEntity();
 
+	@Shadow
+	private ServerLevel level;
+
 	@ModifyVariable(method = "interactWithBlocks", at = @At("HEAD"), argsOnly = true)
 	private List<BlockPos> filterClaimedBlocks(List<BlockPos> positions) {
+		if (this.level != null && this.level.getServer() != null && this.level != this.level.getServer().overworld()) {
+			return positions;
+		}
 		Entity direct = this.getDirectSourceEntity();
 		LivingEntity indirect = this.getIndirectSourceEntity();
 		if (direct instanceof Creeper || indirect instanceof Creeper) {

@@ -48,19 +48,19 @@ public final class Protection {
 	// ---- break --------------------------------------------------------------
 
 	private boolean onBreak(Level level, Player player, BlockPos pos, BlockState state, BlockEntity entity) {
-		if (allowed(player, pos)) return true;
+		if (allowed(level, player, pos)) return true;
 		deny(player);
 		return false;
 	}
 
 	private InteractionResult onAttack(Player player, Level level, InteractionHand hand, BlockPos pos, Direction direction) {
-		if (isAdmin(player) || allowed(player, pos)) return InteractionResult.PASS;
+		if (isAdmin(player) || allowed(level, player, pos)) return InteractionResult.PASS;
 		deny(player);
 		return InteractionResult.FAIL;
 	}
 
 	private InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
-		if (isAdmin(player) || allowed(player, hit.getBlockPos())) return InteractionResult.PASS;
+		if (isAdmin(player) || allowed(level, player, hit.getBlockPos())) return InteractionResult.PASS;
 		deny(player);
 		return InteractionResult.FAIL;
 	}
@@ -68,13 +68,16 @@ public final class Protection {
 	private InteractionResult onUseItem(Player player, Level level, InteractionHand hand) {
 		if (isAdmin(player)) return InteractionResult.PASS;
 		if (!isFluidFireItem(player.getItemInHand(hand))) return InteractionResult.PASS;
-		if (!allowed(player, player.blockPosition())) return InteractionResult.FAIL; // silently, spraying messages
+		if (!allowed(level, player, player.blockPosition())) return InteractionResult.FAIL; // silently, spraying messages
 		return InteractionResult.PASS;
 	}
 
 	// ---- helpers ------------------------------------------------------------
 
-	private boolean allowed(Player player, BlockPos pos) {
+	private boolean allowed(Level level, Player player, BlockPos pos) {
+		if (level != null && level.getServer() != null && level != level.getServer().overworld()) {
+			return true; // Claim system and protection only exist in the main overworld!
+		}
 		String id = regions.cellIdAt(pos.getX(), pos.getZ());
 		RegionManager.CellData cell = regions.get(id);
 		if (cell == null) return true;                       // unclaimed cell: free

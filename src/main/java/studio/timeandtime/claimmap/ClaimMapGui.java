@@ -25,6 +25,10 @@ public final class ClaimMapGui {
 
 	public static void open(ServerPlayer player, RegionManager regions, ClaimMapConfig config,
 							EconomyManager economy, int centerCx, int centerCz) {
+		if (player.level() != player.level().getServer().overworld()) {
+			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+			return;
+		}
 		int playerCx = Math.floorDiv(player.getBlockX(), config.cellSize);
 		int playerCz = Math.floorDiv(player.getBlockZ(), config.cellSize);
 		String myUuid = player.getUUID().toString();
