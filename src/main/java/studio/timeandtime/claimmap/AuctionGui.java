@@ -90,29 +90,29 @@ public final class AuctionGui {
 
 		if (curPage > 0) {
 			ItemStack prev = new ItemStack(Items.ARROW);
-			prev.set(DataComponents.CUSTOM_NAME, Component.literal("§e< หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"));
+			prev.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE103 < หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"));
 			container.setItem(45, prev);
 		}
 
 		// Mode buttons
 		ItemStack itemsBtn = new ItemStack(Items.CHEST);
-		itemsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ITEMS ? "§a[เลือก] " : "§f") + "ของที่ผู้เล่นลงขาย"));
+		itemsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ITEMS ? "§a\uE105 " : "§f") + "\uE100 ของที่ผู้เล่นลงขาย"));
 		itemsBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะสินค้าไอเท็ม"))));
 		container.setItem(46, itemsBtn);
 
 		ItemStack cellsBtn = new ItemStack(Items.FILLED_MAP);
-		cellsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.CELLS ? "§a[เลือก] " : "§f") + "ที่ดินประมูล"));
+		cellsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.CELLS ? "§a\uE105 " : "§f") + "\uE107 ที่ดินประมูล"));
 		cellsBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะเขตที่ดิน"))));
 		container.setItem(47, cellsBtn);
 
 		ItemStack myAuctions = new ItemStack(Items.ENDER_CHEST);
-		myAuctions.set(DataComponents.CUSTOM_NAME, Component.literal("§b[รายการของฉัน]"));
+		myAuctions.set(DataComponents.CUSTOM_NAME, Component.literal("§b\uE101 [รายการของฉัน]"));
 		myAuctions.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อดูและจัดการรายการที่คุณลงขาย"))));
 		container.setItem(48, myAuctions);
 
 		long balance = economy.balance(player.getUUID());
 		ItemStack info = new ItemStack(Items.GOLD_INGOT);
-		info.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency));
+		info.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE108 [ยอดเงินของคุณ]: " + balance + " " + currency));
 		info.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§7หน้า " + (curPage + 1) + "/" + maxPages + " (ทั้งหมด " + active.size() + " รายการ)"),
 				Component.literal("§eคลิกเพื่อรีเฟรช")
@@ -120,12 +120,12 @@ public final class AuctionGui {
 		container.setItem(49, info);
 
 		ItemStack allBtn = new ItemStack(Items.NETHER_STAR);
-		allBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ALL ? "§a[เลือก] " : "§f") + "แสดงทั้งหมด"));
+		allBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ALL ? "§a\uE105 " : "§f") + "แสดงทั้งหมด"));
 		allBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7แสดงทั้งสินค้าไอเท็มและที่ดิน"))));
 		container.setItem(50, allBtn);
 
 		ItemStack howTo = new ItemStack(Items.EMERALD);
-		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a[+] วิธีลงขาย & ประมูล"));
+		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE109 [+] วิธีลงขาย & ประมูล"));
 		howTo.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§e[ลงขายของให้ผู้เล่น]:"),
 				Component.literal("§7ถือของในมือแล้วพิมพ์: §a/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"),
@@ -138,7 +138,7 @@ public final class AuctionGui {
 
 		if (curPage < maxPages - 1) {
 			ItemStack next = new ItemStack(Items.ARROW);
-			next.set(DataComponents.CUSTOM_NAME, Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"));
+			next.set(DataComponents.CUSTOM_NAME, Component.literal("§eหน้าถัดไป > \uE104 (" + (curPage + 2) + "/" + maxPages + ")"));
 			container.setItem(53, next);
 		}
 

@@ -369,8 +369,7 @@ document.addEventListener('pointerdown', (event) => {
 
 /* ---------- shell ---------- */
 const NAV = [
-  { id: 'map', label: 'แผนที่' },
-  { id: 'auction', label: 'ประมูล' },
+  { id: 'auction', label: 'ตลาดประมูล' },
   { id: 'guide', label: 'วิธีใช้งาน' },
 ];
 
@@ -384,18 +383,13 @@ function renderShell() {
     for (const item of NAV) {
       nav.append(el('a', { href: '#' + item.id, 'aria-current': active(item.id) ? 'page' : null }, item.label));
     }
-    if (state.me?.admin) nav.append(el('a', { href: '#admin', 'aria-current': active('admin') ? 'page' : null }, 'แอดมิน'));
 
     const primary = [
-      { id: 'map', label: 'แผนที่' },
-      { id: 'auction', label: 'ประมูล' },
+      { id: 'auction', label: 'ตลาดประมูล' },
       { id: 'guide', label: 'วิธีใช้งาน' },
     ];
     for (const item of primary) {
       tabs.append(el('button', { type: 'button', 'aria-current': active(item.id) ? 'page' : null, onclick: () => go(item.id) }, item.label));
-    }
-    if (state.me?.admin) {
-      tabs.append(el('button', { type: 'button', 'aria-current': active('admin') ? 'page' : null, onclick: () => go('admin') }, 'แอดมิน'));
     }
   }
 
@@ -413,7 +407,7 @@ function openMenu() {
       el('strong', {}, 'เมนู'),
       el('button', { type: 'button', class: 'btn ghost', onclick: closeMenu }, 'ปิด')),
     el('div', { class: 'sheet-body' },
-      ...[...NAV, ...(state.me?.admin ? [{ id: 'admin', label: 'แอดมิน' }] : [])].map((item) =>
+      ...NAV.map((item) =>
         el('a', { href: '#' + item.id, 'aria-current': active(item.id) ? 'page' : null, onclick: closeMenu }, item.label)),
       el('a', { href: '#login', onclick: () => { closeMenu(); state.me ? logout() : null; } }, state.me ? 'ออกจากระบบ' : 'เข้าสู่ระบบ')));
   document.body.append(menu);
@@ -498,7 +492,7 @@ function render() {
   if (pageTimer) { clearInterval(pageTimer); pageTimer = null; }
   if (mapCleanup) { mapCleanup(); mapCleanup = null; }
   const rawRoute = location.hash.replace(/^#\/?/, '');
-  let route = rawRoute || (state.me ? 'map' : 'login');
+  let route = rawRoute || (state.me ? 'auction' : 'login');
 
   if (!state.me) {
     if (route !== 'login') {
@@ -507,19 +501,15 @@ function render() {
     }
   }
 
-  if (route === 'home' || route === 'trends' || route === 'buy' || route === 'sell' || route === 'prices' || route === 'wallet' || route === 'about') {
-    location.hash = '#map';
-    return;
-  }
-  if (route === 'admin' && (!state.me || !state.me.admin)) {
-    location.hash = '#map';
+  if (route !== 'auction' && route !== 'login' && route !== 'guide') {
+    location.hash = '#auction';
     return;
   }
   renderShell();
   const view = $('#view');
   clear(view);
-  const page = (PAGES[route] || page404)(view);
-  document.title = (route === 'map' ? 'แผนที่ · Time SMP' : `${navLabel(route)} · Time SMP`);
+  const page = (PAGES[route] || PAGES['auction'])(view);
+  document.title = (route === 'auction' ? 'ตลาดประมูล · Time SMP' : `${navLabel(route)} · Time SMP`);
   window.scrollTo(0, 0);
   view.focus({ preventScroll: true });
   if (page?.then) page.catch((error) => { clear(view); view.append(errorState(error)); });
@@ -1597,12 +1587,10 @@ function drawTrendChart(canvas, history, basePrice, currentSell) {
 /* ---------- auction ---------- */
 async function pageAuction(view) {
   const page = el('div', { class: 'page' });
-  const head = el('div', { class: 'page-head', style: 'display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px' },
-    el('div', {},
-      el('span', { class: 'mono muted eyebrow' }, navLabel('auction')),
-      el('h1', {}, 'ประมูล'),
-      el('p', { class: 'hint' }, 'รายการประมูลไอเท็มและเขตที่ดิน สามารถเสนอราคา ซื้อทันที หรือนำที่ดินของตนเองมาเปิดประมูลได้')),
-    el('button', { class: 'btn primary', type: 'button', onclick: openPlayerCellAuctionModal }, 'เปิดประมูลเขตที่ดินของฉัน'));
+  const head = el('div', { class: 'page-head' },
+    el('span', { class: 'mono muted eyebrow' }, 'ตลาดประมูล'),
+    el('h1', {}, 'รายการประมูล'),
+    el('p', { class: 'hint' }, 'ตลาดประมูลสินค้าและเขตที่ดิน · สำหรับการเปิดประมูลที่ดินให้เลือกทำในเกมผ่านเมนูแผนที่ (/map หรือ /claimmap)'));
   page.append(head);
   view.append(page);
   tabbed(page, [{ id: 'active', label: 'กำลังประมูล' }, { id: 'mine', label: 'ของฉัน' }], state.auctionTab, (panel, id) => { state.auctionTab = id; auctionList(panel, id === 'mine'); });
@@ -1998,10 +1986,9 @@ function pageGuide(view) {
     el('p', {}, 'ป้องกันพื้นที่ ปลูกสร้าง และซื้อขายเขตที่ดินในเซิร์ฟเวอร์'),
     el('ul', {},
       el('li', {}, el('span', { class: 'guide-cmd' }, '/claim'), ' — ซื้อหรือจองกรรมสิทธิ์เขตที่ดินในตำแหน่งที่กำลังยืนอยู่'),
-      el('li', {}, el('span', { class: 'guide-cmd' }, '/claimmap'), ' — เปิดหน้าต่างแผนที่เรดาร์ในเกม ดูเขตใกล้เคียงและสถานะ'),
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/claimmap'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/map'), ' — เปิดหน้าต่างแผนที่เรดาร์ในเกม ดูเขตใกล้เคียงและสถานะ'),
       el('li', {}, el('span', { class: 'guide-cmd' }, '/claim transfer <ชื่อผู้เล่น>'), ' — โอนกรรมสิทธิ์เขตที่ยืนอยู่ให้ผู้เล่นอื่น'),
-      el('li', {}, '• ', el('strong', {}, 'เปิดประมูลที่ดิน:'), ' พิมพ์ ', el('span', { class: 'guide-cmd' }, '/ah cell <รหัสเขต> <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]'), ' หรือคลิกเขตของตนเองบนหน้าเว็บแผนที่ / หน้าประมูล แล้วกดเปิดประมูล'),
-      el('li', {}, '• ดูขอบเขตที่ดินและผู้ครอบครองทั้งหมดแบบ Real-time ได้ที่แท็บ ', el('a', { href: '#map' }, 'แผนที่'))
+      el('li', {}, '• ', el('strong', {}, 'เปิดประมูลที่ดิน:'), ' ให้เปิดเมนูแผนที่ในเกม (', el('span', { class: 'guide-cmd' }, '/map'), ') แล้วคลิกเลือกเขตของตนเองเพื่อกดเปิดประมูล หรือพิมพ์ ', el('span', { class: 'guide-cmd' }, '/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]'))
     )
   );
 
@@ -2020,11 +2007,11 @@ function pageGuide(view) {
   // 6. การใช้งานหน้าเว็บไซต์
   const cardWeb = el('div', { class: 'guide-card' },
     el('h2', {}, '[6] การเชื่อมต่อกับหน้าเว็บไซต์ (Web UI)'),
-    el('p', {}, 'เข้าถึงข้อมูลเซิร์ฟเวอร์แบบ Real-time จากเบราว์เซอร์หรือมือถือ'),
+    el('p', {}, 'เข้าถึงระบบประมูลของเซิร์ฟเวอร์แบบ Real-time จากเบราว์เซอร์หรือมือถือ'),
     el('ul', {},
       el('li', {}, '• ', el('strong', {}, 'วิธีเข้าสู่ระบบ:'), ' เข้าเล่นในเกม แล้วพิมพ์คำสั่ง ', el('span', { class: 'guide-cmd' }, '/pass'), ' หรือล็อกอินด้วยชื่อและรหัสผ่านในเกม'),
-      el('li', {}, '• ', el('strong', {}, 'หน้าแผนที่ (#map):'), ' ดูพิกัดผู้เล่นแบบสด, ขอบเขตที่ดิน, ค้นหาพิกัด, กดซื้อเขตที่ว่างอยู่, หรือกดเปิดประมูลเขตของตนเอง'),
-      el('li', {}, '• ', el('strong', {}, 'หน้าประมูล (#auction):'), ' ดูรายการประมูลสดทั้งหมด, เสนอราคา (Bid), กดซื้อทันที (Buyout), หรือกดปุ่ม "เปิดประมูลเขตที่ดินของฉัน"')
+      el('li', {}, '• ', el('strong', {}, 'ตลาดประมูล (#auction):'), ' ตรวจสอบรายการประมูลสดทั้งหมด (ทั้งไอเท็มและที่ดิน), เสนอราคาแข่ง (Bid), หรือกดซื้อทันที (Buyout)'),
+      el('li', {}, '• ', el('strong', {}, 'การเปิดประมูลที่ดิน:'), ' ให้เลือกทำในเกมเท่านั้นผ่านคำสั่ง ', el('span', { class: 'guide-cmd' }, '/claimmap'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/map'), ' คลิกเลือกเขตของตนเอง แล้วกดปุ่มเปิดประมูล')
     )
   );
 
@@ -2637,7 +2624,7 @@ async function boot() {
     try {
       const me = await api('GET', '/api/me');
       state.me = { name: me.name, admin: !!me.admin };
-      state.pos = me.hasPos ? { x: Number(me.x) || 0, z: Number(me.z) || 0 } : null;
+      state.pos = null; // No player position tracking
       await refreshWallet();
     } catch {
       state.token = '';

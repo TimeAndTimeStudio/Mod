@@ -71,7 +71,7 @@ public final class SellGui {
 		// Slot 49: Player Balance
 		long balance = economy.balance(player.getUUID());
 		ItemStack gold = new ItemStack(Items.GOLD_INGOT);
-		gold.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency));
+		gold.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE108 [ยอดเงินของคุณ]: " + balance + " " + currency));
 		gold.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§7ยอดเงินคงเหลือปัจจุบันของคุณ")
 		)));
@@ -79,7 +79,7 @@ public final class SellGui {
 
 		// Slot 50: [ปุ่มลงขายให้ผู้เล่น / ประมูล]
 		ItemStack sellPlayerBtn = new ItemStack(Items.EMERALD);
-		sellPlayerBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§a[ลงขาย] ให้ผู้เล่นอื่น (ตลาด / ประมูล)"));
+		sellPlayerBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE101 [ลงขาย] ให้ผู้เล่นอื่น (ตลาด / ประมูล)"));
 		sellPlayerBtn.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§7ต้องการขายของให้ผู้เล่นคนอื่นในราคาที่คุณต้องการ?"),
 				Component.literal("§7--------------------------------"),
@@ -95,7 +95,7 @@ public final class SellGui {
 
 		// Slot 53: Close & Sell button
 		ItemStack closeBtn = new ItemStack(Items.BARRIER);
-		closeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[X] ปิดหน้าต่าง & ขายทันที"));
+		closeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c\uE106 [X] ปิดหน้าต่าง & ขายทันที"));
 		closeBtn.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§7คลิกเพื่อปิดหน้าต่างและทำการขายของที่วางอยู่")
 		)));

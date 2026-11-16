@@ -339,6 +339,9 @@ public final class WebServer {
 	}
 
 	private void requireMethod(HttpExchange ex, String actual, String expected) {
+		if (expected.equals("GET") && actual.equals("HEAD")) {
+			return;
+		}
 		if (!actual.equals(expected)) {
 			throw new Json.ApiError(405, "method_not_allowed", "วิธีเรียกไม่ถูกต้อง ต้องใช้ " + expected)
 					.header("Allow", expected);
@@ -447,6 +450,12 @@ public final class WebServer {
 		ex.getResponseHeaders().set("Content-Type", type);
 		ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
 		ex.getResponseHeaders().set("Cache-Control", rel.startsWith("icons/") ? "max-age=86400" : "no-cache");
+		if ("HEAD".equals(ex.getRequestMethod())) {
+			ex.getResponseHeaders().set("Content-Length", String.valueOf(data.length));
+			ex.sendResponseHeaders(200, -1);
+			ex.close();
+			return;
+		}
 		ex.sendResponseHeaders(200, data.length);
 		try (OutputStream os = ex.getResponseBody()) {
 			os.write(data);
@@ -489,6 +498,12 @@ public final class WebServer {
 		ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
 		ex.getResponseHeaders().set("Cache-Control", "no-cache");
 		ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+		if ("HEAD".equals(ex.getRequestMethod())) {
+			ex.getResponseHeaders().set("Content-Length", String.valueOf(webPage.length));
+			ex.sendResponseHeaders(200, -1);
+			ex.close();
+			return;
+		}
 		ex.sendResponseHeaders(200, webPage.length);
 		try (OutputStream os = ex.getResponseBody()) {
 			os.write(webPage);

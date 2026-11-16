@@ -45,14 +45,10 @@ public final class ClaimMapGui {
 				String cellId = cellX + "," + cellZ;
 
 				RegionManager.CellData cellData = regions.get(cellId);
-				boolean isPlayerHere = (cellX == playerCx && cellZ == playerCz);
 				boolean isCommon = regions.isCommonArea(cellX, cellZ);
 
 				ItemStack stack;
-				if (isPlayerHere) {
-					stack = itemById("minecraft:orange_glazed_terracotta");
-					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ตำแหน่งของคุณ] ช่อง " + cellId));
-				} else if (isCommon) {
+				if (isCommon) {
 					stack = itemById("minecraft:gray_stained_glass_pane");
 					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§8[พื้นที่ส่วนกลาง] ช่อง " + cellId));
 				} else if (cellData != null) {
@@ -105,31 +101,31 @@ public final class ClaimMapGui {
 
 		// Navigation buttons
 		ItemStack west = new ItemStack(Items.ARROW);
-		west.set(DataComponents.CUSTOM_NAME, Component.literal("§e< ตะวันตก (West)"));
+		west.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10D ตะวันตก (West)"));
 		container.setItem(45, west);
 
 		ItemStack north = new ItemStack(Items.ARROW);
-		north.set(DataComponents.CUSTOM_NAME, Component.literal("§e^ เหนือ (North)"));
+		north.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10B เหนือ (North)"));
 		container.setItem(46, north);
 
 		ItemStack south = new ItemStack(Items.ARROW);
-		south.set(DataComponents.CUSTOM_NAME, Component.literal("§ev ใต้ (South)"));
+		south.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10C ใต้ (South)"));
 		container.setItem(47, south);
 
 		ItemStack east = new ItemStack(Items.ARROW);
-		east.set(DataComponents.CUSTOM_NAME, Component.literal("§e> ตะวันออก (East)"));
+		east.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10E ตะวันออก (East)"));
 		container.setItem(48, east);
 
 		ItemStack center = new ItemStack(Items.COMPASS);
-		center.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ตำแหน่งปัจจุบัน]"));
+		center.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE10F [ศูนย์กลาง 0, 0]"));
 		container.setItem(49, center);
 
 		ItemStack claimHere = new ItemStack(Items.EMERALD);
-		claimHere.set(DataComponents.CUSTOM_NAME, Component.literal("§a[+] จองเขตที่ยืนอยู่ทันที"));
+		claimHere.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE109 จองเขตที่ยืนอยู่ทันที"));
 		container.setItem(50, claimHere);
 
 		ItemStack close = new ItemStack(Items.BARRIER);
-		close.set(DataComponents.CUSTOM_NAME, Component.literal("§c[X] ปิดแผนที่"));
+		close.set(DataComponents.CUSTOM_NAME, Component.literal("§c\uE106 ปิดแผนที่"));
 		container.setItem(53, close);
 
 		VirtualChestMenu.open(
@@ -147,8 +143,8 @@ public final class ClaimMapGui {
 						open(sp, regions, config, economy, centerCx, centerCz + 1);
 					} else if (slotIndex == 48) { // East
 						open(sp, regions, config, economy, centerCx + 1, centerCz);
-					} else if (slotIndex == 49) { // Reset center
-						open(sp, regions, config, economy, playerCx, playerCz);
+					} else if (slotIndex == 49) { // Reset center to origin (0, 0)
+						open(sp, regions, config, economy, 0, 0);
 					} else if (slotIndex == 50) { // Claim current
 						sp.closeContainer();
 						var server = ClaimMap.getServer();
@@ -243,7 +239,7 @@ public final class ClaimMapGui {
 		container.setItem(4, cellInfo);
 
 		ItemStack abandon = new ItemStack(Items.LAVA_BUCKET);
-		abandon.set(DataComponents.CUSTOM_NAME, Component.literal("§c[!] ปล่อยสิทธิ์เขตนี้"));
+		abandon.set(DataComponents.CUSTOM_NAME, Component.literal("§c\uE106 [!] ปล่อยสิทธิ์เขตนี้"));
 		abandon.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
 				Component.literal("§cไม่สามารถปล่อยเขตได้เนื่องจากกำลังเปิดประมูลอยู่")
 		) : List.of(
@@ -253,7 +249,7 @@ public final class ClaimMapGui {
 		container.setItem(11, abandon);
 
 		ItemStack auction = new ItemStack(Items.GOLD_INGOT);
-		auction.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ประมูล] เปิดประมูลเขตนี้"));
+		auction.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE102 [ประมูล] เปิดประมูลเขตนี้"));
 		auction.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
 				Component.literal("§aเขตนี้กำลังเปิดประมูลอยู่แล้วในตลาด /ah และหน้าเว็บ"),
 				Component.literal("§7คุณสามารถตรวจสอบสถานะได้ที่คำสั่ง /ah")
@@ -265,7 +261,7 @@ public final class ClaimMapGui {
 		container.setItem(15, auction);
 
 		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปยังแผนที่"));
+		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE103 < กลับไปยังแผนที่"));
 		container.setItem(22, back);
 
 		VirtualChestMenu.open(

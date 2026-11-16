@@ -121,6 +121,12 @@ final class Json {
 		byte[] bytes = GSON.toJson(body).getBytes(StandardCharsets.UTF_8);
 		ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
 		ex.getResponseHeaders().set("Cache-Control", "no-store");
+		if ("HEAD".equals(ex.getRequestMethod())) {
+			ex.getResponseHeaders().set("Content-Length", String.valueOf(bytes.length));
+			ex.sendResponseHeaders(status, -1);
+			ex.close();
+			return;
+		}
 		ex.sendResponseHeaders(status, bytes.length);
 		try (OutputStream os = ex.getResponseBody()) {
 			os.write(bytes);
