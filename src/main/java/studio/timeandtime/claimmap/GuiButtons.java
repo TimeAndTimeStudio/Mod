@@ -70,7 +70,12 @@ public final class GuiButtons {
 	}
 
 	public static ItemStack button(String buttonId, String title, List<String> lore) {
-		List<Component> loreComp = lore == null ? List.of() : lore.stream().map(Component::literal).toList();
+		List<Component> loreComp = new java.util.ArrayList<>();
+		if (lore != null) {
+			for (String line : lore) {
+				loreComp.add(Component.literal(line));
+			}
+		}
 		return button(buttonId, Component.literal(title), loreComp);
 	}
 }
