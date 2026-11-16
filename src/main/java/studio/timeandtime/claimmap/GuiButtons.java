@@ -31,6 +31,7 @@ public final class GuiButtons {
 	public static final String WARP = "warp";
 	public static final String ABANDON = "abandon";
 	public static final String BRAND = "brand";
+	public static final String HELP = "help";
 
 	public static int modelId(String buttonId) {
 		return switch (buttonId) {
@@ -53,6 +54,7 @@ public final class GuiButtons {
 			case WARP -> 1017;
 			case ABANDON -> 1018;
 			case BRAND -> 1019;
+			case HELP -> 1020;
 			default -> 1000;
 		};
 	}

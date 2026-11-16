@@ -43,7 +43,7 @@ public final class SellGui {
 		// Fill bottom control row (slots 45..53)
 		Item paneItem = BuiltInRegistries.ITEM.getValue(Identifier.parse("minecraft:gray_stained_glass_pane"));
 		Item fallbackItem = paneItem != null ? paneItem : Items.IRON_BARS;
-		for (int slot : List.of(45, 46, 51, 52)) {
+		for (int slot : List.of(45, 46, 51, 52, 53)) {
 			ItemStack pane = new ItemStack(fallbackItem);
 			pane.set(DataComponents.CUSTOM_NAME, Component.literal("§7---"));
 			container.setItem(slot, pane);
@@ -55,7 +55,7 @@ public final class SellGui {
 				Component.literal("§e[ช่องขายไอเท็มเข้าร้าน] (ช่อง 1-45)"),
 				List.of(
 						Component.literal("§7วางไอเท็มที่ต้องการขายในช่อง 1-45 ด้านบน"),
-						Component.literal("§7เมื่อปิดหน้าต่าง ระบบจะขายให้เซิร์ฟเวอร์ทันที"),
+						Component.literal("§eกดปุ่ม Esc บนคีย์บอร์ดเพื่อปิดและขายทันที"),
 						Component.literal("§aเงินจะโอนเข้ากระเป๋าของคุณอัตโนมัติ")
 				)
 		);
@@ -99,17 +99,6 @@ public final class SellGui {
 		);
 		container.setItem(50, sellPlayerBtn);
 
-		// Slot 53: Close & Sell button
-		ItemStack closeBtn = GuiButtons.button(
-				GuiButtons.CART,
-				Component.literal("§c[X] ปิดหน้าต่าง & ขายทันที"),
-				List.of(
-						Component.literal("§7คลิกเพื่อปิดหน้าต่างและทำการขายของที่วางอยู่"),
-						Component.literal("§7(หรือกดปุ่ม Esc)")
-				)
-		);
-		container.setItem(53, closeBtn);
-
 		boolean[] processed = new boolean[]{false};
 		Runnable doSell = () -> {
 			if (processed[0]) return;
@@ -136,8 +125,6 @@ public final class SellGui {
 					} else if (slotIndex == 48) { // ดูราคาร้านค้า
 						doSell.run();
 						PriceGui.open(sp, prices, shop, currency, 0, 0);
-					} else if (slotIndex == 53) { // ปิดหน้าต่าง
-						sp.closeContainer();
 					}
 				},
 				(sp, cont) -> doSell.run()

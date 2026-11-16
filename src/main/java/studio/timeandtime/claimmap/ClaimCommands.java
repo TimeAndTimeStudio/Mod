@@ -224,6 +224,13 @@ public final class ClaimCommands {
 			dispatcher.register(Commands.literal("map").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaimMapGui(ctx.getSource())));
 
+			dispatcher.register(Commands.literal("help").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runHelpGui(ctx.getSource())));
+			dispatcher.register(Commands.literal("smphelp").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runHelpGui(ctx.getSource())));
+			dispatcher.register(Commands.literal("menu").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runHelpGui(ctx.getSource())));
+
 			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runTpaAccept(ctx.getSource(), null))
 					.then(Commands.literal("accept")
@@ -602,6 +609,17 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		AuctionGui.open(player, auctions, economy, config.currencyName, 0);
+		return 1;
+	}
+
+	private int runHelpGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		if (authGate != null && !authGate.isAllowed(player)) {
+			src.sendFailure(Component.literal("§cกรุณาเข้าสู่ระบบก่อน: /pass login <รหัสผ่าน>"));
+			return 0;
+		}
+		HelpGui.open(player, regions, config, economy, prices, shop, auctions, mailbox);
 		return 1;
 	}
 
