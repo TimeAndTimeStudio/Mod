@@ -682,6 +682,9 @@ public final class WebServer {
 		} else if (rest.endsWith("/transfer")) {
 			id = rest.substring(0, rest.length() - "/transfer".length());
 			action = "transfer";
+		} else if (rest.endsWith("/auction")) {
+			id = rest.substring(0, rest.length() - "/auction".length());
+			action = "auction";
 		} else {
 			id = rest;
 		}
@@ -751,6 +754,9 @@ public final class WebServer {
 			case "transfer" -> {
 				requireMethod(ex, method, "POST");
 				Auth a = requireAuth(ex);
+				if (auctions.hasActiveCellAuction(id)) {
+					throw new Json.ApiError(409, "already_listed", "ไม่สามารถโอนเขตนี้ได้เนื่องจากกำลังเปิดประมูลอยู่");
+				}
 				boolean admin = a.master() || a.admin();
 				JsonObject body = Json.readObject(ex);
 				String to = Json.str(body, "to");
@@ -784,9 +790,41 @@ public final class WebServer {
 				out.addProperty("ownerName", targetName);
 				Json.send(ex, 200, out);
 			}
+			case "auction" -> {
+				requireMethod(ex, method, "POST");
+				Auth a = requireSession(ex);
+				requireAuctionEnabled();
+				JsonObject body = Json.readObject(ex);
+				Long startPrice = Json.integer(body, "startPrice");
+				Long buyoutValue = Json.integer(body, "buyout");
+				Long hoursValue = Json.integer(body, "hours");
+				if (startPrice == null || startPrice < 0 || startPrice > EconomyManager.MAX_MONEY) {
+					throw new Json.ApiError(400, "bad_request", "ราคาเริ่มต้นต้องระหว่าง 0 ถึง " + EconomyManager.MAX_MONEY);
+				}
+				Long buyout = buyoutValue == null || buyoutValue <= 0 ? null : buyoutValue;
+				if (buyout != null && buyout < startPrice) {
+					throw new Json.ApiError(400, "bad_request", "ราคาซื้อทันทีต้องมากกว่าหรือเท่ากับราคาเริ่มต้น");
+				}
+				int hours = hoursValue == null || hoursValue <= 0 ? 24 : (int) Math.min(24 * 7, Math.max(1, hoursValue));
+				boolean admin = a.master() || a.admin();
+				boolean asServer = admin && body.has("asServer") && body.get("asServer").getAsBoolean();
+				String sellerUuid = asServer ? null : a.uuid();
+				String sellerName = asServer ? "เซิร์ฟเวอร์" : a.name();
+				AuctionManager.CreateOutcome o = auctions.createCellAuction(id, sellerUuid, sellerName, startPrice, buyout, hours);
+				if (o.result() != AuctionManager.Result.OK) {
+					throw auctionError(o.result(), 0);
+				}
+				JsonObject out = new JsonObject();
+				out.addProperty("ok", true);
+				out.addProperty("id", o.auctionId());
+				Json.send(ex, 200, out);
+			}
 			default -> {
 				requireMethod(ex, method, "DELETE");
 				Auth a = requireAuth(ex);
+				if (auctions.hasActiveCellAuction(id)) {
+					throw new Json.ApiError(409, "already_listed", "ไม่สามารถปล่อยเขตนี้ได้เนื่องจากกำลังเปิดประมูลอยู่");
+				}
 				boolean admin = a.master() || a.admin();
 				String byUuid = a.master() ? "admin" : a.uuid();
 				boolean ok = regions.unclaim(id, byUuid, admin);
