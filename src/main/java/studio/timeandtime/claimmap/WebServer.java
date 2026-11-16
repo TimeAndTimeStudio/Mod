@@ -423,10 +423,10 @@ public final class WebServer {
 			if (java.nio.file.Files.exists(diskRp)) {
 				data = java.nio.file.Files.readAllBytes(diskRp);
 			} else {
-				InputStream in = WebServer.class.getResourceAsStream("/resourcepack.zip");
-				if (in == null) in = WebServer.class.getResourceAsStream("/timesmp-web/resourcepack.zip");
-				if (in == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
-				try (in) {
+				InputStream res = WebServer.class.getResourceAsStream("/resourcepack.zip");
+				if (res == null) res = WebServer.class.getResourceAsStream("/timesmp-web/resourcepack.zip");
+				if (res == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+				try (InputStream in = res) {
 					data = in.readAllBytes();
 				}
 			}
