@@ -432,6 +432,7 @@ public final class WebServer {
 					data = in.readAllBytes();
 				}
 			}
+			ClaimMap.LOGGER.info("[timesmp] Serving resourcepack.zip ({} bytes) to {}", data.length, ex.getRemoteAddress());
 		} else if (rel.equals("favicon.png")) {
 			InputStream res = WebServer.class.getResourceAsStream("/server-icon.png");
 			if (res == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
