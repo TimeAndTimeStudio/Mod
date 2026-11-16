@@ -1,9 +1,12 @@
 package studio.timeandtime.claimmap;
 
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemLore;
@@ -38,8 +41,10 @@ public final class SellGui {
 		}
 
 		// Fill bottom control row (slots 45..53)
+		Item paneItem = BuiltInRegistries.ITEM.getValue(Identifier.parse("minecraft:gray_stained_glass_pane"));
+		Item fallbackItem = paneItem != null ? paneItem : Items.IRON_BARS;
 		for (int slot : List.of(45, 46, 51, 52)) {
-			ItemStack pane = new ItemStack(Items.GRAY_STAINED_GLASS_PANE);
+			ItemStack pane = new ItemStack(fallbackItem);
 			pane.set(DataComponents.CUSTOM_NAME, Component.literal("§7---"));
 			container.setItem(slot, pane);
 		}
@@ -112,6 +117,7 @@ public final class SellGui {
 				Component.literal("§0ลากไอเท็มที่ต้องการขายมาวาง (1-45)"),
 				6,
 				false,
+				container,
 				lockedSlots,
 				(slotIndex, button, input, sp) -> {
 					if (slotIndex == 50) { // ลงขายให้ผู้เล่น

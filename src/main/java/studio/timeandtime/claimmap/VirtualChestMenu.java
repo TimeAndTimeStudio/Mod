@@ -113,11 +113,11 @@ public class VirtualChestMenu extends ChestMenu {
 	public static void open(ServerPlayer player, Component title, int rows, boolean readOnly,
 							Container container, SlotClickHandler clickHandler,
 							BiConsumer<ServerPlayer, Container> closeHandler) {
-		open(player, title, rows, readOnly, Collections.emptySet(), clickHandler, closeHandler);
+		open(player, title, rows, readOnly, container, Collections.emptySet(), clickHandler, closeHandler);
 	}
 
 	public static void open(ServerPlayer player, Component title, int rows, boolean readOnly,
-							Set<Integer> lockedSlots, SlotClickHandler clickHandler,
+							Container container, Set<Integer> lockedSlots, SlotClickHandler clickHandler,
 							BiConsumer<ServerPlayer, Container> closeHandler) {
 		player.openMenu(new SimpleMenuProvider(
 				(syncId, inv, p) -> new VirtualChestMenu(syncId, inv, container, rows, readOnly, lockedSlots, clickHandler, closeHandler),

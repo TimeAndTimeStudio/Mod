@@ -37,7 +37,7 @@ public final class AuctionGui {
 				.filter(AuctionManager.Auction::isActive)
 				.filter(a -> switch (mode) {
 					case ALL -> true;
-					case ITEMS -> a.isItemAuction();
+					case ITEMS -> !a.isCellAuction();
 					case CELLS -> a.isCellAuction();
 				})
 				.toList();
