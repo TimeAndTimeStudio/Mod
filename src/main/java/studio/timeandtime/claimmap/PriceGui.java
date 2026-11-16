@@ -43,6 +43,7 @@ public final class PriceGui {
 		if (cat == Category.ALL) return true;
 		String lower = id.toLowerCase();
 		return switch (cat) {
+			case ALL -> true;
 			case ORES -> lower.contains("diamond") || lower.contains("emerald") || lower.contains("netherite")
 					|| lower.contains("gold") || lower.contains("iron") || lower.contains("copper")
 					|| lower.contains("lapis") || lower.contains("redstone") || lower.contains("coal")
