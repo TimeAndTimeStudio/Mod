@@ -21,11 +21,11 @@ public final class PriceGui {
 	}
 
 	public enum Category {
-		ALL("⭐ ทั้งหมด"),
-		ORES("💎 แร่ & อัญมณี"),
-		FARMING("🌾 ผลผลิต & เกษตร"),
-		BUILDING("🧱 บล็อก & ก่อสร้าง"),
-		MOB_DROPS("🏹 มอนสเตอร์ดรอป");
+		ALL("[ทั้งหมด]"),
+		ORES("[แร่ & อัญมณี]"),
+		FARMING("[ผลผลิต & เกษตร]"),
+		BUILDING("[บล็อก & ก่อสร้าง]"),
+		MOB_DROPS("[มอนสเตอร์ดรอป]");
 
 		public final String label;
 
@@ -143,7 +143,7 @@ public final class PriceGui {
 
 		if (curPage > 0) {
 			ItemStack prev = new ItemStack(Items.ARROW);
-			prev.set(DataComponents.CUSTOM_NAME, Component.literal("§e◀ หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"));
+			prev.set(DataComponents.CUSTOM_NAME, Component.literal("§e< หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"));
 			container.setItem(45, prev);
 		}
 
@@ -158,7 +158,7 @@ public final class PriceGui {
 		ItemStack infoBtn = new ItemStack(Items.CHEST);
 		long bal = ClaimMap.instance() != null && ClaimMap.instance().economy() != null
 				? ClaimMap.instance().economy().balance(player.getUUID()) : 0L;
-		infoBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e📊 ตลาดราคากลาง"));
+		infoBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ตลาดราคากลาง]"));
 		infoBtn.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§7รายการในหมวดนี้: §f" + allDetails.size() + " ชิ้น"),
 				Component.literal("§7หน้า " + (curPage + 1) + "/" + maxPages),
@@ -170,7 +170,7 @@ public final class PriceGui {
 		ItemStack handBtn = new ItemStack(Items.SPYGLASS);
 		ItemStack held = player.getMainHandItem();
 		boolean hasHeld = held != null && !held.isEmpty();
-		handBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b🔍 เช็คของที่ถือในมือ"));
+		handBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ค้นหา] เช็คของที่ถือในมือ"));
 		handBtn.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal(hasHeld ? "§7ในมือถือ: §f" + held.getHoverName().getString() : "§7(มือหลักว่างเปล่า)"),
 				Component.literal("§e[คลิก] §7เพื่อเปิดดูราคาของที่ถือในมือทันที")
@@ -179,7 +179,7 @@ public final class PriceGui {
 
 		if (curPage < maxPages - 1) {
 			ItemStack next = new ItemStack(Items.ARROW);
-			next.set(DataComponents.CUSTOM_NAME, Component.literal("§eหน้าถัดไป ▶ (" + (curPage + 2) + "/" + maxPages + ")"));
+			next.set(DataComponents.CUSTOM_NAME, Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"));
 			container.setItem(53, next);
 		}
 
@@ -231,7 +231,7 @@ public final class PriceGui {
 		SimpleContainer container = new SimpleContainer(27);
 
 		ItemStack icon = stackFor(validId);
-		icon.set(DataComponents.CUSTOM_NAME, Component.literal("§6⭐ " + ItemRegistryAdapter.label(validId)));
+		icon.set(DataComponents.CUSTOM_NAME, Component.literal("§6" + ItemRegistryAdapter.label(validId)));
 		List<Component> lore = new ArrayList<>();
 		lore.add(Component.literal("§7รหัสไอเท็ม: §8" + validId));
 		lore.add(Component.literal("§7------------------------"));
@@ -255,7 +255,7 @@ public final class PriceGui {
 		container.setItem(13, icon);
 
 		ItemStack sellBtn = new ItemStack(Items.EMERALD);
-		sellBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§a💰 เปิดเมนูขายของ (/sell)"));
+		sellBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§a[ขาย] เปิดเมนูขายของ (/sell)"));
 		sellBtn.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§7คลิกเพื่อเปิดหน้าต่างวางของขายทันที"),
 				Component.literal("§eของที่วางในกล่องจะถูกประเมินและขายอัตโนมัติ")
@@ -263,7 +263,7 @@ public final class PriceGui {
 		container.setItem(11, sellBtn);
 
 		ItemStack ahBtn = new ItemStack(Items.GOLD_INGOT);
-		ahBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e⚖ ลงประมูลไอเท็มนี้ (/ah)"));
+		ahBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ประมูล] ลงประมูลไอเท็มนี้ (/ah)"));
 		ahBtn.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§7หากต้องการเปิดประมูลให้ผู้เล่นอื่นแข่งราคา"),
 				Component.literal("§7ถือของในมือแล้วพิมพ์:"),
@@ -272,7 +272,7 @@ public final class PriceGui {
 		container.setItem(15, ahBtn);
 
 		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e◀ กลับไปยังรายการราคาทั้งหมด"));
+		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปยังรายการราคาทั้งหมด"));
 		container.setItem(22, back);
 
 		VirtualChestMenu.open(

@@ -377,29 +377,33 @@ const NAV = [
 function renderShell() {
   const nav = $('#nav');
   clear(nav);
-  for (const item of NAV) {
-    nav.append(el('a', { href: '#' + item.id, 'aria-current': active(item.id) ? 'page' : null }, item.label));
-  }
-  if (state.me?.admin) nav.append(el('a', { href: '#admin', 'aria-current': active('admin') ? 'page' : null }, 'แอดมิน'));
-
   const tabs = $('#tabbar');
   clear(tabs);
-  const primary = [
-    { id: 'map', label: 'แผนที่' },
-    { id: 'auction', label: 'ประมูล' },
-  ];
-  for (const item of primary) {
-    tabs.append(el('button', { type: 'button', 'aria-current': active(item.id) ? 'page' : null, onclick: () => go(item.id) }, item.label));
-  }
-  if (state.me?.admin) {
-    tabs.append(el('button', { type: 'button', 'aria-current': active('admin') ? 'page' : null, onclick: () => go('admin') }, 'แอดมิน'));
+
+  if (state.me) {
+    for (const item of NAV) {
+      nav.append(el('a', { href: '#' + item.id, 'aria-current': active(item.id) ? 'page' : null }, item.label));
+    }
+    if (state.me?.admin) nav.append(el('a', { href: '#admin', 'aria-current': active('admin') ? 'page' : null }, 'แอดมิน'));
+
+    const primary = [
+      { id: 'map', label: 'แผนที่' },
+      { id: 'auction', label: 'ประมูล' },
+      { id: 'guide', label: 'วิธีใช้งาน' },
+    ];
+    for (const item of primary) {
+      tabs.append(el('button', { type: 'button', 'aria-current': active(item.id) ? 'page' : null, onclick: () => go(item.id) }, item.label));
+    }
+    if (state.me?.admin) {
+      tabs.append(el('button', { type: 'button', 'aria-current': active('admin') ? 'page' : null, onclick: () => go('admin') }, 'แอดมิน'));
+    }
   }
 
   $('#balance').textContent = state.me ? money(state.balance) : '—';
   $('#mailcount').textContent = state.me && state.mail > 0 ? 'กล่อง ' + state.mail : '';
   $('#mailcount').title = 'พิมพ์คำสั่ง /mail ในเกมเพื่อเปิดกล่องรับของ';
   const user = $('#userBtn');
-  user.textContent = state.me ? state.me.name : 'เข้าใช้';
+  user.textContent = state.me ? state.me.name : 'เข้าสู่ระบบ';
   user.onclick = () => state.me ? openAccount() : go('login');
 }
 
@@ -494,7 +498,15 @@ function render() {
   if (pageTimer) { clearInterval(pageTimer); pageTimer = null; }
   if (mapCleanup) { mapCleanup(); mapCleanup = null; }
   const rawRoute = location.hash.replace(/^#\/?/, '');
-  let route = rawRoute || 'map';
+  let route = rawRoute || (state.me ? 'map' : 'login');
+
+  if (!state.me) {
+    if (route !== 'login') {
+      location.hash = '#login';
+      return;
+    }
+  }
+
   if (route === 'home' || route === 'trends' || route === 'buy' || route === 'sell' || route === 'prices' || route === 'wallet' || route === 'about') {
     location.hash = '#map';
     return;
@@ -532,18 +544,18 @@ function page404(view) {
 /* ---------- login ---------- */
 async function pageLogin(view) {
   if (state.me) { go('map'); return; }
-  const page = el('div', { class: 'page' });
-  page.append(pageHead('login', 'เข้าสู่ระบบ', 'ใช้ชื่อที่ลงทะเบียนกับเซิร์ฟเวอร์'));
-  view.append(page);
+  const wrap = el('div', { class: 'login-wrap' });
+  const card = el('div', { class: 'login-card' });
+  card.append(pageHead('login', 'เข้าสู่ระบบ', 'กรุณาเข้าสู่ระบบเพื่อใช้งานแผนที่และตลาดประมูล'));
   const names = await fetchNames();
   const form = el('form', { class: 'stack', novalidate: true });
-  const nameDD = dropdown({ label: 'ชื่อผู้เล่น', required: true, options: names, placeholder: 'เลือกชื่อ', name: 'name', id: 'login-name' });
-  const fallback = names.length ? null : el('input', { class: 'input', type: 'text', name: 'name', id: 'login-name-input', placeholder: 'ชื่อในเกม', autocomplete: 'username', maxLength: '32', required: true });
-  const password = el('input', { class: 'input', id: 'login-password', type: 'text', name: 'password', autocomplete: 'current-password', required: true, placeholder: 'รหัสผ่าน' });
+  const nameDD = dropdown({ label: 'ชื่อผู้เล่นในเกม', required: true, options: names, placeholder: 'เลือกหรือค้นหาชื่อ', name: 'name', id: 'login-name', searchable: true });
+  const fallback = names.length ? null : el('input', { class: 'input', type: 'text', name: 'name', id: 'login-name-input', placeholder: 'ชื่อผู้เล่นในเกม', autocomplete: 'username', maxLength: '32', required: true });
+  const password = el('input', { class: 'input', id: 'login-password', type: 'password', name: 'password', autocomplete: 'current-password', required: true, placeholder: 'รหัสผ่าน' });
   const error = el('p', { class: 'err', role: 'alert' });
-  const submit = el('button', { class: 'btn primary block', type: 'submit' }, 'เข้าสู่ระบบ');
+  const submit = el('button', { class: 'btn primary block', type: 'submit', style: 'margin-top:8px;' }, 'เข้าสู่ระบบ');
   form.append(
-    names.length ? nameDD.el : el('div', { class: 'field' }, el('label', { for: 'login-name-input' }, 'ชื่อผู้เล่น', el('span', { class: 'req' }, ' *')), fallback),
+    names.length ? nameDD.el : el('div', { class: 'field' }, el('label', { for: 'login-name-input' }, 'ชื่อผู้เล่นในเกม', el('span', { class: 'req' }, ' *')), fallback),
     el('div', { class: 'field' }, el('label', { for: 'login-password' }, 'รหัสผ่าน', el('span', { class: 'req' }, ' *')), password),
     error, submit);
   form.addEventListener('submit', async (event) => {
@@ -551,8 +563,8 @@ async function pageLogin(view) {
     error.textContent = '';
     const pass = password.value;
     const name = names.length ? nameDD.getValue() : fallback.value.trim();
-    if (!name) { error.textContent = 'เลือกหรือกรอกชื่อผู้เล่น'; return; }
-    if (!pass) { error.textContent = 'กรอกรหัสผ่าน'; return; }
+    if (!name) { error.textContent = 'กรุณาเลือกหรือกรอกชื่อผู้เล่น'; return; }
+    if (!pass) { error.textContent = 'กรุณากรอกรหัสผ่าน'; return; }
     submit.disabled = true;
     submit.textContent = 'กำลังเข้าสู่ระบบ…';
     try {
@@ -570,11 +582,18 @@ async function pageLogin(view) {
       submit.textContent = 'เข้าสู่ระบบ';
     }
   });
-  const hintBox = el('p', { class: 'hint', style: 'margin-top:24px; font-size:var(--fs-2); line-height:1.6;' },
-    '💡 ', el('strong', {}, 'วิธีตั้งหรือเปลี่ยนรหัสผ่าน:'), ' เข้าเกม Minecraft แล้วพิมพ์คำสั่ง ',
-    el('code', { class: 'guide-cmd' }, '/pass <รหัสผ่านเก่า> <รหัสผ่านใหม่>'),
-    ' (หากเพิ่งลงทะเบียนเข้าเกมครั้งแรก ระบบจะให้ตั้งรหัสผ่านตอนล็อกอินเข้าเกมอัตโนมัติ)');
-  page.append(form, hintBox);
+  const hintBox = el('div', { class: 'login-hint' },
+    el('strong', {}, '[คำแนะนำ] วิธีตั้งหรือเปลี่ยนรหัสผ่าน:'),
+    el('div', { style: 'margin-top:6px;' },
+      'เข้าเกม Minecraft แล้วพิมพ์คำสั่ง ',
+      el('code', { class: 'guide-cmd' }, '/pass <รหัสผ่านเก่า> <รหัสผ่านใหม่>'),
+      el('div', { class: 'hint', style: 'margin-top:4px;' },
+        'หากเข้าเซิร์ฟเวอร์ครั้งแรก ระบบจะแจ้งให้ตั้งรหัสผ่านทันทีที่เข้าเกม')
+    )
+  );
+  card.append(form, hintBox);
+  wrap.append(card);
+  view.append(wrap);
 }
 
 /* ---------- home ---------- */
@@ -610,13 +629,14 @@ function rowLink(title, desc, href) {
 /* ---------- map ---------- */
 async function pageMap(view) {
   const page = el('div', { class: 'page' });
-  page.append(pageHead('map', 'แผนที่', 'ลากเพื่อเลื่อน แตะช่องเพื่อเลือก'));
+  page.append(pageHead('map', 'แผนที่เขต', 'เลื่อนแผนที่หรือคลิกเลือกช่องเพื่อดูรายละเอียดและจับจองที่ดิน'));
   view.append(page);
   const bar = el('div', { class: 'mapbar' });
   const start = state.pos || { x: 0, z: 0 };
   let initCamX = start.x;
   let initCamZ = start.z;
   let selected = null;
+  let hoveredCell = null;
   if (state.focusCell) {
     const [fcx, fcz] = state.focusCell.split(',').map(Number);
     if (Number.isFinite(fcx) && Number.isFinite(fcz)) {
@@ -628,6 +648,11 @@ async function pageMap(view) {
   }
   const xInput = el('input', { class: 'input', type: 'text', inputmode: 'numeric', value: String(Math.floor(initCamX / 500)), 'aria-label': 'พิกัด X' });
   const zInput = el('input', { class: 'input', type: 'text', inputmode: 'numeric', value: String(Math.floor(initCamZ / 500)), 'aria-label': 'พิกัด Z' });
+  
+  const hoverTag = el('span', { class: 'cell-tag' }, 'ชี้เมาส์หรือแตะที่ช่องเพื่อตรวจดูข้อมูล');
+  const hoverStatus = el('span', { class: 'status-tag badge-free' }, 'พร้อมใช้งาน');
+  const hoverBar = el('div', { class: 'map-hover-bar' }, hoverTag, hoverStatus);
+
   const canvas = el('canvas', { id: 'mapcanvas', width: '800', height: '500', tabindex: '0', 'aria-label': 'แผนที่เขต' });
   const info = el('div', { class: 'stack', style: 'margin-top:16px' });
   const zoomLabel = el('span', { class: 'mono muted' }, '100%');
@@ -638,15 +663,17 @@ async function pageMap(view) {
   let selectedDD = null;
 
   bar.append(
-    el('div', { class: 'field' }, el('label', { for: 'mx' }, 'X'), xInput),
-    el('div', { class: 'field' }, el('label', { for: 'mz' }, 'Z'), zInput),
-    el('button', { class: 'btn secondary', type: 'button', onclick: () => { cam.x = num(xInput.value) * 500 + 250; cam.z = num(zInput.value) * 500 + 250; draw(); } }, 'ไป'),
+    el('div', { class: 'field' }, el('label', { for: 'mx' }, 'พิกัด X'), xInput),
+    el('div', { class: 'field' }, el('label', { for: 'mz' }, 'พิกัด Z'), zInput),
+    el('button', { class: 'btn secondary', type: 'button', onclick: () => { cam.x = num(xInput.value) * 500 + 250; cam.z = num(zInput.value) * 500 + 250; draw(); } }, 'ไปยังพิกัด'),
+    el('button', { class: 'btn secondary', type: 'button', title: 'ไปยังตำแหน่งผู้เล่น', onclick: () => { if (state.pos) { cam.x = state.pos.x; cam.z = state.pos.z; } else { cam.x = 250; cam.z = 250; } xInput.value = String(Math.floor(cam.x / 500)); zInput.value = String(Math.floor(cam.z / 500)); draw(); } }, 'ตำแหน่งฉัน'),
     el('button', { class: 'btn secondary', type: 'button', 'aria-label': 'ซูมออก', title: 'ซูมออก', onclick: () => setZoom(zoom / 1.35) }, '−'),
     el('button', { class: 'btn secondary', type: 'button', 'aria-label': 'ซูมเข้า', title: 'ซูมเข้า', onclick: () => setZoom(zoom * 1.35) }, '+'),
     zoomLabel);
-  page.append(bar, canvas, el('div', { class: 'legend' },
-    el('span', {}, el('i', { class: 'own' }), 'ของคุณ'),
-    el('span', {}, el('i', { class: 'other' }), 'ผู้อื่น'),
+
+  page.append(bar, hoverBar, canvas, el('div', { class: 'legend' },
+    el('span', {}, el('i', { class: 'own' }), 'เขตของคุณ'),
+    el('span', {}, el('i', { class: 'other' }), 'เขตผู้อื่น'),
     el('span', {}, el('i', { style: 'background:#FFD700' }), 'กำลังประมูล'),
     el('span', {}, el('i', { class: 'sel' }), 'เลือกอยู่')), info);
   info.append(skeleton(2));
@@ -713,20 +740,74 @@ async function pageMap(view) {
         ctx.lineWidth = owner || cellAu ? 1.5 : 1;
         ctx.strokeStyle = cellAu ? '#FFD700' : (owner === state.me?.name ? '#FF4D00' : (owner ? '#808080' : '#232323'));
         ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
-        if (cellKey === selected) {
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = '#FF4D00';
+        if (hoveredCell && hoveredCell.cx === cx && hoveredCell.cz === cz) {
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#FFFFFF';
           ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
         }
-        if ((owner || cellAu) && size > 110) {
+        if (cellKey === selected) {
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = '#FF4D00';
+          ctx.strokeRect(x + 1.5, y + 1.5, size - 3, size - 3);
+        }
+        if ((owner || cellAu) && size > 100) {
           ctx.fillStyle = cellAu ? '#FFD700' : '#F2F2F2';
           ctx.font = '11px "JetBrains Mono", monospace';
-          const labelText = cellAu ? '⚖️ ' + (owner || 'ประมูล') : owner;
+          const labelText = cellAu ? '[ประมูล] ' + (owner || 'เปิดประมูล') : owner;
           ctx.fillText(labelText.slice(0, Math.floor(size / 8)), x + 8, y + 20);
         }
       }
     }
+
+    // Player position marker
+    if (state.pos) {
+      const px = w / 2 + (state.pos.x - cam.x) * s;
+      const pz = h / 2 + (state.pos.z - cam.z) * s;
+      if (px >= -20 && px <= w + 20 && pz >= -20 && pz <= h + 20) {
+        ctx.fillStyle = '#FF4D00';
+        ctx.beginPath();
+        ctx.arc(px, pz, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.stroke();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 11px "Space Grotesk", sans-serif';
+        ctx.fillText('คุณ', px + 9, pz + 4);
+      }
+    }
   }
+
+  function updateHover(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const s = scale();
+    const wx = cam.x + (clientX - rect.left - rect.width / 2) / s;
+    const wz = cam.z + (clientY - rect.top - rect.height / 2) / s;
+    const cx = Math.floor(wx / 500);
+    const cz = Math.floor(wz / 500);
+    const key = cx + ',' + cz;
+    if (!hoveredCell || hoveredCell.key !== key) {
+      hoveredCell = { cx, cz, key };
+      const owner = cells[key];
+      const au = activeAuctions[key];
+      hoverTag.textContent = `เขต [${key}] | บล็อก X: ${cx * 500}..${cx * 500 + 499}, Z: ${cz * 500}..${cz * 500 + 499}`;
+      if (au) {
+        hoverStatus.textContent = `กำลังเปิดประมูล (เริ่ม ${money(au.startPrice)} ${state.currency})`;
+        hoverStatus.className = 'status-tag badge-auction';
+      } else if (owner === state.me?.name) {
+        hoverStatus.textContent = 'เขตของคุณ';
+        hoverStatus.className = 'status-tag badge-own';
+      } else if (owner) {
+        hoverStatus.textContent = `เจ้าของ: ${owner}`;
+        hoverStatus.className = 'status-tag badge-other';
+      } else {
+        hoverStatus.textContent = 'ที่ดินว่าง (คลิกเพื่อซื้อ/จอง)';
+        hoverStatus.className = 'status-tag badge-free';
+      }
+      draw();
+    }
+  }
+
   function selectAt(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const s = scale();
@@ -738,10 +819,16 @@ async function pageMap(view) {
     draw();
     renderInfo();
   }
+
   function renderInfo() {
     closeOpenDD(false);
     clear(info);
-    if (!selected) { info.append(el('p', { class: 'hint' }, 'เลือกช่องบนแผนที่เพื่อจองหรือโอน')); return; }
+    if (!selected) {
+      info.append(el('div', { class: 'notice' },
+        el('strong', {}, 'เลือกเขตบนแผนที่'),
+        el('p', { class: 'hint', style: 'margin-top:4px;' }, 'คลิกหรือแตะช่องเขตบนแผนที่เพื่อดูข้อมูลกรรมสิทธิ์ ซื้อที่ดิน หรือเปิดประมูล')));
+      return;
+    }
     const [cx, cz] = selected.split(',').map(Number);
     const owner = cells[selected];
     const mine = owner === state.me?.name;
@@ -752,43 +839,78 @@ async function pageMap(view) {
       ? `ฟรี (${myClaims + 1}/4 ช่อง)`
       : (state.landPrice ? money(state.landPrice) + ' ' + (state.currency || 'เหรียญ') : '100,000 เหรียญ');
 
+    const card = el('div', { class: 'cell-card' });
+    const badgeCls = au ? 'badge-auction' : (mine ? 'badge-own' : (owner ? 'badge-other' : 'badge-free'));
+    const badgeText = au ? '[กำลังเปิดประมูล]' : (mine ? '[เขตของคุณ]' : (owner ? '[มีเจ้าของ]' : '[ที่ดินว่าง]'));
+
+    card.append(el('div', { class: 'cell-card-head' },
+      el('span', { class: 'cell-card-title' }, `เขต [${selected}]`),
+      el('span', { class: 'badge ' + badgeCls }, badgeText)
+    ));
+
+    const meta = el('div', { class: 'cell-meta-grid' },
+      el('div', { class: 'cell-meta-item' },
+        el('span', { class: 'label' }, 'พิกัดบล็อก X'),
+        el('span', { class: 'val' }, `${cx * 500} ถึง ${cx * 500 + 499}`)),
+      el('div', { class: 'cell-meta-item' },
+        el('span', { class: 'label' }, 'พิกัดบล็อก Z'),
+        el('span', { class: 'val' }, `${cz * 500} ถึง ${cz * 500 + 499}`)),
+      el('div', { class: 'cell-meta-item' },
+        el('span', { class: 'label' }, 'เจ้าของกรรมสิทธิ์'),
+        el('span', { class: 'val' }, txt(owner, 'ยังไม่มีเจ้าของ'))),
+      el('div', { class: 'cell-meta-item' },
+        el('span', { class: 'label' }, au ? 'ราคาเริ่มต้นประมูล' : 'สถานะการซื้อ'),
+        el('span', { class: 'val' }, au ? `${money(au.startPrice)} ${state.currency || 'เหรียญ'}` : currentPriceText))
+    );
+    card.append(meta);
+
     if (au) {
       const open = auctionOpen(au);
-      const bidInput = el('input', { class: 'input', type: 'text', min: String(au.minBid || au.startPrice), value: String(au.minBid || au.startPrice), inputmode: 'numeric', 'aria-label': 'ราคาประมูลเขต' });
-      info.append(el('div', { class: 'item', style: 'border-top:0' },
-        el('div', { class: 'item-main' },
-          el('span', { class: 'item-title', style: 'color:#FFD700' }, `🏛️ ช่อง ${selected} (กำลังเปิดประมูล)`),
-          el('span', { class: 'item-meta' }, `เจ้าของเดิม: ${txt(owner || au.sellerName, 'เซิร์ฟเวอร์')} · ผู้เสนอสูงสุด: ${au.highBid ? money(au.highBid) + ' โดย ' + txt(au.highBidderName, '-') : 'ยังไม่มีผู้เสนอ'} · เริ่ม ${money(au.startPrice)}`),
-          el('span', { class: 'item-meta mono' }, auctionTiming(au) + (au.buyout ? ` · ซื้อทันที ${money(au.buyout)}` : ''))),
-        el('div', { class: 'item-side' },
-          !state.me && open ? el('a', { class: 'btn primary', href: '#login' }, 'เข้าใช้เพื่อประมูล') : null,
-          au.canBid && open ? el('div', { class: 'item-form' },
-            el('div', { class: 'field' }, el('label', {}, 'เสนอราคา'), bidInput),
-            el('button', { class: 'btn primary', type: 'button', onclick: async () => { await placeBid(au, num(bidInput.value)); await reload(); } }, 'เสนอราคา')) : null,
-          au.canBuyout && open ? el('button', { class: 'btn secondary', type: 'button', onclick: async () => { await buyout(au); await reload(); } }, 'ซื้อทันที ' + money(au.buyout)) : null,
-          au.highest ? el('span', { class: 'mono muted' }, 'คุณเป็นผู้นำ') : null,
-          el('button', { class: 'btn ghost', type: 'button', onclick: () => go('auction') }, 'เปิดหน้าประมูล'))));
-      return;
+      const auStats = el('div', { class: 'notice', style: 'margin-bottom:16px;' },
+        el('div', { class: 'mono', style: 'color:#FFD700; font-weight:600;' },
+          `ผู้เสนอราคาสูงสุด: ${au.highBid ? money(au.highBid) + ' ' + (state.currency || 'เหรียญ') + ' โดย ' + txt(au.highBidderName, '-') : 'ยังไม่มีผู้เสนอราคา'}`),
+        el('div', { class: 'item-meta mono', style: 'margin-top:4px;' },
+          `ระยะเวลา: ${auctionTiming(au)}` + (au.buyout ? ` | ซื้อทันที: ${money(au.buyout)} ${state.currency || 'เหรียญ'}` : '')));
+      card.append(auStats);
+
+      const actions = el('div', { class: 'cell-actions' });
+      if (au.canBid && open) {
+        const bidInput = el('input', { class: 'input', type: 'text', min: String(au.minBid || au.startPrice), value: String(au.minBid || au.startPrice), inputmode: 'numeric', style: 'width:140px;' });
+        actions.append(
+          el('div', { class: 'row', style: 'gap:8px;' },
+            bidInput,
+            el('button', { class: 'btn primary', type: 'button', onclick: async () => { await placeBid(au, num(bidInput.value)); await reload(); } }, 'เสนอราคา')));
+      }
+      if (au.canBuyout && open) {
+        actions.append(el('button', { class: 'btn secondary', type: 'button', onclick: async () => { await buyout(au); await reload(); } }, 'ซื้อทันที ' + money(au.buyout)));
+      }
+      if (au.highest) {
+        actions.append(el('span', { class: 'badge badge-own' }, 'คุณเป็นผู้นำการประมูล'));
+      }
+      actions.append(el('button', { class: 'btn ghost', type: 'button', onclick: () => go('auction') }, 'เปิดหน้าประมูล'));
+      card.append(actions);
+    } else {
+      const actions = el('div', { class: 'cell-actions' });
+      if (!owner) {
+        actions.append(el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) },
+          isFree ? `รับเขตฟรี (${myClaims + 1}/4)` : `ซื้อที่ดิน (${currentPriceText})`));
+      } else if (mine || state.me?.admin) {
+        actions.append(el('button', { class: 'btn secondary', type: 'button', onclick: () => auctionCellDialog(selected) }, 'เปิดประมูลเขตนี้'));
+        actions.append(el('button', { class: 'btn danger', type: 'button', onclick: () => removeCell(selected) }, 'ปล่อยเขต'));
+        
+        const dd = dropdown({ label: 'โอนให้', options: (state.names || []).filter((n) => n !== owner), placeholder: 'เลือกผู้เล่น', searchable: true, onChange: () => {} });
+        selectedDD = dd;
+        actions.append(
+          el('div', { class: 'row', style: 'gap:8px; margin-top:8px; width:100%;' },
+            dd.el,
+            el('button', { class: 'btn secondary', type: 'button', onclick: () => transferCell(selected, dd.getValue()) }, 'โอนเขต')
+          )
+        );
+      }
+      card.append(actions);
     }
 
-    info.append(el('div', { class: 'item', style: 'border-top:0' },
-      el('div', { class: 'item-main' },
-        el('span', { class: 'item-title' }, `ช่อง ${selected}`),
-        el('span', { class: 'item-meta' }, `${owner ? 'เจ้าของ ' + owner : 'ยังไม่มีเจ้าของ (' + (isFree ? 'รับฟรี ' + (myClaims + 1) + '/4 ช่อง' : 'ราคาซื้อ: ' + currentPriceText) + ' · ซื้อได้ไม่จำกัด)'} · X ${cx * 500}–${cx * 500 + 499} · Z ${cz * 500}–${cz * 500 + 499}`)),
-      el('div', { class: 'item-side' },
-        !owner ? (state.me
-          ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, isFree ? `รับเขตฟรี (${myClaims + 1}/4)` : `ซื้อที่ดิน (${currentPriceText})`)
-          : el('a', { class: 'btn primary', href: '#login' }, 'เข้าใช้เพื่อซื้อเขต (' + currentPriceText + ')')
-        ) : null,
-        (mine || state.me?.admin) && owner ? el('button', { class: 'btn secondary', type: 'button', onclick: () => auctionCellDialog(selected) }, '⚖️ เปิดประมูลเขตนี้') : null,
-        (mine || state.me?.admin) && owner ? el('button', { class: 'btn danger', type: 'button', onclick: () => removeCell(selected) }, 'ปล่อยช่อง') : null)));
-    if (owner && (mine || state.me?.admin)) {
-      const form = el('div', { class: 'item-form' });
-      const dd = dropdown({ label: 'โอนให้', options: (state.names || []).filter((n) => n !== owner), placeholder: 'เลือกผู้เล่น', searchable: true, onChange: () => {} });
-      selectedDD = dd;
-      form.append(dd.el, el('button', { class: 'btn secondary', type: 'button', onclick: () => transferCell(selected, dd.getValue()) }, 'โอนเขต'));
-      info.append(form);
-    }
+    info.append(card);
   }
   async function reload() {
     try {
@@ -895,12 +1017,17 @@ async function pageMap(view) {
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener('pointermove', (event) => {
+    updateHover(event.clientX, event.clientY);
     if (!down) return;
     const dx = event.clientX - down.x;
     const dy = event.clientY - down.y;
     if (Math.abs(dx) + Math.abs(dy) > 4) down.moved = true;
     cam.x = down.cx - dx / scale();
     cam.z = down.cz - dy / scale();
+    draw();
+  });
+  canvas.addEventListener('pointerleave', () => {
+    hoveredCell = null;
     draw();
   });
   canvas.addEventListener('pointerup', (event) => {
@@ -1475,7 +1602,7 @@ async function pageAuction(view) {
       el('span', { class: 'mono muted eyebrow' }, navLabel('auction')),
       el('h1', {}, 'ประมูล'),
       el('p', { class: 'hint' }, 'รายการประมูลไอเท็มและเขตที่ดิน สามารถเสนอราคา ซื้อทันที หรือนำที่ดินของตนเองมาเปิดประมูลได้')),
-    el('button', { class: 'btn primary', type: 'button', onclick: openPlayerCellAuctionModal }, '➕ เปิดประมูลเขตที่ดินของฉัน'));
+    el('button', { class: 'btn primary', type: 'button', onclick: openPlayerCellAuctionModal }, 'เปิดประมูลเขตที่ดินของฉัน'));
   page.append(head);
   view.append(page);
   tabbed(page, [{ id: 'active', label: 'กำลังประมูล' }, { id: 'mine', label: 'ของฉัน' }], state.auctionTab, (panel, id) => { state.auctionTab = id; auctionList(panel, id === 'mine'); });
@@ -1572,8 +1699,8 @@ async function auctionList(panel, mineOnly) {
       const main = isCell
         ? el('div', { class: 'item-main' },
             el('div', { style: 'display:flex; align-items:center; gap:8px; flex-wrap:wrap' },
-              el('span', { class: 'item-title' }, '🏛️ ประมูลเขตที่ดิน [' + txt(a.cellId, '-') + ']'),
-              el('button', { class: 'btn ghost sm', type: 'button', onclick: () => { state.focusCell = a.cellId; go('map'); } }, '🗺️ ดูบนแผนที่')),
+              el('span', { class: 'item-title' }, '[เขตที่ดิน] ประมูลเขต ' + txt(a.cellId, '-')),
+              el('button', { class: 'btn ghost sm', type: 'button', onclick: () => { state.focusCell = a.cellId; go('map'); } }, 'ดูบนแผนที่')),
             el('span', { class: 'item-meta' }, `เจ้าของปัจจุบัน: ${txt(a.cellOwnerName || a.sellerName, 'เซิร์ฟเวอร์')} · ผู้ชนะประมูลจะได้รับกรรมสิทธิ์เขตนี้ทันที`))
         : itemHeading(a.itemId, `${txt(a.label, txt(a.itemId, 'ไอเท็ม'))} ×${num(a.count)}`);
       const timingEl = el('span', { class: 'mono' }, auctionTiming(a));
@@ -1766,7 +1893,7 @@ async function pagePrices(view) {
       }
       for (const it of filtered) {
         const multPct = Math.round((it.multiplier || 1.0) * 100);
-        const multText = multPct > 100 ? `▲ ความต้องการสูง (+${multPct - 100}%)` : multPct < 100 ? `▼ ความต้องการต่ำ (${multPct}%)` : 'ความต้องการปกติ (100%)';
+        const multText = multPct > 100 ? `[+] ความต้องการสูง (+${multPct - 100}%)` : multPct < 100 ? `[-] ความต้องการต่ำ (${multPct}%)` : 'ความต้องการปกติ (100%)';
         
         container.append(el('div', { class: 'item' },
           el('div', { class: 'item-main' },
@@ -1828,7 +1955,7 @@ function pageGuide(view) {
 
   // 1. ตลาดซื้อขาย & ประมูลของผู้เล่น
   const cardAuction = el('div', { class: 'guide-card' },
-    el('h2', {}, '🛍️ ตลาดผู้เล่น & ประมูล (/buy, /ah)'),
+    el('h2', {}, '[1] ตลาดผู้เล่น & ประมูล (/buy, /ah)'),
     el('p', {}, 'เซิร์ฟเวอร์นี้ไอเท็มซื้อขายระหว่างผู้เล่นด้วยกันเองผ่านตลาดกลางและระบบประมูล'),
     el('ul', {},
       el('li', {}, el('span', { class: 'guide-cmd' }, '/buy'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/ah'), ' — เปิดดูรายการสินค้าและที่ดินที่ผู้เล่นลงขาย'),
@@ -1841,11 +1968,11 @@ function pageGuide(view) {
 
   // 2. ขายของให้เซิร์ฟเวอร์
   const cardSell = el('div', { class: 'guide-card' },
-    el('h2', {}, '🛒 การขายของเข้าร้านค้า (/sell)'),
+    el('h2', {}, '[2] การขายของเข้าร้านค้า (/sell)'),
     el('p', {}, 'ผู้เล่นสามารถนำผลผลิต แร่ หรือบล็อกต่าง ๆ มาขายให้เซิร์ฟเวอร์เพื่อรับเงินเข้ากระเป๋าได้'),
     el('ul', {},
       el('li', {}, el('span', { class: 'guide-cmd' }, '/sell'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/sell gui'), ' — เปิดเมนูกล่องขายของขนาดใหญ่ (ช่อง 1-45 ด้านบน): ลากไอเท็มที่ต้องการขายมาวาง แล้วปิดหน้าต่าง ระบบจะคำนวณเงินและโอนเข้าตัวทันที!'),
-      el('li', {}, '• ', el('strong', {}, 'ปุ่มลงขายให้ผู้เล่น:'), ' ภายในหน้าต่าง ', el('span', { class: 'guide-cmd' }, '/sell'), ' มีปุ่มมรกตลัดสำหรับนำไอเท็มไปเปิดตลาดขายให้ผู้เล่นอื่น'),
+      el('li', {}, '• ', el('strong', {}, 'ปุ่มลงขายให้ผู้เล่น:'), ' ภายในหน้าต่าง ', el('span', { class: 'guide-cmd' }, '/sell'), ' มีปุ่มลัดสำหรับนำไอเท็มไปเปิดตลาดขายให้ผู้เล่นอื่น'),
       el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/sell hand'), ' — ขายไอเท็มที่กำลังถือในมือหลักทันที'),
       el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/sell all'), ' — สรุปมูลค่าของที่ขายได้ทั้งหมดในตัว จากนั้นพิมพ์ ', el('span', { class: 'guide-cmd' }, '/sell all confirm'), ' ภายใน 30 วินาที')
     )
@@ -1853,13 +1980,13 @@ function pageGuide(view) {
 
   // 3. เช็คราคากลาง
   const cardPrice = el('div', { class: 'guide-card' },
-    el('h2', {}, '📊 เช็คราคาสินค้า (/price)'),
+    el('h2', {}, '[3] เช็คราคาสินค้า (/price)'),
     el('p', {}, 'ตรวจสอบราคารับซื้อ ราคากลาง และแนวโน้มความต้องการของตลาด'),
     el('ul', {},
       el('li', {}, el('span', { class: 'guide-cmd' }, '/price'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/price gui'), ' — เปิดสมุดราคากลางแบบ GUI เรียงตามราคาขายจากมากไปน้อย'),
-      el('li', {}, '• กรองตามหมวดหมู่ได้: ⭐ ทั้งหมด, 💎 แร่, 🌾 ผลผลิตเกษตร, 🧱 บล็อกก่อสร้าง, 🏹 มอนสเตอร์ดรอป'),
+      el('li', {}, '• กรองตามหมวดหมู่ได้: ทั้งหมด, แร่ & อัญมณี, ผลผลิต & เกษตร, บล็อกก่อสร้าง, มอนสเตอร์ดรอป'),
       el('li', {}, '• มีระบบนับของในตัวผู้เล่น พร้อมคำนวณมูลค่ารวมถ้าขายทันที'),
-      el('li', {}, '• ดัชนีความต้องการตลาด: มีตัวคูณราคาผันผวนตามปริมาณของในเซิร์ฟเวอร์ (🟢 สูง / 🟡 ปกติ / 🔴 ล้นตลาด)'),
+      el('li', {}, '• ดัชนีความต้องการตลาด: มีตัวคูณราคาผันผวนตามปริมาณของในเซิร์ฟเวอร์ (สูง / ปกติ / ล้นตลาด)'),
       el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/price hand'), ' — เช็คราคาไอเท็มที่ถืออยู่ในมือ'),
       el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/price <ชื่อไอเท็ม>'), ' — เช่น ', el('span', { class: 'guide-cmd' }, '/price diamond'), ' เพื่อดูรายละเอียดเฉพาะชิ้น')
     )
@@ -1867,20 +1994,20 @@ function pageGuide(view) {
 
   // 4. ระบบเขต & ที่ดิน
   const cardLand = el('div', { class: 'guide-card' },
-    el('h2', {}, '🗺️ ระบบเขต & ที่ดิน (Land Claim)'),
+    el('h2', {}, '[4] ระบบเขต & ที่ดิน (Land Claim)'),
     el('p', {}, 'ป้องกันพื้นที่ ปลูกสร้าง และซื้อขายเขตที่ดินในเซิร์ฟเวอร์'),
     el('ul', {},
       el('li', {}, el('span', { class: 'guide-cmd' }, '/claim'), ' — ซื้อหรือจองกรรมสิทธิ์เขตที่ดินในตำแหน่งที่กำลังยืนอยู่'),
       el('li', {}, el('span', { class: 'guide-cmd' }, '/claimmap'), ' — เปิดหน้าต่างแผนที่เรดาร์ในเกม ดูเขตใกล้เคียงและสถานะ'),
       el('li', {}, el('span', { class: 'guide-cmd' }, '/claim transfer <ชื่อผู้เล่น>'), ' — โอนกรรมสิทธิ์เขตที่ยืนอยู่ให้ผู้เล่นอื่น'),
       el('li', {}, '• ', el('strong', {}, 'เปิดประมูลที่ดิน:'), ' พิมพ์ ', el('span', { class: 'guide-cmd' }, '/ah cell <รหัสเขต> <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]'), ' หรือคลิกเขตของตนเองบนหน้าเว็บแผนที่ / หน้าประมูล แล้วกดเปิดประมูล'),
-      el('li', {}, '• ดูขอบเขตที่ดินและผู้ครอบครองทั้งหมดแบบ Real-time ได้ที่แท็บ ', el('a', { href: '#map' }, '🗺️ แผนที่'))
+      el('li', {}, '• ดูขอบเขตที่ดินและผู้ครอบครองทั้งหมดแบบ Real-time ได้ที่แท็บ ', el('a', { href: '#map' }, 'แผนที่'))
     )
   );
 
   // 5. ระบบเงิน & กล่องจดหมาย
   const cardEconomy = el('div', { class: 'guide-card' },
-    el('h2', {}, '💰 ระบบเงิน & กล่องจดหมาย (/mail)'),
+    el('h2', {}, '[5] ระบบเงิน & กล่องจดหมาย (/mail)'),
     el('p', {}, 'การบริหารจัดการเงินและรับของรางวัลหรือสินค้าที่ซื้อมา'),
     el('ul', {},
       el('li', {}, el('span', { class: 'guide-cmd' }, '/bal'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/money'), ' — ตรวจสอบยอดเงินคงเหลือของคุณ'),
@@ -1892,10 +2019,10 @@ function pageGuide(view) {
 
   // 6. การใช้งานหน้าเว็บไซต์
   const cardWeb = el('div', { class: 'guide-card' },
-    el('h2', {}, '🌐 การเชื่อมต่อกับหน้าเว็บไซต์ (Web UI)'),
+    el('h2', {}, '[6] การเชื่อมต่อกับหน้าเว็บไซต์ (Web UI)'),
     el('p', {}, 'เข้าถึงข้อมูลเซิร์ฟเวอร์แบบ Real-time จากเบราว์เซอร์หรือมือถือ'),
     el('ul', {},
-      el('li', {}, '• ', el('strong', {}, 'วิธีเข้าสู่ระบบ:'), ' เข้าเล่นในเกม แล้วพิมพ์คำสั่ง ', el('span', { class: 'guide-cmd' }, '/link'), ' เพื่อรับรหัส Token แล้วนำมากรอกที่ปุ่ม "เข้าใช้" บนหน้าเว็บ'),
+      el('li', {}, '• ', el('strong', {}, 'วิธีเข้าสู่ระบบ:'), ' เข้าเล่นในเกม แล้วพิมพ์คำสั่ง ', el('span', { class: 'guide-cmd' }, '/pass'), ' หรือล็อกอินด้วยชื่อและรหัสผ่านในเกม'),
       el('li', {}, '• ', el('strong', {}, 'หน้าแผนที่ (#map):'), ' ดูพิกัดผู้เล่นแบบสด, ขอบเขตที่ดิน, ค้นหาพิกัด, กดซื้อเขตที่ว่างอยู่, หรือกดเปิดประมูลเขตของตนเอง'),
       el('li', {}, '• ', el('strong', {}, 'หน้าประมูล (#auction):'), ' ดูรายการประมูลสดทั้งหมด, เสนอราคา (Bid), กดซื้อทันที (Buyout), หรือกดปุ่ม "เปิดประมูลเขตที่ดินของฉัน"')
     )
