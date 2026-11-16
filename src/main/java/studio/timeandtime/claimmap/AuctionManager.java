@@ -589,8 +589,14 @@ public final class AuctionManager {
 			if (a == null) return Result.NOT_FOUND;
 			if (!a.isActive()) return Result.CLOSED;
 			if (!admin && !a.seller.equals(actor.toString())) return Result.FORBIDDEN;
-			if (a.highBidder != null) return Result.HAS_BIDS;
 
+			if (a.highBidder != null && a.highBid > 0) {
+				TxResult r = economy.apply(List.of(new Move(Acct.escrow(a.id),
+						Acct.player(UUID.fromString(a.highBidder)), a.highBid,
+						"auction.refund:" + a.id, a.id)), true);
+				if (r != TxResult.OK) return Result.IO_ERROR;
+			}
+			a.highBid = 0;
 			a.status = CANCELLED;
 			a.closedAt = now.getAsLong();
 			deliverSeller(a);

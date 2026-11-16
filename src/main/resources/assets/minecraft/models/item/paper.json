@@ -4,25 +4,125 @@
     "layer0": "minecraft:item/paper"
   },
   "overrides": [
-    { "predicate": { "custom_model_data": 1000 }, "model": "minecraft:item/button_cart" },
-    { "predicate": { "custom_model_data": 1001 }, "model": "minecraft:item/button_tag" },
-    { "predicate": { "custom_model_data": 1002 }, "model": "minecraft:item/button_map" },
-    { "predicate": { "custom_model_data": 1003 }, "model": "minecraft:item/button_back" },
-    { "predicate": { "custom_model_data": 1004 }, "model": "minecraft:item/button_next" },
-    { "predicate": { "custom_model_data": 1005 }, "model": "minecraft:item/button_gavel" },
-    { "predicate": { "custom_model_data": 1006 }, "model": "minecraft:item/button_parcel" },
-    { "predicate": { "custom_model_data": 1007 }, "model": "minecraft:item/button_gear" },
-    { "predicate": { "custom_model_data": 1008 }, "model": "minecraft:item/button_coin" },
-    { "predicate": { "custom_model_data": 1009 }, "model": "minecraft:item/button_chat" },
-    { "predicate": { "custom_model_data": 1011 }, "model": "minecraft:item/button_nav_north" },
-    { "predicate": { "custom_model_data": 1012 }, "model": "minecraft:item/button_nav_south" },
-    { "predicate": { "custom_model_data": 1013 }, "model": "minecraft:item/button_nav_west" },
-    { "predicate": { "custom_model_data": 1014 }, "model": "minecraft:item/button_nav_east" },
-    { "predicate": { "custom_model_data": 1015 }, "model": "minecraft:item/button_nav_center" },
-    { "predicate": { "custom_model_data": 1016 }, "model": "minecraft:item/button_claim" },
-    { "predicate": { "custom_model_data": 1017 }, "model": "minecraft:item/button_warp" },
-    { "predicate": { "custom_model_data": 1018 }, "model": "minecraft:item/button_abandon" },
-    { "predicate": { "custom_model_data": 1019 }, "model": "minecraft:item/button_brand" },
-    { "predicate": { "custom_model_data": 1020 }, "model": "minecraft:item/button_help" }
+    {
+      "predicate": {
+        "custom_model_data": 1000
+      },
+      "model": "minecraft:item/button_cart"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1001
+      },
+      "model": "minecraft:item/button_tag"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1002
+      },
+      "model": "minecraft:item/button_map"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1003
+      },
+      "model": "minecraft:item/button_back"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1004
+      },
+      "model": "minecraft:item/button_next"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1005
+      },
+      "model": "minecraft:item/button_gavel"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1006
+      },
+      "model": "minecraft:item/button_parcel"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1007
+      },
+      "model": "minecraft:item/button_gear"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1008
+      },
+      "model": "minecraft:item/button_coin"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1009
+      },
+      "model": "minecraft:item/button_chat"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1011
+      },
+      "model": "minecraft:item/button_nav_north"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1012
+      },
+      "model": "minecraft:item/button_nav_south"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1013
+      },
+      "model": "minecraft:item/button_nav_west"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1014
+      },
+      "model": "minecraft:item/button_nav_east"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1015
+      },
+      "model": "minecraft:item/button_nav_center"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1016
+      },
+      "model": "minecraft:item/button_claim"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1017
+      },
+      "model": "minecraft:item/button_warp"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1018
+      },
+      "model": "minecraft:item/button_abandon"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1019
+      },
+      "model": "minecraft:item/button_brand"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 1020
+      },
+      "model": "minecraft:item/button_help"
+    }
   ]
 }

@@ -73,7 +73,7 @@ public final class HelpGui {
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
 						Component.literal("§6/ah §7- เปิดดูตลาดประมูลทั้งหมด"),
 						Component.literal("§6/ah sell <ราคาเริ่ม> [ชม.] §7- นำไอเท็มในมือขึ้นประมูล"),
-						Component.literal("§6/ah end <รหัส> §7- เจ้าของกดจบประมูลทันที"),
+						Component.literal("§6/ah cancel <รหัส> §7- เจ้าของกดยกเลิกการประมูล"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§b[คลิก] §7เพื่อเปิดดูตลาดประมูลทันที")
 				)
@@ -156,9 +156,9 @@ public final class HelpGui {
 						Component.literal("§7--------------------------------"),
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
 						Component.literal("§f/tpa <ชื่อผู้เล่น> §7- ส่งคำขอวาร์ปไปหาเพื่อน"),
-						Component.literal("§f/tpaccept §7- กดยอมรับคำขอวาร์ป"),
-						Component.literal("§f/tpdeny §7- ปฏิเสธคำขอวาร์ป"),
-						Component.literal("§f/tpacancel §7- ยกเลิกคำขอวาร์ป"),
+						Component.literal("§f/tpa accept §7- กดยอมรับคำขอวาร์ป"),
+						Component.literal("§f/tpa deny §7- ปฏิเสธคำขอวาร์ป"),
+						Component.literal("§f/tpa cancel §7- ยกเลิกคำขอวาร์ป"),
 						Component.literal("§f/spawn §7หรือ §f/main §7- วาร์ปกลับจุดเกิด/โลกหลัก")
 				)
 		);

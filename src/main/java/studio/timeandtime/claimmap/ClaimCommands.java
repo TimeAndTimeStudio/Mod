@@ -153,10 +153,6 @@ public final class ClaimCommands {
 											.executes(ctx -> runAhBid(ctx.getSource(),
 													StringArgumentType.getString(ctx, "id"),
 													StringArgumentType.getString(ctx, "amount"))))))
-					.then(Commands.literal("end")
-							.then(Commands.argument("id", StringArgumentType.word())
-									.executes(ctx -> runAhEnd(ctx.getSource(),
-											StringArgumentType.getString(ctx, "id")))))
 					.then(Commands.literal("cancel")
 							.then(Commands.argument("id", StringArgumentType.word())
 									.executes(ctx -> runAhCancel(ctx.getSource(),
@@ -232,7 +228,6 @@ public final class ClaimCommands {
 					.executes(ctx -> runHelpGui(ctx.getSource())));
 
 			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runTpaAccept(ctx.getSource(), null))
 					.then(Commands.literal("accept")
 							.executes(ctx -> runTpaAccept(ctx.getSource(), null))
 							.then(Commands.argument("player", StringArgumentType.word())
@@ -246,31 +241,7 @@ public final class ClaimCommands {
 					.then(Commands.literal("cancel")
 							.executes(ctx -> runTpaCancel(ctx.getSource())))
 					.then(Commands.argument("player", StringArgumentType.word())
-							.executes(ctx -> runTpaRequestOrAccept(ctx.getSource(),
-									StringArgumentType.getString(ctx, "player")))));
-
-			dispatcher.register(Commands.literal("tpaccept").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runTpaAccept(ctx.getSource(), null))
-					.then(Commands.argument("player", StringArgumentType.word())
-							.executes(ctx -> runTpaAccept(ctx.getSource(),
-									StringArgumentType.getString(ctx, "player")))));
-
-			dispatcher.register(Commands.literal("tpdeny").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runTpaDeny(ctx.getSource(), null))
-					.then(Commands.argument("player", StringArgumentType.word())
-							.executes(ctx -> runTpaDeny(ctx.getSource(),
-									StringArgumentType.getString(ctx, "player")))));
-
-			dispatcher.register(Commands.literal("tpacancel").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runTpaCancel(ctx.getSource())));
-
-			dispatcher.register(Commands.literal("tp").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> {
-						ctx.getSource().sendFailure(Component.literal("§eการใช้งาน: /tp <ชื่อผู้เล่น> (วาร์ปหรือส่งคำขอวาร์ป)"));
-						return 0;
-					})
-					.then(Commands.argument("player", StringArgumentType.word())
-							.executes(ctx -> runTp(ctx.getSource(),
+							.executes(ctx -> runTpaRequest(ctx.getSource(),
 									StringArgumentType.getString(ctx, "player")))));
 		});
 	}
@@ -790,18 +761,6 @@ public final class ClaimCommands {
 			player.sendSystemMessage(Component.literal("ยกเลิกแล้ว ของจะอยู่ในกล่องของ พิมพ์ /mail claim"));
 		} else {
 			player.sendSystemMessage(Component.literal("ยกเลิกไม่ได้: " + auctionErrorText(r)));
-		}
-		return 1;
-	}
-
-	private int runAhEnd(CommandSourceStack src, String id) {
-		ServerPlayer player = src.getPlayer();
-		if (player == null) return 0;
-		AuctionManager.Result r = auctions.closeByOwner(player.getUUID(), id);
-		if (r == AuctionManager.Result.OK) {
-			player.sendSystemMessage(Component.literal("ปิดประมูลแล้ว หากมีผู้เสนอราคาสูงสุด ระบบจะโอนเงินให้คุณและส่งของ/เขตให้ผู้ชนะ"));
-		} else {
-			player.sendSystemMessage(Component.literal("ปิดประมูลไม่ได้: " + auctionErrorText(r)));
 		}
 		return 1;
 	}

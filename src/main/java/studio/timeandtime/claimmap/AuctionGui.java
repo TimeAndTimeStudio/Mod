@@ -142,9 +142,9 @@ public final class AuctionGui {
 						Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
 						Component.literal("§7คลิกเขตของตนเองใน §e/claimmap §7แล้วกดเปิดประมูล"),
 						Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่มต้น> [ชั่วโมง]"),
-						Component.literal("§e[เจ้าของปิดประมูลก่อนเวลา]:"),
-						Component.literal("§7คลิกที่รายการของคุณแล้วกดปุ่ม §6[ปิดประมูลทันที]"),
-						Component.literal("§7ผู้ที่เสนอราคาสูงสุดจะได้รับของทันที!")
+						Component.literal("§e[เจ้าของยกเลิกการประมูล]:"),
+						Component.literal("§7คลิกที่รายการของคุณแล้วกดปุ่ม §c[ยกเลิกการประมูล]"),
+						Component.literal("§7หากมีผู้เสนอราคา ระบบจะคืนเงินให้ผู้เสนอราคาทันที")
 				)
 		);
 		container.setItem(51, howTo);
@@ -250,24 +250,24 @@ public final class AuctionGui {
 		container.setItem(8, balItem);
 
 		if (isOwner) {
-			// Owner controls: End auction now and settle to highest bidder
-			List<Component> closeLore = new ArrayList<>();
-			closeLore.add(Component.literal("§7------------------------"));
+			// Owner controls: Cancel auction and return item/land
+			List<Component> cancelLore = new ArrayList<>();
+			cancelLore.add(Component.literal("§7คุณเป็นเจ้าของรายการประมูลนี้"));
+			cancelLore.add(Component.literal("§7------------------------"));
 			if (a.highBidder != null) {
-				closeLore.add(Component.literal("§aผู้ชนะที่จะได้รับ: §f" + a.highBidderName));
-				closeLore.add(Component.literal("§aเงินที่คุณจะได้รับ: §6" + a.highBid + " " + currency));
-				closeLore.add(Component.literal("§e[คลิก] เพื่อยุติการประมูลทันทีและส่งมอบสินค้า"));
+				cancelLore.add(Component.literal("§eมีผู้เสนอราคาสูงสุด: §f" + a.highBidderName + " (" + a.highBid + " " + currency + ")"));
+				cancelLore.add(Component.literal("§7หากกดยกเลิก ระบบจะคืนเงินเต็มจำนวนให้ผู้เสนอราคา"));
 			} else {
-				closeLore.add(Component.literal("§7ยังไม่มีผู้ใดเสนอราคา"));
-				closeLore.add(Component.literal("§c[คลิก] เพื่อยกเลิกการประมูลและรับของคืนเข้า /mail"));
+				cancelLore.add(Component.literal("§7ยังไม่มีผู้ใดเสนอราคา"));
 			}
-			closeLore.add(Component.literal("§7------------------------"));
-			ItemStack closeBtn = GuiButtons.button(
-					GuiButtons.GAVEL,
-					Component.literal("§6[ปิดประมูลทันที] ขายให้คนที่จ่ายสูงสุด"),
-					closeLore
+			cancelLore.add(Component.literal("§c[คลิก] เพื่อยกเลิกการประมูลและรับของคืนเข้า /mail"));
+			cancelLore.add(Component.literal("§7------------------------"));
+			ItemStack cancelBtn = GuiButtons.button(
+					GuiButtons.ABANDON,
+					Component.literal("§c[ยกเลิกการประมูล]"),
+					cancelLore
 			);
-			container.setItem(13, closeBtn);
+			container.setItem(13, cancelBtn);
 		} else {
 			boolean isTopBidder = myUuid.equals(a.highBidder);
 			if (isTopBidder) {
@@ -341,18 +341,12 @@ public final class AuctionGui {
 					if (slotIndex == 0) {
 						open(sp, auctions, economy, currency, returnPage, returnMode);
 					} else if (isOwner && slotIndex == 13) {
-						String topName = a.highBidderName;
-						long topBid = a.highBid;
-						AuctionManager.Result res = auctions.closeByOwner(sp.getUUID(), a.id);
+						AuctionManager.Result res = auctions.cancel(sp.getUUID(), false, a.id);
 						if (res == AuctionManager.Result.OK) {
-							if (topName != null && topBid > 0) {
-								sp.sendSystemMessage(Component.literal("§aปิดประมูลสำเร็จ! ขายให้ " + topName + " ในราคา " + topBid + " " + currency));
-							} else {
-								sp.sendSystemMessage(Component.literal("§eปิดประมูลสำเร็จ! ยังไม่มีผู้เสนอราคา สินค้าถูกส่งคืนเข้ากล่อง /mail"));
-							}
+							sp.sendSystemMessage(Component.literal("§aยกเลิกการประมูลสำเร็จ! สินค้า/โฉนดถูกส่งคืนเข้ากล่อง /mail"));
 							open(sp, auctions, economy, currency, returnPage, returnMode);
 						} else {
-							sp.sendSystemMessage(Component.literal("§cไม่สามารถปิดประมูลได้: " + res));
+							sp.sendSystemMessage(Component.literal("§cไม่สามารถยกเลิกการประมูลได้: " + res));
 						}
 					} else if (!isOwner && (slotIndex == 10 || slotIndex == 12 || slotIndex == 14 || slotIndex == 16)) {
 						long targetBid = minNextBid;
@@ -415,11 +409,7 @@ public final class AuctionGui {
 			lore.add(Component.literal("§eราคาประมูลปัจจุบัน: §6" + currentPrice + " " + currency));
 			lore.add(Component.literal("§eผู้เสนอราคาสูงสุด: §f" + (a.highBidderName != null ? a.highBidderName : "ยังไม่มี")));
 			lore.add(Component.literal("§7------------------------"));
-			if (a.highBidder != null) {
-				lore.add(Component.literal("§6[คลิก] เพื่อดูรายละเอียด & ปิดประมูลให้คนที่จ่ายสูงสุด"));
-			} else {
-				lore.add(Component.literal("§c[คลิก] เพื่อดูรายละเอียด & ยกเลิกรายการ"));
-			}
+			lore.add(Component.literal("§c[คลิก] เพื่อดูรายละเอียด & ขอยกเลิกรายการ"));
 
 			displayStack.set(DataComponents.LORE, new ItemLore(lore));
 			container.setItem(i, displayStack);
