@@ -76,7 +76,7 @@ public final class WorldSpawnProtection {
 
 		// 2. On Player Respawn:
 		ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
-			if (newPlayer.getRespawnPosition() == null) {
+			if (newPlayer.getRespawnConfig() == null) {
 				// No bed or anchor: random spawn in Overworld
 				ServerLevel overworld = newPlayer.level().getServer().overworld();
 				newPlayer.level().getServer().execute(() -> {
@@ -89,7 +89,7 @@ public final class WorldSpawnProtection {
 		});
 
 		// 3. On Dimension / World Change:
-		ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE.register((player, origin, destination) -> {
+		ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) -> {
 			grantProtection(player);
 		});
 
@@ -129,7 +129,7 @@ public final class WorldSpawnProtection {
 
 	public void grantProtection(ServerPlayer player) {
 		protectedUntil.put(player.getUUID(), System.currentTimeMillis() + (PROTECTION_SECONDS * 1000L));
-		player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, PROTECTION_SECONDS * 20, 4, false, false, true));
+		player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, PROTECTION_SECONDS * 20, 4, false, false, true));
 		player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, PROTECTION_SECONDS * 20, 0, false, false, true));
 		player.addEffect(new MobEffectInstance(MobEffects.WATER_BREATHING, PROTECTION_SECONDS * 20, 0, false, false, true));
 		player.sendSystemMessage(Component.literal("§a[ระบบคุ้มครอง] คุณได้รับการคุ้มครองความปลอดภัย 30 วินาที"));
