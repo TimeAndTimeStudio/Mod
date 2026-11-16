@@ -373,7 +373,6 @@ const NAV = [
   { id: 'map', label: 'แผนที่' },
   { id: 'buy', label: 'ซื้อ' },
   { id: 'sell', label: 'ขาย' },
-  { id: 'trends', label: 'กราฟราคา' },
   { id: 'auction', label: 'ประมูล' },
   { id: 'wallet', label: 'เงิน' },
   { id: 'mailbox', label: 'กล่อง' },
@@ -475,7 +474,7 @@ async function fetchNames() {
 }
 
 /* ---------- router ---------- */
-const PAGES = { home: pageHome, map: pageMap, buy: pageBuy, sell: pageSell, trends: pageTrends, auction: pageAuction, wallet: pageWallet, mailbox: pageMailbox, about: pageAbout, admin: pageAdmin, login: pageLogin };
+const PAGES = { home: pageHome, map: pageMap, buy: pageBuy, sell: pageSell, auction: pageAuction, wallet: pageWallet, mailbox: pageMailbox, about: pageAbout, admin: pageAdmin, login: pageLogin };
 
 function requireAuth(view) {
   if (!state.me) {
@@ -494,7 +493,8 @@ function render() {
   if (pageTimer) { clearInterval(pageTimer); pageTimer = null; }
   if (mapCleanup) { mapCleanup(); mapCleanup = null; }
   const route = location.hash.replace(/^#\/?/, '') || 'home';
-  if (route !== 'login' && route !== 'home' && route !== 'trends' && route !== 'about' && !state.me) {
+  if (route === 'trends') { location.hash = '#home'; return; }
+  if (route !== 'login' && route !== 'home' && route !== 'about' && !state.me) {
     go('login');
     return;
   }
@@ -720,13 +720,17 @@ async function pageMap(view) {
     const [cx, cz] = selected.split(',').map(Number);
     const owner = cells[selected];
     const mine = owner === state.me?.name;
-    const currentPriceText = state.landPrice ? money(state.landPrice) + ' ' + (state.currency || 'เหรียญ') : '100,000 เหรียญ';
+    const myClaims = Object.values(cells).filter((n) => n === state.me?.name).length;
+    const isFree = myClaims < 4;
+    const currentPriceText = isFree
+      ? `ฟรี (${myClaims + 1}/4 ช่อง)`
+      : (state.landPrice ? money(state.landPrice) + ' ' + (state.currency || 'เหรียญ') : '100,000 เหรียญ');
     info.append(el('div', { class: 'item', style: 'border-top:0' },
       el('div', { class: 'item-main' },
         el('span', { class: 'item-title' }, `ช่อง ${selected}`),
-        el('span', { class: 'item-meta' }, `${owner ? 'เจ้าของ ' + owner : 'ยังไม่มีเจ้าของ (ราคาซื้อ: ' + currentPriceText + ')'} · X ${cx * 500}–${cx * 500 + 499} · Z ${cz * 500}–${cz * 500 + 499}`)),
+        el('span', { class: 'item-meta' }, `${owner ? 'เจ้าของ ' + owner : 'ยังไม่มีเจ้าของ (' + (isFree ? 'รับฟรี ' + (myClaims + 1) + '/4 ช่อง' : 'ราคาซื้อ: ' + currentPriceText) + ' · ซื้อได้ไม่จำกัด)'} · X ${cx * 500}–${cx * 500 + 499} · Z ${cz * 500}–${cz * 500 + 499}`)),
       el('div', { class: 'item-side' },
-        !owner ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, `ซื้อที่ดิน (${currentPriceText})`) : null,
+        !owner ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, isFree ? `รับเขตฟรี (${myClaims + 1}/4)` : `ซื้อที่ดิน (${currentPriceText})`) : null,
         (mine || state.me?.admin) && owner ? el('button', { class: 'btn danger', type: 'button', onclick: () => removeCell(selected) }, 'ปล่อยช่อง') : null,
         state.me?.admin ? el('button', { class: 'btn secondary', type: 'button', onclick: () => adminAuctionCellDialog(selected) }, 'ประมูลเขต (เริ่มที่ 0)') : null)));
     if (owner && (mine || state.me?.admin)) {
@@ -751,16 +755,24 @@ async function pageMap(view) {
     catch (error) { clear(info); info.append(errorState(error)); }
   }
   async function claimCell(id) {
+    const myClaims = Object.values(cells).filter((n) => n === state.me?.name).length;
+    const isFree = myClaims < 4;
     const price = state.landPrice || 100000;
     const ok = await confirmDialog({
-      title: 'ซื้อที่ดินเขต ' + id,
-      body: `ราคาซื้อ ${money(price)} ${state.currency || 'เหรียญ'} (โควตาสูงสุด 4 ช่องต่อคน)`,
-      confirm: 'ยืนยันซื้อที่ดิน',
+      title: isFree ? 'รับกรรมสิทธิ์เขต ' + id + ' (ฟรี)' : 'ซื้อที่ดินเขต ' + id,
+      body: isFree
+        ? `สิทธิ์ฟรีช่องที่ ${myClaims + 1}/4 (ฟรีคนละ 4 เขต และซื้อเพิ่มได้ไม่จำกัด)`
+        : `ราคาซื้อ ${money(price)} ${state.currency || 'เหรียญ'} (ซื้อเพิ่มได้ไม่จำกัดจำนวนเขต)`,
+      confirm: isFree ? 'รับเขตฟรี' : 'ยืนยันซื้อที่ดิน',
     });
     if (!ok) return;
     try {
       const res = await api('POST', `/api/cells/${id}/claim`, {});
-      toast(`ซื้อกรรมสิทธิ์เขต ${id} สำเร็จ! จ่าย ${money(res.pricePaid || price)} ${state.currency || 'เหรียญ'}`);
+      if (res.free) {
+        toast(`รับกรรมสิทธิ์เขต ${id} ฟรีสำเร็จ! (ฟรี ${myClaims + 1}/4 ช่อง)`);
+      } else {
+        toast(`ซื้อกรรมสิทธิ์เขต ${id} สำเร็จ! จ่าย ${money(res.pricePaid || price)} ${state.currency || 'เหรียญ'}`);
+      }
       if (res.balance != null) state.balance = res.balance;
       renderShell();
       await reload();
@@ -1221,20 +1233,7 @@ async function pageTrends(view) {
         el('div', { class: 'stat' }, el('strong', {}, (item.sold || 0).toLocaleString() + ' ชิ้น'), el('span', {}, `ขายเข้าเซิร์ฟเวอร์แล้ว (ตัวคูณ: ${item.multiplier}x)`))
       );
 
-      const chartTitle = el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-top:12px;' },
-        el('span', { class: 'mono muted', style: 'font-size:var(--fs-2); text-transform:uppercase; letter-spacing:0.05em;' }, 'แนวโน้มราคารับซื้อตามความต้องการ (PRICE HISTORY & SATURATION)'),
-        el('span', { class: 'mono muted', style: 'font-size:var(--fs-1);' }, 'เส้นประ = ราคาฐานเดิม · เส้นส้ม = ราคารับซื้อจริง')
-      );
-
-      const chartBox = el('div', { class: 'chart-box' });
-      const canvas = el('canvas', { class: 'chart-canvas' });
-      chartBox.append(canvas);
-
-      detailBox.append(header, stats, chartTitle, chartBox);
-
-      requestAnimationFrame(() => {
-        drawTrendChart(canvas, item.history || [], item.base, item.sell);
-      });
+      detailBox.append(header, stats);
     }
 
     function renderTable(filterTerm = '') {

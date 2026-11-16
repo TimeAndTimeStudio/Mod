@@ -36,7 +36,8 @@ public final class ClaimMapConfig {
 	/** Comma separated list of admin names. */
 	public String admins = "";
 	public int cellSize = 500;
-	public int maxCellsPerPlayer = 4;
+	public int freeCellsPerPlayer = 4;
+	public int maxCellsPerPlayer = 0; // 0 = unlimited
 	/** Radius (in cells) around 0,0 treated as a common / spawn area (unclaimable). */
 	public int spawnProtectedCells = 3;
 	/** Map sampling step in blocks; one pixel per {@code renderScale} block. */
@@ -143,7 +144,8 @@ public final class ClaimMapConfig {
 		players = props.getProperty("players", players).trim();
 		admins = props.getProperty("admins", admins).trim();
 		cellSize = getInt("cellSize", cellSize, 16, 10000);
-		maxCellsPerPlayer = getInt("maxCellsPerPlayer", maxCellsPerPlayer, 1, 100000);
+		freeCellsPerPlayer = getInt("freeCellsPerPlayer", freeCellsPerPlayer, 0, 100000);
+		maxCellsPerPlayer = getInt("maxCellsPerPlayer", maxCellsPerPlayer, 0, 100000);
 		spawnProtectedCells = getInt("spawnProtectedCells", spawnProtectedCells, 0, 100000);
 		renderScale = getInt("renderScale", renderScale, 1, 100);
 		saveDelayMs = getLong("saveDelayMs", saveDelayMs, 1000L, 3600000L);
@@ -271,6 +273,7 @@ public final class ClaimMapConfig {
 		props.setProperty("players", players);
 		props.setProperty("admins", admins);
 		props.setProperty("cellSize", Integer.toString(cellSize));
+		props.setProperty("freeCellsPerPlayer", Integer.toString(freeCellsPerPlayer));
 		props.setProperty("maxCellsPerPlayer", Integer.toString(maxCellsPerPlayer));
 		props.setProperty("spawnProtectedCells", Integer.toString(spawnProtectedCells));
 		props.setProperty("renderScale", Integer.toString(renderScale));

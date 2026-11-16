@@ -609,7 +609,9 @@ public final class ClaimCommands {
 		int cz = Math.floorDiv(bz, config.cellSize);
 		String id = cx + "," + cz;
 		String uuid = player.getUUID().toString();
-		if (regions.countClaimedBy(uuid) >= config.maxCellsPerPlayer) {
+		int ownedCount = regions.countClaimedBy(uuid);
+		boolean isFree = ownedCount < config.freeCellsPerPlayer;
+		if (!isFree && config.maxCellsPerPlayer > 0 && ownedCount >= config.maxCellsPerPlayer) {
 			player.sendSystemMessage(Component.literal("§cคุณครอบครองที่ดินครบโควตา " + config.maxCellsPerPlayer + " ช่องแล้ว"));
 			return 0;
 		}
@@ -620,6 +622,17 @@ public final class ClaimCommands {
 		if (regions.get(id) != null) {
 			player.sendSystemMessage(Component.literal("§cเขตนี้มีเจ้าของแล้ว (" + regions.ownerName(id) + ")"));
 			return 0;
+		}
+		if (isFree) {
+			String name = player.getGameProfile().name();
+			RegionManager.ClaimResult r = regions.claim(cx, cz, uuid, name);
+			if (r != RegionManager.ClaimResult.OK) {
+				player.sendSystemMessage(Component.literal("§cไม่สามารถจองเขตได้: " + r));
+				return 0;
+			}
+			player.sendSystemMessage(Component.literal("§aรับสิทธิ์ครอบครองเขต " + id + " ฟรีสำเร็จ! (สิทธิ์ฟรีช่องที่ "
+					+ (ownedCount + 1) + "/" + config.freeCellsPerPlayer + ", รวมถือครอง " + regions.countClaimedBy(uuid) + " ช่อง)"));
+			return 1;
 		}
 		int totalClaimed = regions.ownerMap().size();
 		long price = ClaimMap.instance() != null && ClaimMap.instance().landPrices() != null
@@ -648,7 +661,7 @@ public final class ClaimCommands {
 		}
 		player.sendSystemMessage(Component.literal("§aซื้อกรรมสิทธิ์เขต " + id + " สำเร็จ! จ่าย " + price + " "
 				+ config.currencyName + " (คงเหลือ " + economy.balance(player.getUUID()) + " " + config.currencyName
-				+ ", ถือครอง " + regions.countClaimedBy(uuid) + "/" + config.maxCellsPerPlayer + " ช่อง)"));
+				+ ", รวมถือครอง " + regions.countClaimedBy(uuid) + " ช่อง)"));
 		return 1;
 	}
 
@@ -659,7 +672,7 @@ public final class ClaimCommands {
 		RegionManager.CellData c = regions.get(id);
 		String owner = c == null ? "free" : c.ownerName;
 		src.sendSuccess(() -> Component.literal("Cell " + id + " -> " + owner + " (claimed " + regions.countClaimedBy(player.getUUID().toString())
-				+ "/" + config.maxCellsPerPlayer + " by you)"), false);
+				+ " by you)"), false);
 		return 1;
 	}
 

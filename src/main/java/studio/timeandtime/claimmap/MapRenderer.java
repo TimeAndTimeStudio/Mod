@@ -41,7 +41,7 @@ public final class MapRenderer {
 
 		Tile(int size) {
 			this.size = size;
-			this.img = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
+			this.img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
 		}
 	}
 
@@ -63,28 +63,16 @@ public final class MapRenderer {
 
 	/** Called from the server thread for every newly loaded chunk. */
 	public void onChunkLoaded(ServerLevel level, LevelChunk chunk) {
-		// Only render chunks that are near an actual online player.
-		// Ignore pre-generated or spawn chunks loaded without players!
-		int chunkX = chunk.getPos().x();
-		int chunkZ = chunk.getPos().z();
-		boolean nearPlayer = false;
-		for (var player : level.players()) {
-			int px = player.getBlockX() >> 4;
-			int pz = player.getBlockZ() >> 4;
-			if (Math.abs(px - chunkX) <= 8 && Math.abs(pz - chunkZ) <= 8) {
-				nearPlayer = true;
-				break;
-			}
-		}
-		if (!nearPlayer) return;
+		// Only render when players are online to avoid filling map from offline world loads
+		if (level.players().isEmpty()) return;
 		renderChunk(level, chunk);
 	}
 
 	public void onPlayerPosition(ServerLevel level, int blockX, int blockZ) {
 		int chunkX = blockX >> 4;
 		int chunkZ = blockZ >> 4;
-		for (int dx = -2; dx <= 2; dx++) {
-			for (int dz = -2; dz <= 2; dz++) {
+		for (int dx = -8; dx <= 8; dx++) {
+			for (int dz = -8; dz <= 8; dz++) {
 				LevelChunk chunk = level.getChunkSource().getChunkNow(chunkX + dx, chunkZ + dz);
 				if (chunk != null) {
 					renderChunk(level, chunk);
@@ -102,8 +90,15 @@ public final class MapRenderer {
 				int x = chunkX * 16 + dx;
 				int z = chunkZ * 16 + dz;
 				int topY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
-				BlockState state = chunk.getBlockState(new BlockPos(x, topY, z));
-				draw(x, z, classify(state));
+				BlockState state = (topY > chunk.getMinY())
+						? chunk.getBlockState(new BlockPos(x, topY - 1, z))
+						: chunk.getBlockState(new BlockPos(x, topY, z));
+				if (state.isAir()) {
+					state = chunk.getBlockState(new BlockPos(x, topY, z));
+				}
+				if (!state.isAir()) {
+					draw(x, z, classify(state));
+				}
 			}
 		}
 	}

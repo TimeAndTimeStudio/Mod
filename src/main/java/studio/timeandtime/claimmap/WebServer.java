@@ -695,22 +695,28 @@ public final class WebServer {
 				Auth a = requireSession(ex);
 				int[] cell = parseCellId(id);
 				UUID playerUuid = UUID.fromString(a.uuid());
-				if (regions.countClaimedBy(a.uuid()) >= config.maxCellsPerPlayer) {
+				int ownedCount = regions.countClaimedBy(a.uuid());
+				boolean isFree = ownedCount < config.freeCellsPerPlayer;
+				if (!isFree && config.maxCellsPerPlayer > 0 && ownedCount >= config.maxCellsPerPlayer) {
 					throw new Json.ApiError(409, "limit_reached", "คุณครอบครองที่ดินครบโควตา " + config.maxCellsPerPlayer + " ช่องแล้ว");
 				}
-				long landPrice = currentLandPrice();
-				long bal = economy.balance(playerUuid);
-				if (bal < landPrice) {
-					throw new Json.ApiError(409, "insufficient_funds",
-							"เงินไม่พอสำหรับการซื้อที่ดิน ต้องการ " + landPrice + " " + config.currencyName + " (คุณมี " + bal + " " + config.currencyName + ")");
-				}
-				TxResult tx = economy.withdraw(playerUuid, landPrice, "land.purchase:" + id, id);
-				if (tx != TxResult.OK) {
-					throw new Json.ApiError(409, "insufficient_funds", "การหักเงินไม่สำเร็จ (" + tx + ")");
+				long landPrice = isFree ? 0L : currentLandPrice();
+				if (!isFree) {
+					long bal = economy.balance(playerUuid);
+					if (bal < landPrice) {
+						throw new Json.ApiError(409, "insufficient_funds",
+								"เงินไม่พอสำหรับการซื้อที่ดิน ต้องการ " + landPrice + " " + config.currencyName + " (คุณมี " + bal + " " + config.currencyName + ")");
+					}
+					TxResult tx = economy.withdraw(playerUuid, landPrice, "land.purchase:" + id, id);
+					if (tx != TxResult.OK) {
+						throw new Json.ApiError(409, "insufficient_funds", "การหักเงินไม่สำเร็จ (" + tx + ")");
+					}
 				}
 				RegionManager.ClaimResult r = regions.claim(cell[0], cell[1], a.uuid(), a.name());
 				if (r != RegionManager.ClaimResult.OK) {
-					economy.deposit(playerUuid, landPrice, "land.refund:" + id, id);
+					if (!isFree) {
+						economy.deposit(playerUuid, landPrice, "land.refund:" + id, id);
+					}
 					switch (r) {
 						case ALREADY_CLAIMED -> throw new Json.ApiError(409, "already_claimed", "ช่องนี้ถูกซื้อหรือมีเจ้าของแล้ว");
 						case COMMON_AREA -> throw new Json.ApiError(403, "forbidden", "เป็นพื้นที่ส่วนกลาง ไม่สามารถซื้อได้");
@@ -718,11 +724,12 @@ public final class WebServer {
 						default -> throw new Json.ApiError(500, "internal_error", "ไม่สามารถซื้อที่ดินได้");
 					}
 				}
-				if (landPrices != null) {
+				if (!isFree && landPrices != null) {
 					landPrices.onCellPurchased();
 				}
 				JsonObject out = new JsonObject();
 				out.addProperty("ok", true);
+				out.addProperty("free", isFree);
 				out.addProperty("pricePaid", landPrice);
 				out.addProperty("balance", economy.balance(playerUuid));
 				out.addProperty("nextPrice", currentLandPrice());

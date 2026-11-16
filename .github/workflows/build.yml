@@ -38,5 +38,5 @@ jobs:
       - name: Upload artifact (Minecraft ${{ matrix.mc }})
         uses: actions/upload-artifact@v4
         with:
-          name: claimmap-mc${{ matrix.mc }}
+          name: timesmp-mc${{ matrix.mc }}
           path: build/libs/*.jar

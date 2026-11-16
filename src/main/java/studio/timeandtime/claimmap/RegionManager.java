@@ -163,7 +163,7 @@ public final class RegionManager {
 			String id = cellX + "," + cellZ;
 			if (isCommonArea(cellX, cellZ)) return ClaimResult.COMMON_AREA;
 			if (cells.containsKey(id)) return ClaimResult.ALREADY_CLAIMED;
-			if (countClaimedBy(uuid) >= config.maxCellsPerPlayer) return ClaimResult.LIMIT_REACHED;
+			if (config.maxCellsPerPlayer > 0 && countClaimedBy(uuid) >= config.maxCellsPerPlayer) return ClaimResult.LIMIT_REACHED;
 			CellData c = new CellData();
 			c.id = id;
 			c.cx = cellX;
