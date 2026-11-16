@@ -5,8 +5,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -120,7 +120,7 @@ public class HomeManager {
 	public boolean setHome(UUID uuid, String name, ServerLevel level, Vec3 pos, float yaw, float pitch) {
 		if (!isValidName(name)) return false;
 		String key = name.toLowerCase(Locale.ROOT);
-		String worldId = level.dimension().location().toString();
+		String worldId = level.dimension().identifier().toString();
 		HomeEntry entry = new HomeEntry(name, worldId, pos.x, pos.y, pos.z, yaw, pitch, System.currentTimeMillis());
 		synchronized (lock) {
 			Map<String, HomeEntry> userHomes = data.computeIfAbsent(uuid.toString(), k -> new LinkedHashMap<>());
@@ -149,13 +149,13 @@ public class HomeManager {
 	}
 
 	public void teleport(ServerPlayer player, HomeEntry home) {
-		MinecraftServer srv = player.getServer();
+		MinecraftServer srv = ClaimMap.getServer();
 		if (srv == null) {
 			player.sendSystemMessage(Component.literal("§c[Home] เซิร์ฟเวอร์ยังไม่พร้อม"));
 			return;
 		}
 		ServerLevel targetLevel = null;
-		ResourceLocation loc = ResourceLocation.tryParse(home.world);
+		Identifier loc = Identifier.tryParse(home.world);
 		if (loc != null) {
 			ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, loc);
 			targetLevel = srv.getLevel(key);

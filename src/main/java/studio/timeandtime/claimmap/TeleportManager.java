@@ -71,7 +71,6 @@ public class TeleportManager {
 		activeWarmups.put(uuid, task);
 		player.sendSystemMessage(Component.literal("§6[Teleport] §eกำลังเตรียมวาร์ปไป §f" + destinationName.getString()
 				+ " §eในอีก §c" + WARMUP_SECONDS + " §eวินาที... §cห้ามขยับตัว"));
-		player.displayClientMessage(Component.literal("§eกำลังเตรียมวาร์ปในอีก §c" + WARMUP_SECONDS + " §eวินาที... §7(ห้ามขยับตัว)"), true);
 	}
 
 	public void cancelWarmup(UUID uuid, String reason) {
@@ -81,7 +80,6 @@ public class TeleportManager {
 			if (srv != null) {
 				ServerPlayer player = srv.getPlayerList().getPlayer(uuid);
 				if (player != null) {
-					player.displayClientMessage(Component.literal("§c" + reason), true);
 					player.sendSystemMessage(Component.literal("§c[Teleport] " + reason));
 				}
 			}
@@ -105,7 +103,6 @@ public class TeleportManager {
 			if (!player.level().dimension().equals(task.startDimension)
 					|| player.position().distanceToSqr(task.startPos) > 0.5) {
 				activeWarmups.remove(uuid);
-				player.displayClientMessage(Component.literal("§cการวาร์ปถูกยกเลิกเนื่องจากคุณขยับตัว!"), true);
 				player.sendSystemMessage(Component.literal("§c[Teleport] การวาร์ปถูกยกเลิกเนื่องจากคุณขยับตัว!"));
 				if (task.onCancel != null) task.onCancel.run();
 				continue;
@@ -113,7 +110,7 @@ public class TeleportManager {
 			task.remainingTicks--;
 			if (task.remainingTicks <= 0) {
 				activeWarmups.remove(uuid);
-				player.displayClientMessage(Component.literal("§aวาร์ปสำเร็จ!"), true);
+				player.sendSystemMessage(Component.literal("§6[Teleport] §aวาร์ปสำเร็จ!"));
 				try {
 					task.teleportAction.run();
 				} catch (Exception e) {
@@ -121,7 +118,7 @@ public class TeleportManager {
 				}
 			} else if (task.remainingTicks % 20 == 0) {
 				int sec = task.remainingTicks / 20;
-				player.displayClientMessage(Component.literal("§eกำลังวาร์ปในอีก §c" + sec + " §eวินาที... §7(ห้ามขยับตัว)"), true);
+				player.sendSystemMessage(Component.literal("§6[Teleport] §eกำลังวาร์ปในอีก §c" + sec + " §eวินาที... §7(ห้ามขยับตัว)"));
 			}
 		}
 	}

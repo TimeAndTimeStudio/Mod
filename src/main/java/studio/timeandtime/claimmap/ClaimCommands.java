@@ -310,7 +310,7 @@ public final class ClaimCommands {
 			player.sendSystemMessage(Component.literal("§c[Home] ชื่อบ้านไม่ถูกต้อง (ต้องเป็นภาษาอังกฤษหรือตัวเลข ไม่เกิน 24 ตัวอักษร)"));
 			return 0;
 		}
-		boolean ok = homeManager.setHome(player.getUUID(), name, player.serverLevel(), player.position(), player.getYRot(), player.getXRot());
+		boolean ok = homeManager.setHome(player.getUUID(), name, (ServerLevel) player.level(), player.position(), player.getYRot(), player.getXRot());
 		if (ok) {
 			player.sendSystemMessage(Component.literal("§a[Home] บันทึกจุดเซฟบ้าน \"§e" + name + "§a\" สำเร็จ! (พิมพ์ §b/home §aเพื่อเปิดเมนู)"));
 			return 1;
