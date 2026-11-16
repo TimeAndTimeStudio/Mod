@@ -750,7 +750,7 @@ public final class AuctionManager {
 		}
 	}
 
-	private Auction byId(String id) {
+	public Auction byId(String id) {
 		if (id == null) return null;
 		for (Auction a : auctions) {
 			if (a.id.equals(id)) return a;
