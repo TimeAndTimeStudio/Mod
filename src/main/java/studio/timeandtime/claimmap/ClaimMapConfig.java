@@ -51,7 +51,7 @@ public final class ClaimMapConfig {
 	/** Display name of the currency. */
 	public String currencyName = "เหรียญ";
 	/** Money granted to a brand new player account. */
-	public long startingBalance = 1000L;
+	public long startingBalance = 0L;
 	/** PBKDF2 work factor for in-game / web passwords. */
 	public int pbkdf2Iterations = 210_000;
 	/** Remote price API endpoint + access key (optional; empty by default to use local prices.json). */
