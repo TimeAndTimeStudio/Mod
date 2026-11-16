@@ -14,8 +14,7 @@ public final class CommandFilter {
 	public static final Set<String> ALLOWED_MOD_COMMANDS = Set.of(
 			"pass", "bal", "pay", "sell", "buy", "mail", "ah",
 			"claim", "claimmap", "timesmp", "main", "spawn", "world",
-			"tp", "tpa", "tpaccept", "tpdeny", "tpacancel",
-			"home", "sethome", "delhome", "help", "smphelp"
+			"tp", "tpa", "tpaccept", "tpdeny", "tpacancel"
 	);
 
 	public static final Set<String> ALLOWED_WHISPER_COMMANDS = Set.of(
