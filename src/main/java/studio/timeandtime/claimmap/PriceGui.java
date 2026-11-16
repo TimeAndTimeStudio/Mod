@@ -94,9 +94,9 @@ public final class PriceGui {
 		Category cat = categories[Math.max(0, Math.min(categoryIndex, categories.length - 1))];
 
 		List<PriceService.ItemPriceDetail> allDetails = prices.detailsSnapshot().stream()
-				.filter(d -> !d.blocked() && (d.sell() > 0 || d.buy() > 0))
+				.filter(d -> !d.blocked() && (d.sellPrice() > 0 || d.buyPrice() > 0))
 				.filter(d -> matchesCategory(d.id(), cat))
-				.sorted(Comparator.comparingDouble(PriceService.ItemPriceDetail::sell).reversed())
+				.sorted(Comparator.comparingDouble(PriceService.ItemPriceDetail::sellPrice).reversed())
 				.toList();
 
 		int maxPages = Math.max(1, (allDetails.size() + PAGE_SIZE - 1) / PAGE_SIZE);
