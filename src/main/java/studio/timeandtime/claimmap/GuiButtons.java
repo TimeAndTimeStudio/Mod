@@ -64,7 +64,7 @@ public final class GuiButtons {
 			stack.set(DataComponents.LORE, new ItemLore(lore));
 		}
 		int id = modelId(buttonId);
-		stack.set(DataComponents.ITEM_MODEL, Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "button_" + buttonId));
+		stack.set(DataComponents.ITEM_MODEL, Identifier.fromNamespaceAndPath("minecraft", "button_" + buttonId));
 		stack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(List.of((float) id), List.of(), List.of(), List.of()));
 		return stack;
 	}
