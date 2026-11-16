@@ -388,6 +388,17 @@ public final class WebServer {
 		return a;
 	}
 
+	/** Optional authentication: returns null when unauthenticated, instead of throwing. */
+	private Auth optAuth(HttpExchange ex) {
+		String token = bearer(ex);
+		if (token == null) return null;
+		if (isMaster(token)) return new Auth("admin", null, true, true, null);
+		LinkManager.Session s = links.resolve(token);
+		if (s == null) return null;
+		if (!config.isAllowed(s.name())) return null;
+		return new Auth(s.name(), s.uuid(), config.isAdmin(s.name()), false, s);
+	}
+
 	// ---- handlers -----------------------------------------------------------
 
 	/**
@@ -615,9 +626,8 @@ public final class WebServer {
 		Json.send(ex, 200, true);
 	}
 
-	/** GET /api/cells -> {"cx,cz":"ownerName",...} */
+	/** GET /api/cells -> {"cx,cz":"ownerName",...}. Public for map viewing. */
 	private void handleCells(HttpExchange ex) throws IOException {
-		requireAuth(ex);
 		JsonObject out = new JsonObject();
 		for (Map.Entry<String, String> e : regions.ownerMap().entrySet()) {
 			out.addProperty(e.getKey(), e.getValue());
@@ -625,9 +635,8 @@ public final class WebServer {
 		Json.send(ex, 200, out);
 	}
 
-	/** GET /api/map/{cx},{cz}.png */
+	/** GET /api/map/{cx},{cz}.png. Public map tiles. */
 	private void handleMap(HttpExchange ex, String path) throws IOException {
-		requireAuth(ex);
 		String rest = path.substring("/api/map/".length());
 		if (!rest.endsWith(".png")) {
 			throw new Json.ApiError(404, "not_found", "ไม่พบแผนที่ที่เรียก");
@@ -1094,19 +1103,21 @@ public final class WebServer {
 
 	// ---- auctions -----------------------------------------------------------
 
-	/** GET /api/auctions — active listings plus the caller's 7-day history. */
+	/** GET /api/auctions — active listings plus the caller's 7-day history. Public to view. */
 	private void handleAuctions(HttpExchange ex) throws IOException {
-		Auth a = requireSession(ex);
+		Auth a = optAuth(ex);
 		requireAuctionEnabled();
-		UUID uuid = sessionUuid(a);
+		UUID uuid = a != null ? sessionUuid(a) : null;
 		JsonArray list = new JsonArray();
 		for (AuctionManager.Auction au : auctions.all()) {
 			if (!au.isActive()) continue;
 			list.add(auctionView(au, uuid));
 		}
 		JsonArray mine = new JsonArray();
-		for (AuctionManager.Auction au : auctions.recentForSeller(uuid.toString())) {
-			mine.add(auctionView(au, uuid));
+		if (uuid != null) {
+			for (AuctionManager.Auction au : auctions.recentForSeller(uuid.toString())) {
+				mine.add(auctionView(au, uuid));
+			}
 		}
 		JsonObject out = new JsonObject();
 		out.addProperty("currency", config.currencyName);
@@ -1118,12 +1129,12 @@ public final class WebServer {
 	private JsonObject auctionView(AuctionManager.Auction au, UUID viewer) {
 		JsonObject o = new JsonObject();
 		boolean cell = au.isCellAuction();
-		String viewerId = viewer.toString();
+		String viewerId = viewer != null ? viewer.toString() : "";
 		RegionManager.CellData cellData = cell ? regions.get(au.cellId) : null;
 		String cellOwner = cellData == null ? null : cellData.ownerName;
-		boolean viewerOwnsCell = cellData != null && viewerId.equals(cellData.ownerUuid);
-		boolean mine = au.seller.equals(viewerId);
-		boolean highest = viewerId.equals(au.highBidder);
+		boolean viewerOwnsCell = cellData != null && !viewerId.isEmpty() && viewerId.equals(cellData.ownerUuid);
+		boolean mine = !viewerId.isEmpty() && au.seller.equals(viewerId);
+		boolean highest = !viewerId.isEmpty() && viewerId.equals(au.highBidder);
 		boolean open = auctions.isOpen(au);
 		o.addProperty("id", au.id);
 		o.addProperty("kind", cell ? "CELL" : "ITEM");
@@ -1141,12 +1152,12 @@ public final class WebServer {
 		o.addProperty("status", au.status);
 		o.addProperty("minBid", auctions.minBid(au));
 		o.addProperty("finalPrice", au.finalPrice);
-		o.addProperty("winner", au.winner == null ? null : au.winner.equals(viewerId) ? "คุณ" : null);
+		o.addProperty("winner", au.winner == null ? null : (!viewerId.isEmpty() && au.winner.equals(viewerId) ? "คุณ" : null));
 		o.addProperty("mine", mine);
 		o.addProperty("highest", highest);
-		o.addProperty("canBid", open && !mine && !highest && !viewerOwnsCell);
-		o.addProperty("canBuyout", open && au.buyout != null && !mine && !viewerOwnsCell);
-		o.addProperty("canCancel", open && mine && au.highBidder == null);
+		o.addProperty("canBid", viewer != null && open && !mine && !highest && !viewerOwnsCell);
+		o.addProperty("canBuyout", viewer != null && open && au.buyout != null && !mine && !viewerOwnsCell);
+		o.addProperty("canCancel", viewer != null && open && mine && au.highBidder == null);
 		return o;
 	}
 

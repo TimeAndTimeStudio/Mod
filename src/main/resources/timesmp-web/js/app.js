@@ -499,8 +499,8 @@ function render() {
     location.hash = '#map';
     return;
   }
-  if (route !== 'login' && route !== 'guide' && !state.me) {
-    go('login');
+  if (route === 'admin' && (!state.me || !state.me.admin)) {
+    location.hash = '#map';
     return;
   }
   renderShell();
@@ -562,7 +562,7 @@ async function pageLogin(view) {
       state.me = { name: data.name, admin: !!data.admin };
       await refreshWallet();
       toast('ยินดีต้อนรับ ' + data.name);
-      go('home');
+      go('map');
     } catch (err) {
       error.textContent = errText(err);
     } finally {
@@ -570,7 +570,11 @@ async function pageLogin(view) {
       submit.textContent = 'เข้าสู่ระบบ';
     }
   });
-  page.append(form);
+  const hintBox = el('p', { class: 'hint', style: 'margin-top:24px; font-size:var(--fs-2); line-height:1.6;' },
+    '💡 ', el('strong', {}, 'วิธีตั้งหรือเปลี่ยนรหัสผ่าน:'), ' เข้าเกม Minecraft แล้วพิมพ์คำสั่ง ',
+    el('code', { class: 'guide-cmd' }, '/pass <รหัสผ่านเก่า> <รหัสผ่านใหม่>'),
+    ' (หากเพิ่งลงทะเบียนเข้าเกมครั้งแรก ระบบจะให้ตั้งรหัสผ่านตอนล็อกอินเข้าเกมอัตโนมัติ)');
+  page.append(form, hintBox);
 }
 
 /* ---------- home ---------- */
@@ -757,6 +761,7 @@ async function pageMap(view) {
           el('span', { class: 'item-meta' }, `เจ้าของเดิม: ${txt(owner || au.sellerName, 'เซิร์ฟเวอร์')} · ผู้เสนอสูงสุด: ${au.highBid ? money(au.highBid) + ' โดย ' + txt(au.highBidderName, '-') : 'ยังไม่มีผู้เสนอ'} · เริ่ม ${money(au.startPrice)}`),
           el('span', { class: 'item-meta mono' }, auctionTiming(au) + (au.buyout ? ` · ซื้อทันที ${money(au.buyout)}` : ''))),
         el('div', { class: 'item-side' },
+          !state.me && open ? el('a', { class: 'btn primary', href: '#login' }, 'เข้าใช้เพื่อประมูล') : null,
           au.canBid && open ? el('div', { class: 'item-form' },
             el('div', { class: 'field' }, el('label', {}, 'เสนอราคา'), bidInput),
             el('button', { class: 'btn primary', type: 'button', onclick: async () => { await placeBid(au, num(bidInput.value)); await reload(); } }, 'เสนอราคา')) : null,
@@ -771,7 +776,10 @@ async function pageMap(view) {
         el('span', { class: 'item-title' }, `ช่อง ${selected}`),
         el('span', { class: 'item-meta' }, `${owner ? 'เจ้าของ ' + owner : 'ยังไม่มีเจ้าของ (' + (isFree ? 'รับฟรี ' + (myClaims + 1) + '/4 ช่อง' : 'ราคาซื้อ: ' + currentPriceText) + ' · ซื้อได้ไม่จำกัด)'} · X ${cx * 500}–${cx * 500 + 499} · Z ${cz * 500}–${cz * 500 + 499}`)),
       el('div', { class: 'item-side' },
-        !owner ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, isFree ? `รับเขตฟรี (${myClaims + 1}/4)` : `ซื้อที่ดิน (${currentPriceText})`) : null,
+        !owner ? (state.me
+          ? el('button', { class: 'btn primary', type: 'button', onclick: () => claimCell(selected) }, isFree ? `รับเขตฟรี (${myClaims + 1}/4)` : `ซื้อที่ดิน (${currentPriceText})`)
+          : el('a', { class: 'btn primary', href: '#login' }, 'เข้าใช้เพื่อซื้อเขต (' + currentPriceText + ')')
+        ) : null,
         (mine || state.me?.admin) && owner ? el('button', { class: 'btn secondary', type: 'button', onclick: () => auctionCellDialog(selected) }, '⚖️ เปิดประมูลเขตนี้') : null,
         (mine || state.me?.admin) && owner ? el('button', { class: 'btn danger', type: 'button', onclick: () => removeCell(selected) }, 'ปล่อยช่อง') : null)));
     if (owner && (mine || state.me?.admin)) {
@@ -1476,6 +1484,11 @@ async function pageAuction(view) {
 }
 
 async function openPlayerCellAuctionModal() {
+  if (!state.me) {
+    toast('กรุณาเข้าสู่ระบบก่อนเปิดประมูลเขตที่ดิน', 'error');
+    go('login');
+    return;
+  }
   try {
     const [cellsData, priceData, auctionsData] = await Promise.all([
       api('GET', '/api/cells'),
@@ -1586,8 +1599,12 @@ async function auctionList(panel, mineOnly) {
       if (a.canCancel && open) side.append(el('button', { class: 'btn danger', type: 'button', onclick: () => cancelAuction(a) }, 'ยกเลิก'));
       const stateEl = el('span', { class: 'mono muted' });
       if (a.status === 'ACTIVE' && (!open || (!controls.length && !a.highest && !a.canCancel))) {
-        stateEl.textContent = !open ? 'หมดเวลา · รอสรุปผล' : a.mine && a.highBid ? 'มีผู้ประมูลแล้ว' : a.mine ? 'ของคุณ' : 'รอผล';
-        side.append(stateEl);
+        if (!state.me && open) {
+          side.append(el('a', { class: 'btn ghost sm', href: '#login' }, 'เข้าใช้เพื่อประมูล'));
+        } else {
+          stateEl.textContent = !open ? 'หมดเวลา · รอสรุปผล' : a.mine && a.highBid ? 'มีผู้ประมูลแล้ว' : a.mine ? 'ของคุณ' : 'รอผล';
+          side.append(stateEl);
+        }
       }
       if (a.status !== 'ACTIVE') side.append(el('span', { class: 'mono muted' }, a.mine ? 'ของคุณ' : 'ปิดแล้ว'));
       rows.append(el('div', { class: 'item' }, main, side));
@@ -1640,6 +1657,7 @@ function startAuctionClock(box, live) {
 }
 
 async function placeBid(a, amount) {
+  if (!state.me) { toast('กรุณาเข้าสู่ระบบก่อนเสนอราคา', 'error'); go('login'); return; }
   if (!a.canBid || !auctionOpen(a)) { toast('รายการนี้หมดเวลาประมูลแล้ว', 'error'); return; }
   if (amount < 1) { toast('จำนวนไม่ถูกต้อง', 'error'); return; }
   try {
@@ -1649,6 +1667,7 @@ async function placeBid(a, amount) {
   } catch (error) { toastError(error); }
 }
 async function buyout(a) {
+  if (!state.me) { toast('กรุณาเข้าสู่ระบบก่อนซื้อทันที', 'error'); go('login'); return; }
   if (!a.canBuyout || !auctionOpen(a)) { toast('รายการนี้หมดเวลาประมูลแล้ว', 'error'); return; }
   const isCell = a.kind === 'CELL';
   if (!await confirmDialog({ title: 'ซื้อทันที', body: `จ่าย ${money(a.buyout)} ${state.currency} เพื่อซื้อ${isCell ? 'กรรมสิทธิ์เขต ' + a.cellId : 'ไอเท็ม'}ทันทีหรือไม่?`, confirm: 'ซื้อทันที' })) return;
