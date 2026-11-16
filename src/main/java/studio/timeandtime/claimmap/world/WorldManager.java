@@ -118,8 +118,8 @@ public final class WorldManager {
 
 	public static boolean isLobby(Level level) {
 		if (level == null) return false;
-		return level.dimension().location().getPath().equalsIgnoreCase("lobby")
-				&& level.dimension().location().getNamespace().equalsIgnoreCase(DIMENSION_NAMESPACE);
+		return level.dimension().identifier().getPath().equalsIgnoreCase("lobby")
+				&& level.dimension().identifier().getNamespace().equalsIgnoreCase(DIMENSION_NAMESPACE);
 	}
 
 	public boolean hasLobbyWorld() {
