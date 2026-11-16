@@ -59,7 +59,7 @@ public final class WebServer {
 		this.landPrices = landPrices;
 	}
 	private static final Pattern STATIC_PATH =
-			Pattern.compile("^/(css|js|icons|img)/[A-Za-z0-9_./-]+$|^/favicon\\.png$|^/resourcepack\\.zip$");
+			Pattern.compile("^/favicon\\.png$|^/resourcepack\\.zip$");
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
@@ -317,7 +317,7 @@ public final class WebServer {
 				handleAdminWorldsScan(ex);
 			}
 			default -> {
-				if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/icons/") || path.startsWith("/img/") || path.equals("/favicon.png") || path.equals("/resourcepack.zip")) {
+				if (path.equals("/favicon.png") || path.equals("/resourcepack.zip")) {
 					requireMethod(ex, method, "GET");
 					handleStatic(ex, path);
 				} else if (path.startsWith("/api/admin/")) {
@@ -427,23 +427,19 @@ public final class WebServer {
 				data = java.nio.file.Files.readAllBytes(diskRp);
 			} else {
 				InputStream res = WebServer.class.getResourceAsStream("/resourcepack.zip");
-				if (res == null) res = WebServer.class.getResourceAsStream("/timesmp-web/resourcepack.zip");
 				if (res == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
 				try (InputStream in = res) {
 					data = in.readAllBytes();
 				}
 			}
-		} else {
-			InputStream resourceStream = WebServer.class.getResourceAsStream("/timesmp-web/" + rel);
-			if (resourceStream == null) {
-				resourceStream = WebServer.class.getResourceAsStream("/claimmap-web/" + rel);
-			}
-			try (InputStream in = resourceStream) {
-				if (in == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+		} else if (rel.equals("favicon.png")) {
+			InputStream res = WebServer.class.getResourceAsStream("/server-icon.png");
+			if (res == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+			try (InputStream in = res) {
 				data = in.readAllBytes();
-			} catch (IOException e) {
-				throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
 			}
+		} else {
+			throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
 		}
 		String type = contentType(rel);
 		if (type == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
