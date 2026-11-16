@@ -137,8 +137,8 @@ public final class BuyGui {
 				List.of(
 						Component.literal("§eวิธีนำไอเท็มลงขายในตลาด /buy:"),
 						Component.literal("§71. ถือไอเท็มที่ต้องการขายไว้ในมือหลัก"),
-						Component.literal("§72. พิมพ์คำสั่ง: §a/buy sell <ราคา>"),
-						Component.literal("§7ตัวอย่าง: §b/buy sell 500"),
+						Component.literal("§72. พิมพ์คำสั่ง: §a/sell hand <ราคา>"),
+						Component.literal("§7ตัวอย่าง: §b/sell hand 500"),
 						Component.literal("§73. เมื่อมีผู้เล่นซื้อ เงินจะเข้าตัวคุณทันที"),
 						Component.literal("§74. หากยกเลิก รับไอเท็มคืนได้ที่ §e/mail")
 				)

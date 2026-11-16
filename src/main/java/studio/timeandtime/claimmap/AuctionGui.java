@@ -145,7 +145,7 @@ public final class AuctionGui {
 						Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
 						Component.literal("§7พิมพ์: §e/claim at <ราคาเริ่มต้น> [ชั่วโมง]"),
 						Component.literal("§e[ต้องการขายราคาคงที่ (ซื้อทันที)]:"),
-						Component.literal("§7ถือของในมือแล้วพิมพ์: §a/buy sell <ราคา>"),
+						Component.literal("§7ถือของในมือแล้วพิมพ์: §a/sell hand <ราคา>"),
 						Component.literal("§e[เจ้าของยกเลิกการประมูล]:"),
 						Component.literal("§7คลิกที่รายการของคุณแล้วกดปุ่ม §c[ยกเลิกการประมูล]"),
 						Component.literal("§7(หากมีผู้เสนอราคา ระบบจะคืนเงินให้ผู้เสนอราคาทันที)")

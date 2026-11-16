@@ -134,11 +134,18 @@ public final class ClaimCommands {
 			dispatcher.register(Commands.literal("sell").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runSellGui(ctx.getSource()))
 					.then(Commands.literal("gui").executes(ctx -> runSellGui(ctx.getSource())))
-					.then(Commands.literal("hand").executes(ctx -> runSellHand(ctx.getSource())))
+					.then(Commands.literal("hand")
+							.executes(ctx -> runSellHand(ctx.getSource()))
+							.then(Commands.argument("price", StringArgumentType.word())
+									.executes(ctx -> runBuySell(ctx.getSource(),
+											StringArgumentType.getString(ctx, "price")))))
 					.then(Commands.literal("all")
 							.executes(ctx -> runSellAllSummary(ctx.getSource()))
 							.then(Commands.literal("confirm")
-									.executes(ctx -> runSellAllConfirm(ctx.getSource())))));
+									.executes(ctx -> runSellAllConfirm(ctx.getSource()))))
+					.then(Commands.argument("price", StringArgumentType.word())
+							.executes(ctx -> runBuySell(ctx.getSource(),
+									StringArgumentType.getString(ctx, "price")))));
 
 			dispatcher.register(Commands.literal("buy").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runBuyGui(ctx.getSource()))

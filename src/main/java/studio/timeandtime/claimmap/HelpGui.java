@@ -107,7 +107,7 @@ public final class HelpGui {
 						Component.literal("§7--------------------------------"),
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
 						Component.literal("§a/buy §7- เปิดดูตลาดสินค้าผู้เล่นและเลือกซื้อทันที"),
-						Component.literal("§a/buy sell <ราคา> §7- นำไอเท็มในมือลงขายในราคาที่ต้องการ"),
+						Component.literal("§a/sell hand <ราคา> §7- นำไอเท็มในมือลงขายในราคาที่ต้องการ"),
 						Component.literal("§a/buy cancel <รหัส> §7- ยกเลิกการลงขาย (รับของคืนใน /mail)"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§b[คลิก] §7เพื่อเปิดดูตลาดสินค้าผู้เล่นทันที")

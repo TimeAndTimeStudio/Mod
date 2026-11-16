@@ -27,9 +27,7 @@ public final class TpaGui {
 						Component.literal("§7--------------------------------"),
 						Component.literal("§a[คลิกซ้ายที่คำขอ] §7ยอมรับคำขอ (รอ 5 วิ)"),
 						Component.literal("§c[คลิกขวาที่คำขอ] §7ปฏิเสธ / ยกเลิกคำขอ"),
-						Component.literal("§b[คลิกที่ผู้เล่น] §7ส่งคำขอวาร์ปไปหาผู้เล่นนั้น"),
-						Component.literal("§7--------------------------------"),
-						Component.literal("§eกดปุ่ม Esc เพื่อปิดหน้าต่าง")
+						Component.literal("§b[คลิกที่ผู้เล่น] §7ส่งคำขอวาร์ปไปหาผู้เล่นนั้น")
 				)
 		);
 		container.setItem(4, header);
@@ -147,15 +145,6 @@ public final class TpaGui {
 			};
 			leftClicks.put(49, cancelAction);
 			rightClicks.put(49, cancelAction);
-		} else {
-			ItemStack tipStack = GuiButtons.button(
-					GuiButtons.HELP,
-					Component.literal("§fคำแนะนำ: ปิดเมนูด้วย §eEsc"),
-					List.of(
-							Component.literal("§7กดปุ่ม §eEsc §7บนคีย์บอร์ดเพื่อปิดหน้าต่างเมนูนี้")
-					)
-			);
-			container.setItem(49, tipStack);
 		}
 
 		VirtualChestMenu.open(
