@@ -9,14 +9,15 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-
-import net.minecraft.world.item.ItemStack;
 
 /**
  * In-game commands:
@@ -97,6 +98,8 @@ public final class ClaimCommands {
 											StringArgumentType.getString(ctx, "amount"))))));
 
 			dispatcher.register(Commands.literal("sell").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runSellGui(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runSellGui(ctx.getSource())))
 					.then(Commands.literal("hand").executes(ctx -> runSellHand(ctx.getSource())))
 					.then(Commands.literal("all")
 							.executes(ctx -> runSellAllSummary(ctx.getSource()))
@@ -111,11 +114,28 @@ public final class ClaimCommands {
 											StringArgumentType.getString(ctx, "qty"))))));
 
 			dispatcher.register(Commands.literal("mail").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runMailList(ctx.getSource()))
-					.then(Commands.literal("claim").executes(ctx -> runMailClaim(ctx.getSource()))));
+					.executes(ctx -> runMailGui(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runMailGui(ctx.getSource())))
+					.then(Commands.literal("claim").executes(ctx -> runMailGui(ctx.getSource())))
+					.then(Commands.literal("list").executes(ctx -> runMailList(ctx.getSource()))));
 
 			dispatcher.register(Commands.literal("ah").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runAhList(ctx.getSource()))
+					.executes(ctx -> runAhGui(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runAhGui(ctx.getSource())))
+					.then(Commands.literal("list").executes(ctx -> runAhList(ctx.getSource())))
+					.then(Commands.literal("sell")
+							.then(Commands.argument("startPrice", StringArgumentType.word())
+									.executes(ctx -> runAhSell(ctx.getSource(),
+											StringArgumentType.getString(ctx, "startPrice"), "0", "24"))
+									.then(Commands.argument("buyout", StringArgumentType.word())
+											.executes(ctx -> runAhSell(ctx.getSource(),
+													StringArgumentType.getString(ctx, "startPrice"),
+													StringArgumentType.getString(ctx, "buyout"), "24"))
+											.then(Commands.argument("hours", StringArgumentType.word())
+													.executes(ctx -> runAhSell(ctx.getSource(),
+															StringArgumentType.getString(ctx, "startPrice"),
+															StringArgumentType.getString(ctx, "buyout"),
+															StringArgumentType.getString(ctx, "hours")))))))
 					.then(Commands.literal("bid")
 							.then(Commands.argument("id", StringArgumentType.word())
 									.then(Commands.argument("amount", StringArgumentType.word())
@@ -126,6 +146,13 @@ public final class ClaimCommands {
 							.then(Commands.argument("id", StringArgumentType.word())
 									.executes(ctx -> runAhCancel(ctx.getSource(),
 											StringArgumentType.getString(ctx, "id"))))));
+
+			dispatcher.register(Commands.literal("price").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runPriceHand(ctx.getSource()))
+					.then(Commands.literal("hand").executes(ctx -> runPriceHand(ctx.getSource())))
+					.then(Commands.argument("item", StringArgumentType.word())
+							.executes(ctx -> runPriceItem(ctx.getSource(),
+									StringArgumentType.getString(ctx, "item")))));
 
 			dispatcher.register(Commands.literal("eco")
 					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
@@ -141,6 +168,9 @@ public final class ClaimCommands {
 											StringArgumentType.getString(ctx, "player"))))));
 
 			var timesmpNode = dispatcher.register(Commands.literal("timesmp")
+					.executes(ctx -> runClaimMapGui(ctx.getSource()))
+					.then(Commands.literal("gui").requires(src -> src.getPlayer() != null)
+							.executes(ctx -> runClaimMapGui(ctx.getSource())))
 					.then(Commands.literal("here").requires(src -> src.getPlayer() != null)
 							.executes(ctx -> runHere(ctx.getSource())))
 					.then(Commands.literal("reload").requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
@@ -155,6 +185,8 @@ public final class ClaimCommands {
 															StringArgumentType.getString(ctx, "player"))))))));
 
 			dispatcher.register(Commands.literal("claimmap").redirect(timesmpNode));
+			dispatcher.register(Commands.literal("map").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runClaimMapGui(ctx.getSource())));
 
 			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runTpaAccept(ctx.getSource(), null))
@@ -349,6 +381,42 @@ public final class ClaimCommands {
 		return 1;
 	}
 
+	private int runSellGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		if (shop.isDisabled()) {
+			player.sendSystemMessage(Component.literal("§cระบบร้านค้าถูกปิดชั่วคราว"));
+			return 0;
+		}
+		if (economy.isFrozen(player.getUUID())) {
+			player.sendSystemMessage(Component.literal("§cบัญชีของคุณถูกระงับ"));
+			return 0;
+		}
+		SimpleContainer container = new SimpleContainer(54);
+		VirtualChestMenu.open(
+				player,
+				Component.literal("§0ลากไอเท็มที่ต้องการขายมาวาง"),
+				6,
+				false,
+				container,
+				null,
+				(sp, cont) -> {
+					ShopManager.BulkSellOutcome outcome = shop.sellContainer(sp, cont);
+					if (outcome.soldCount() > 0) {
+						sp.sendSystemMessage(Component.literal(
+								"§aขายไอเท็มสำเร็จ " + outcome.soldCount() + " ชิ้น! รวมเป็นเงิน +"
+										+ outcome.totalEarned() + " " + config.currencyName
+										+ " §7(ยอดเงินคงเหลือ: " + outcome.balance() + ")"));
+					}
+					if (outcome.returnedCount() > 0) {
+						sp.sendSystemMessage(Component.literal(
+								"§eคืนไอเท็มที่ร้านไม่รับซื้อ " + outcome.returnedCount() + " ชิ้น เข้าตัว"));
+					}
+				}
+		);
+		return 1;
+	}
+
 	private long pricesSell(String itemId) {
 		return shop.sellUnitPrice(itemId);
 	}
@@ -395,6 +463,129 @@ public final class ClaimCommands {
 		}
 		player.sendSystemMessage(Component.literal("รับของ " + o.claimed() + " ชิ้น (คงเหลือในกล่อง "
 				+ o.remaining() + " รายการ" + (o.skipped() > 0 ? ", รับไม่ได้ " + o.skipped() + " รายการ" : "") + ")"));
+		return 1;
+	}
+
+	private int runMailGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		if (mailbox.isDisabled()) {
+			player.sendSystemMessage(Component.literal("§cระบบกล่องของถูกปิดชั่วคราว"));
+			return 0;
+		}
+		List<MailboxManager.MailEntry> entries = mailbox.list(player.getUUID());
+		if (entries.isEmpty()) {
+			player.sendSystemMessage(Component.literal("§eกล่องของว่างเปล่า ไม่มีไอเท็มค้างอยู่"));
+			return 1;
+		}
+
+		SimpleContainer container = new SimpleContainer(54);
+		int slot = 0;
+		for (MailboxManager.MailEntry entry : entries) {
+			if (slot >= 54) break;
+			var decoded = ItemCodecs.decode(entry.itemJson(), player.level().registryAccess());
+			if (decoded.isPresent()) {
+				ItemStack stack = decoded.get();
+				stack.setCount(Math.min(entry.count(), stack.getMaxStackSize()));
+				container.setItem(slot++, stack);
+			}
+		}
+
+		VirtualChestMenu.open(
+				player,
+				Component.literal("§0กล่องของของคุณ (หยิบของเข้าตัว)"),
+				6,
+				false,
+				container,
+				null,
+				(sp, cont) -> {
+					List<MailboxManager.MailEntry> remaining = new ArrayList<>();
+					for (int i = 0; i < cont.getContainerSize(); i++) {
+						ItemStack stack = cont.getItem(i);
+						if (stack != null && !stack.isEmpty()) {
+							String json = ItemCodecs.encode(stack, sp.level().registryAccess());
+							if (json != null) {
+								ItemCodecs.ItemView v = ItemCodecs.view(stack);
+								remaining.add(new MailboxManager.MailEntry(
+										UUID.randomUUID().toString().substring(0, 8),
+										json, v.itemId(), v.count(), v.label(), "mailbox",
+										System.currentTimeMillis()
+								));
+							}
+						}
+					}
+					if (entries.size() > 54) {
+						for (int i = 54; i < entries.size(); i++) {
+							remaining.add(entries.get(i));
+						}
+					}
+					mailbox.setAll(sp.getUUID(), remaining);
+					int taken = entries.size() - remaining.size();
+					if (taken > 0) {
+						sp.sendSystemMessage(Component.literal("§aคุณได้รับของเข้าตัวเรียบร้อยแล้ว (คงเหลือในกล่อง " + remaining.size() + " รายการ)"));
+					} else if (remaining.isEmpty()) {
+						sp.sendSystemMessage(Component.literal("§aคุณได้รับของทั้งหมดในกล่องเรียบร้อยแล้ว"));
+					}
+				}
+		);
+		return 1;
+	}
+
+	private int runPriceHand(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		ItemStack stack = player.getMainHandItem();
+		if (stack == null || stack.isEmpty()) {
+			player.sendSystemMessage(Component.literal("§eกรุณาถือไอเท็มในมือที่ต้องการเช็คราคา หรือพิมพ์ /price <ชื่อไอเท็ม>"));
+			return 0;
+		}
+		String itemId = ItemCodecs.idOf(stack);
+		return showPrice(player, itemId, stack.getHoverName().getString());
+	}
+
+	private int runPriceItem(CommandSourceStack src, String query) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		String itemId = query.contains(":") ? query : "minecraft:" + query;
+		if (!ItemRegistryAdapter.exists(itemId)) {
+			player.sendSystemMessage(Component.literal("§cไม่พบไอเท็ม: " + itemId));
+			return 0;
+		}
+		String label = ItemRegistryAdapter.label(itemId);
+		return showPrice(player, itemId, label);
+	}
+
+	private int showPrice(ServerPlayer player, String itemId, String label) {
+		long sellPrice = shop.sellUnitPrice(itemId);
+		long buyPrice = shop.buyUnitPrice(itemId);
+		double mult = prices.detailsSnapshot().stream()
+				.filter(d -> d.id().equals(itemId))
+				.mapToDouble(PriceService.ItemPriceDetail::multiplier)
+				.findFirst().orElse(1.0);
+		int multPct = (int) Math.round(mult * 100.0);
+		String demandText = multPct > 100 ? "§aความต้องการสูง (+" + (multPct - 100) + "%)"
+				: multPct < 100 ? "§cความต้องการต่ำ (" + multPct + "%)" : "§7ความต้องการปกติ (100%)";
+
+		player.sendSystemMessage(Component.literal("§6[เช็คราคา] §f" + label + " §7(" + itemId + ")"));
+		player.sendSystemMessage(Component.literal("§a  ราคารับซื้อ: §f" + (sellPrice > 0 ? sellPrice + " " + config.currencyName : "§cร้านไม่รับซื้อ")
+				+ " §7| " + demandText));
+		player.sendSystemMessage(Component.literal("§c  ราคาขายออก: §f" + (buyPrice > 0 ? buyPrice + " " + config.currencyName : "§cไม่มีขาย")));
+		return 1;
+	}
+
+	private int runClaimMapGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		int cx = Math.floorDiv(player.getBlockX(), config.cellSize);
+		int cz = Math.floorDiv(player.getBlockZ(), config.cellSize);
+		ClaimMapGui.open(player, regions, config, economy, cx, cz);
+		return 1;
+	}
+
+	private int runAhGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		AuctionGui.open(player, auctions, economy, config.currencyName, 0);
 		return 1;
 	}
 

@@ -194,6 +194,19 @@ public final class MailboxManager {
 		}
 	}
 
+	/** Overwrites all entries for a player, saving atomically. */
+	public void setAll(UUID to, List<MailEntry> newEntries) {
+		if (to == null) return;
+		synchronized (Market.LOCK) {
+			if (newEntries == null || newEntries.isEmpty()) {
+				boxes.remove(to);
+			} else {
+				boxes.put(to, new ArrayList<>(newEntries));
+			}
+			save();
+		}
+	}
+
 	/** Removes an entry without persisting per item (used when a claim consumed it). */
 	public void remove(UUID to, String id) {
 		replace(to, id, null);

@@ -371,11 +371,11 @@ document.addEventListener('pointerdown', (event) => {
 const NAV = [
   { id: 'home', label: 'หน้าแรก' },
   { id: 'map', label: 'แผนที่' },
+  { id: 'prices', label: 'เช็คราคา' },
   { id: 'buy', label: 'ซื้อ' },
   { id: 'sell', label: 'ขาย' },
   { id: 'auction', label: 'ประมูล' },
   { id: 'wallet', label: 'เงิน' },
-  { id: 'mailbox', label: 'กล่อง' },
   { id: 'about', label: 'ช่วยเหลือ' },
 ];
 
@@ -389,14 +389,21 @@ function renderShell() {
 
   const tabs = $('#tabbar');
   clear(tabs);
-  const primary = [{ id: 'home', label: 'หน้าแรก' }, { id: 'map', label: 'แผนที่' }, { id: 'buy', label: 'ซื้อ' }, { id: 'sell', label: 'ขาย' }];
+  const primary = [
+    { id: 'home', label: 'หน้าแรก' },
+    { id: 'map', label: 'แผนที่' },
+    { id: 'prices', label: 'เช็คราคา' },
+    { id: 'buy', label: 'ซื้อ' },
+    { id: 'sell', label: 'ขาย' },
+  ];
   for (const item of primary) {
     tabs.append(el('button', { type: 'button', 'aria-current': active(item.id) ? 'page' : null, onclick: () => go(item.id) }, item.label));
   }
   tabs.append(el('button', { type: 'button', onclick: openMenu }, 'เพิ่มเติม'));
 
   $('#balance').textContent = state.me ? money(state.balance) : '—';
-  $('#mailcount').textContent = state.me ? 'กล่อง ' + state.mail : '';
+  $('#mailcount').textContent = state.me && state.mail > 0 ? 'กล่อง ' + state.mail : '';
+  $('#mailcount').title = 'พิมพ์คำสั่ง /mail ในเกมเพื่อเปิดกล่องรับของ';
   const user = $('#userBtn');
   user.textContent = state.me ? state.me.name : 'เข้าใช้';
   user.onclick = () => state.me ? openAccount() : go('login');
@@ -438,7 +445,7 @@ function openAccount() {
   clear(dialog);
   const form = el('form', { method: 'dialog', class: 'dialog-body' },
     el('h2', {}, state.me.name),
-    el('p', { class: 'hint' }, `ยอดเงิน ${money(state.balance)} ${state.currency} · กล่องของ ${state.mail}`),
+    el('p', { class: 'hint' }, `ยอดเงิน ${money(state.balance)} ${state.currency} · ของในกล่อง ${state.mail} ชิ้น (รับของในเกมด้วยคำสั่ง /mail)`),
     el('div', { class: 'dialog-actions' },
       el('button', { class: 'btn secondary', value: 'close', type: 'submit' }, 'ปิด'),
       el('button', { class: 'btn danger', value: 'logout', type: 'submit', onclick: () => setTimeout(logout, 0) }, 'ออกจากระบบ')));
@@ -474,7 +481,7 @@ async function fetchNames() {
 }
 
 /* ---------- router ---------- */
-const PAGES = { home: pageHome, map: pageMap, buy: pageBuy, sell: pageSell, auction: pageAuction, wallet: pageWallet, mailbox: pageMailbox, about: pageAbout, admin: pageAdmin, login: pageLogin };
+const PAGES = { home: pageHome, map: pageMap, prices: pagePrices, buy: pageBuy, sell: pageSell, auction: pageAuction, wallet: pageWallet, about: pageAbout, admin: pageAdmin, login: pageLogin };
 
 function requireAuth(view) {
   if (!state.me) {
@@ -583,9 +590,9 @@ function pageHome(view) {
       el('a', { class: 'btn secondary', href: '#sell' }, 'ลงขาย')));
     page.append(el('div', { class: 'rows', style: 'margin-top:48px' },
       rowLink('แผนที่เขต', 'จอง ดูเจ้าของ และโอนย้าย', '#map'),
+      rowLink('เช็คราคาไอเท็ม', 'ดูราคารับซื้อและขายออกทั้งหมด', '#prices'),
       rowLink('ตลาดผู้เล่น', 'ของราคาคงที่แยกจากประมูล', '#buy'),
-      rowLink('ประมูล', 'เฉพาะเซิร์ฟเวอร์ที่เปิดรายการ', '#auction'),
-      rowLink('กล่องของ', 'รับของได้แม้ออฟไลน์', '#mailbox')));
+      rowLink('ประมูล', 'เฉพาะเซิร์ฟเวอร์ที่เปิดรายการ', '#auction')));
   } else {
     page.append(el('p', { class: 'hint' }, 'เข้าสู่ระบบเพื่อดูเงิน ลงขาย และจองเขต'),
       el('div', { class: 'row', style: 'margin-top:24px' }, el('a', { class: 'btn primary', href: '#login' }, 'เข้าสู่ระบบ')));
@@ -1588,36 +1595,61 @@ async function pageWallet(view) {
   } catch (error) { clear(historyList); historyList.append(errorState(error)); }
 }
 
-/* ---------- mailbox ---------- */
-async function pageMailbox(view) {
+/* ---------- prices ---------- */
+async function pagePrices(view) {
   const page = el('div', { class: 'page' });
-  page.append(pageHead('mailbox', 'กล่องของ', 'รับของเข้าตัวได้แม้ผู้เล่นออฟไลน์'));
+  page.append(pageHead('prices', 'เช็คราคาตลาด', 'ตรวจสอบราคารับซื้อและขายออกของไอเท็มทั้งหมด'));
   view.append(page);
-  const box = el('div', { style: 'margin-top:24px' });
-  const claim = el('button', { class: 'btn primary', type: 'button' }, 'รับทั้งหมด');
-  page.append(claim, box);
-  async function load() {
-    loading(box);
-    try {
-      const data = await api('GET', '/api/mailbox');
-      state.mail = data.count || 0; renderShell();
-      clear(box);
-      const entries = data.entries || [];
-      if (!entries.length) { box.append(emptyState('กล่องว่าง', 'ของที่ซื้อหรือชนะประมูลจะมาที่นี่')); claim.disabled = true; return; }
-      claim.disabled = false;
-      const rows = el('div', { class: 'rows' });
-      for (const entry of entries) rows.append(el('div', { class: 'item' },
-        el('div', { class: 'item-main' }, itemHeading(entry.itemId, `${txt(entry.label, txt(entry.itemId, 'ไอเท็ม'))} ×${num(entry.count)}`), el('span', { class: 'item-meta' }, `${txt(entry.from, 'ระบบ')} · ${clock(entry.t)}`)),
-        el('span', { class: 'mono muted' }, entry.id)));
-      box.append(rows);
-    } catch (error) { clear(box); box.append(errorState(error)); }
+
+  const searchInput = el('input', { class: 'input', type: 'search', placeholder: 'ค้นหาชื่อไอเท็ม เช่น diamond, iron, wood...', 'aria-label': 'ค้นหาไอเท็ม' });
+  const countSpan = el('span', { class: 'mono muted' }, 'กำลังโหลด...');
+  const headBar = el('div', { class: 'bar', style: 'margin-top:16px; margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;' },
+    el('div', { style: 'flex:1; min-width:200px;' }, searchInput),
+    countSpan
+  );
+  const container = el('div', { class: 'rows', style: 'margin-top:8px' });
+  page.append(headBar, container);
+
+  loading(container);
+  try {
+    const data = await api('GET', '/api/prices/trends');
+    const items = data.items || [];
+    function renderList(query) {
+      clear(container);
+      const q = (query || '').toLowerCase().trim();
+      const filtered = items.filter(it => it.itemId.toLowerCase().includes(q));
+      countSpan.textContent = `พบ ${filtered.length} รายการ`;
+      if (!filtered.length) {
+        container.append(emptyState('ไม่พบไอเท็ม', 'ลองค้นหาด้วยคำอื่น'));
+        return;
+      }
+      for (const it of filtered) {
+        const multPct = Math.round((it.multiplier || 1.0) * 100);
+        const multText = multPct > 100 ? `▲ ความต้องการสูง (+${multPct - 100}%)` : multPct < 100 ? `▼ ความต้องการต่ำ (${multPct}%)` : 'ความต้องการปกติ (100%)';
+        
+        container.append(el('div', { class: 'item' },
+          el('div', { class: 'item-main' },
+            itemHeading(it.itemId, it.itemId.replace('minecraft:', '')),
+            el('span', { class: 'item-meta' },
+              `ราคาฐาน: ${money(it.effectiveBase || it.base)} · ${multText}`
+            )
+          ),
+          el('div', { class: 'item-side' },
+            el('div', { style: 'text-align:right' },
+              el('span', { class: 'mono' }, `รับซื้อ: ${money(it.sell)} ${data.currency || 'เหรียญ'}`),
+              el('br'),
+              el('span', { class: 'mono muted', style: 'font-size:12px' }, `ขายออก: ${money(it.buy)} ${data.currency || 'เหรียญ'}`)
+            )
+          )
+        ));
+      }
+    }
+    searchInput.addEventListener('input', (e) => renderList(e.target.value));
+    renderList('');
+  } catch (err) {
+    clear(container);
+    container.append(errorState(err));
   }
-  claim.addEventListener('click', async () => {
-    claim.disabled = true;
-    try { const data = await api('POST', '/api/mailbox/claim', {}); toast(`รับ ${data.claimed} รายการ${data.offline ? ' (โหมดออฟไลน์)' : ''}`); await load(); }
-    catch (error) { toastError(error); claim.disabled = false; }
-  });
-  await load();
 }
 
 /* ---------- about ---------- */
@@ -1626,16 +1658,19 @@ function pageAbout(view) {
   page.append(pageHead('about', 'ช่วยเหลือ', 'คำสั่งและกติกาหลัก'));
   const commands = [
     ['/claim', 'จองช่องที่ยืนอยู่ เปิดเมนูเขต'],
-    ['/timesmp', 'เปิดลิงก์เว็บและสถานะเขต'],
-    ['/ah', 'เปิดรายการประมูล'],
-    ['/pay <ชื่อ> <จำนวน>', 'โอนเงินให้ผู้เล่น'],
-    ['/mail', 'เปิดกล่องของ'],
+    ['/claimmap', 'เปิดหน้าต่างแผนที่เขตในเกม'],
+    ['/sell', 'เปิดกล่องขายของ (ลากวางแล้วปิดกล่อง)'],
+    ['/mail', 'เปิดกล่องรับไอเท็ม (ย้ายของเข้าตัว)'],
+    ['/ah', 'เปิดตลาดประมูลในเกม'],
+    ['/price [hand]', 'เช็คราคารับซื้อและขายออกของไอเท็ม'],
     ['/shop', 'เปิดร้านค้ากลาง'],
+    ['/pay <ชื่อ> <จำนวน>', 'โอนเงินให้ผู้เล่น'],
+    ['/timesmp', 'เปิดลิงก์เว็บและสถานะเขต'],
   ];
   const rows = el('div', { class: 'rows' });
   for (const [cmd, desc] of commands) rows.append(el('div', { class: 'item' },
     el('div', { class: 'item-main' }, el('span', { class: 'item-title mono' }, cmd), el('span', { class: 'item-meta' }, desc))));
-  page.append(rows, el('p', { class: 'hint', style: 'margin-top:32px' }, 'ตลาดผู้เล่นกับประมูลแยกกัน: ผู้เล่นลงขายราคาคงที่ได้เอง ส่วนประมูลเปิดโดยเซิร์ฟเวอร์จากของที่ผู้เล่นฝากไว้เท่านั้น'));
+  page.append(rows, el('p', { class: 'hint', style: 'margin-top:32px' }, 'ผู้เล่นสามารถรับของทั้งหมดได้ในเกมด้วยคำสั่ง /mail และขายของได้ด้วยคำสั่ง /sell'));
   view.append(page);
 }
 

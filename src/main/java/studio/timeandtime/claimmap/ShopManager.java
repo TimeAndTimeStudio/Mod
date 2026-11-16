@@ -353,6 +353,92 @@ public final class ShopManager {
 		}
 	}
 
+	public record BulkSellOutcome(int soldCount, long totalEarned, int returnedCount, long balance) {
+	}
+
+	/** Sells all sellable items placed into a container, depositing payment and returning unsold items. */
+	public BulkSellOutcome sellContainer(net.minecraft.server.level.ServerPlayer player, Container container) {
+		if (player == null || container == null) return new BulkSellOutcome(0, 0, 0, 0);
+		UUID uuid = player.getUUID();
+		int soldItems = 0;
+		long totalEarned = 0;
+		int returnedItems = 0;
+
+		synchronized (Market.LOCK) {
+			if (isDisabled() || economy.isFrozen(uuid)) {
+				for (int i = 0; i < container.getContainerSize(); i++) {
+					ItemStack stack = container.getItem(i);
+					if (stack != null && !stack.isEmpty()) {
+						returnedItems += stack.getCount();
+						if (!player.getInventory().add(stack)) {
+							player.drop(stack, false);
+						}
+						container.setItem(i, ItemStack.EMPTY);
+					}
+				}
+				return new BulkSellOutcome(0, 0, returnedItems, economy.balance(uuid));
+			}
+
+			for (int i = 0; i < container.getContainerSize(); i++) {
+				ItemStack stack = container.getItem(i);
+				if (stack == null || stack.isEmpty()) continue;
+				String itemId = ItemCodecs.idOf(stack);
+				if (itemId.isEmpty() || !ItemRegistryAdapter.exists(itemId)
+						|| prices.isBlocked(itemId) || !ItemCodecs.isPlain(stack)) {
+					returnedItems += stack.getCount();
+					if (!player.getInventory().add(stack)) {
+						player.drop(stack, false);
+					}
+					container.setItem(i, ItemStack.EMPTY);
+					continue;
+				}
+
+				double unit = prices.sellPriceDouble(itemId);
+				if (unit <= 0.0) {
+					returnedItems += stack.getCount();
+					if (!player.getInventory().add(stack)) {
+						player.drop(stack, false);
+					}
+					container.setItem(i, ItemStack.EMPTY);
+					continue;
+				}
+
+				int qty = stack.getCount();
+				long stackTotal = Math.max(1L, Math.round(unit * (double) qty));
+				if (economy.balance(uuid) + totalEarned > EconomyManager.MAX_BALANCE - stackTotal) {
+					returnedItems += stack.getCount();
+					if (!player.getInventory().add(stack)) {
+						player.drop(stack, false);
+					}
+					container.setItem(i, ItemStack.EMPTY);
+					continue;
+				}
+
+				TxResult credit = economy.deposit(uuid, stackTotal, "shop.sell:" + itemId, "sell:chest_gui");
+				if (credit != TxResult.OK) {
+					returnedItems += stack.getCount();
+					if (!player.getInventory().add(stack)) {
+						player.drop(stack, false);
+					}
+					container.setItem(i, ItemStack.EMPTY);
+					continue;
+				}
+
+				prices.recordSale(itemId, qty);
+				SalesTracker st = salesTracker;
+				if (st != null) {
+					st.record(uuid, playerName(uuid), itemId, itemId, qty, stackTotal, Math.max(1L, Math.round(unit)), "chest_gui");
+				}
+
+				soldItems += qty;
+				totalEarned += stackTotal;
+				container.setItem(i, ItemStack.EMPTY);
+			}
+		}
+
+		return new BulkSellOutcome(soldItems, totalEarned, returnedItems, economy.balance(uuid));
+	}
+
 	/** Removes exactly {@code qty}; returns the removed stacks, or null when short. */
 	private static List<ItemStack> takeItems(Container inventory, String itemId, int qty) {
 		List<ItemStack> removed = new ArrayList<>();
