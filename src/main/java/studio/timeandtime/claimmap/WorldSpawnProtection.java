@@ -70,10 +70,11 @@ public final class WorldSpawnProtection {
 				if (hasLobby) {
 					ServerLevel lobby = wm.getLobbyLevel();
 					if (lobby != null) {
-						if (firstTime || player.level() == lobby) {
-							teleportToLobbySpawn(player, lobby, firstTime);
-							return;
+						if (wm != null && player.level() == server.overworld()) {
+							wm.recordMainWorldPosition(player);
 						}
+						teleportToLobbySpawn(player, lobby, firstTime);
+						return;
 					}
 				}
 				if (firstTime) {

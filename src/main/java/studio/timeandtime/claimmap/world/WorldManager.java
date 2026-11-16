@@ -267,9 +267,12 @@ public final class WorldManager {
 				def.lastEmptyTick = 0L;
 				continue;
 			}
+			if (config.worldIdleUnloadSeconds <= 0) {
+				continue;
+			}
 			if (def.lastEmptyTick == 0L) {
 				def.lastEmptyTick = now;
-			} else if (now - def.lastEmptyTick >= Math.max(20, config.worldIdleUnloadSeconds * 20)) {
+			} else if (now - def.lastEmptyTick >= Math.max(600, config.worldIdleUnloadSeconds * 20)) {
 				try {
 					unloadLocked(def);
 				} catch (Exception e) {
@@ -608,16 +611,27 @@ public final class WorldManager {
 		}
 	}
 
-	private void executeTeleportLocked(ServerPlayer player, WorldDefinition def) {
-		ServerLevel destination = def.level;
-		if (destination == null) throw new IllegalStateException("โลกยังโหลดไม่เสร็จ");
-
-		// If player is leaving the main overworld, remember where they were so they return here
-		if (player.level() == server.overworld()) {
+	public void recordMainWorldPosition(ServerPlayer player) {
+		if (server != null && player != null && player.level() == server.overworld()) {
 			mainWorldPositions.put(player.getUUID(), new MainWorldPos(
 					player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot()));
 			saveMainWorldPositions();
 		}
+	}
+
+	private void executeTeleportLocked(ServerPlayer player, WorldDefinition def) {
+		if (def.level == null) {
+			try {
+				loadLocked(def);
+			} catch (Exception e) {
+				throw new IllegalStateException("โหลดโลกไม่สำเร็จ: " + e.getMessage(), e);
+			}
+		}
+		ServerLevel destination = def.level;
+		if (destination == null) throw new IllegalStateException("โลกยังโหลดไม่เสร็จ");
+
+		// If player is leaving the main overworld, remember where they were so they return here
+		recordMainWorldPosition(player);
 
 		if ("lobby".equalsIgnoreCase(def.name())) {
 			BlockPos sp = spawnPos(destination);
@@ -625,7 +639,10 @@ public final class WorldManager {
 			TeleportTransition transition = new TeleportTransition(destination, target, Vec3.ZERO,
 					player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
 			ServerPlayer moved = player.teleport(transition);
-			if (moved == null) throw new IllegalStateException("ย้ายผู้เล่นไม่สำเร็จ");
+			if (moved == null) {
+				player.teleportTo(destination, target.x, target.y, target.z, Set.of(), player.getYRot(), player.getXRot(), true);
+				moved = player;
+			}
 			if (!moved.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
 				moved.setGameMode(GameType.ADVENTURE);
 			}
@@ -633,41 +650,36 @@ public final class WorldManager {
 			return;
 		}
 
-		// Randomize X and Z every time!
-		ThreadLocalRandom rnd = ThreadLocalRandom.current();
-		int range = 2500;
-		int rx = 0;
-		int rz = 0;
-		int ry = 64;
-		boolean safe = false;
-		for (int attempt = 0; attempt < 25; attempt++) {
-			rx = rnd.nextInt(-range, range + 1);
-			rz = rnd.nextInt(-range, range + 1);
-			destination.getChunk(rx >> 4, rz >> 4);
-			ry = destination.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, rx, rz) + 1;
-			if (ry > destination.getMinY() + 5) {
-				BlockPos under = new BlockPos(rx, ry - 1, rz);
-				net.minecraft.world.level.block.state.BlockState bs = destination.getBlockState(under);
-				if (!bs.isAir() && !bs.liquid()) {
-					safe = true;
-					break;
-				}
+		BlockPos sp = spawnPos(destination);
+		int rx = sp.getX();
+		int rz = sp.getZ();
+		int ry = sp.getY();
+		boolean isRandom = "resource".equalsIgnoreCase(def.name());
+		if (isRandom) {
+			BlockPos safePos = WorldSpawnProtection.findSafeSpawnLocation(destination, -2500, 2500, -2500, 2500);
+			if (safePos != null) {
+				rx = safePos.getX();
+				ry = safePos.getY();
+				rz = safePos.getZ();
 			}
-		}
-		if (!safe) {
-			BlockPos pos = spawnPos(destination);
-			rx = pos.getX(); rz = pos.getZ(); ry = pos.getY();
 		}
 
 		Vec3 target = new Vec3(rx + 0.5, Math.max(ry, destination.getMinY() + 1), rz + 0.5);
 		TeleportTransition transition = new TeleportTransition(destination, target, Vec3.ZERO,
 				player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
 		ServerPlayer moved = player.teleport(transition);
-		if (moved == null) throw new IllegalStateException("ย้ายผู้เล่นไม่สำเร็จ");
+		if (moved == null) {
+			player.teleportTo(destination, target.x, target.y, target.z, Set.of(), player.getYRot(), player.getXRot(), true);
+			moved = player;
+		}
 		if (moved.gameMode.getGameModeForPlayer() == GameType.ADVENTURE) {
 			moved.setGameMode(GameType.SURVIVAL);
 		}
-		moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") แล้ว"));
+		if (isRandom) {
+			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") แล้ว"));
+		} else {
+			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " แล้ว"));
+		}
 	}
 
 	public void teleportToMainWorld(ServerPlayer player) {
