@@ -356,6 +356,15 @@ public final class ShopManager {
 	public record BulkSellOutcome(int soldCount, long totalEarned, int returnedCount, long balance) {
 	}
 
+	private static void giveOrDrop(net.minecraft.server.level.ServerPlayer player, ItemStack stack) {
+		if (stack == null || stack.isEmpty()) return;
+		if (!player.getInventory().add(stack)) {
+			if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+				player.spawnAtLocation(sl, stack, 0.5f);
+			}
+		}
+	}
+
 	/** Sells all sellable items placed into a container, depositing payment and returning unsold items. */
 	public BulkSellOutcome sellContainer(net.minecraft.server.level.ServerPlayer player, Container container) {
 		if (player == null || container == null) return new BulkSellOutcome(0, 0, 0, 0);
@@ -370,9 +379,7 @@ public final class ShopManager {
 					ItemStack stack = container.getItem(i);
 					if (stack != null && !stack.isEmpty()) {
 						returnedItems += stack.getCount();
-						if (!player.getInventory().add(stack)) {
-							player.drop(stack, false);
-						}
+						giveOrDrop(player, stack);
 						container.setItem(i, ItemStack.EMPTY);
 					}
 				}
@@ -386,9 +393,7 @@ public final class ShopManager {
 				if (itemId.isEmpty() || !ItemRegistryAdapter.exists(itemId)
 						|| prices.isBlocked(itemId) || !ItemCodecs.isPlain(stack)) {
 					returnedItems += stack.getCount();
-					if (!player.getInventory().add(stack)) {
-						player.drop(stack, false);
-					}
+					giveOrDrop(player, stack);
 					container.setItem(i, ItemStack.EMPTY);
 					continue;
 				}
@@ -396,9 +401,7 @@ public final class ShopManager {
 				double unit = prices.sellPriceDouble(itemId);
 				if (unit <= 0.0) {
 					returnedItems += stack.getCount();
-					if (!player.getInventory().add(stack)) {
-						player.drop(stack, false);
-					}
+					giveOrDrop(player, stack);
 					container.setItem(i, ItemStack.EMPTY);
 					continue;
 				}
@@ -407,9 +410,7 @@ public final class ShopManager {
 				long stackTotal = Math.max(1L, Math.round(unit * (double) qty));
 				if (economy.balance(uuid) + totalEarned > EconomyManager.MAX_BALANCE - stackTotal) {
 					returnedItems += stack.getCount();
-					if (!player.getInventory().add(stack)) {
-						player.drop(stack, false);
-					}
+					giveOrDrop(player, stack);
 					container.setItem(i, ItemStack.EMPTY);
 					continue;
 				}
@@ -417,9 +418,7 @@ public final class ShopManager {
 				TxResult credit = economy.deposit(uuid, stackTotal, "shop.sell:" + itemId, "sell:chest_gui");
 				if (credit != TxResult.OK) {
 					returnedItems += stack.getCount();
-					if (!player.getInventory().add(stack)) {
-						player.drop(stack, false);
-					}
+					giveOrDrop(player, stack);
 					container.setItem(i, ItemStack.EMPTY);
 					continue;
 				}

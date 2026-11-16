@@ -557,7 +557,7 @@ public final class ClaimCommands {
 
 	private int showPrice(ServerPlayer player, String itemId, String label) {
 		long sellPrice = shop.sellUnitPrice(itemId);
-		long buyPrice = shop.buyUnitPrice(itemId);
+		long buyPrice = prices.buyPrice(itemId).orElse(0L);
 		double mult = prices.detailsSnapshot().stream()
 				.filter(d -> d.id().equals(itemId))
 				.mapToDouble(PriceService.ItemPriceDetail::multiplier)

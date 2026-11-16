@@ -1,8 +1,11 @@
 package studio.timeandtime.claimmap;
 
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -13,6 +16,11 @@ import java.util.List;
 
 public final class ClaimMapGui {
 	private ClaimMapGui() {
+	}
+
+	private static ItemStack itemById(String id) {
+		var item = BuiltInRegistries.ITEM.getValue(Identifier.parse(id));
+		return item != null ? new ItemStack(item) : new ItemStack(Items.PAPER);
 	}
 
 	public static void open(ServerPlayer player, RegionManager regions, ClaimMapConfig config,
@@ -42,21 +50,21 @@ public final class ClaimMapGui {
 
 				ItemStack stack;
 				if (isPlayerHere) {
-					stack = new ItemStack(Items.ORANGE_GLAZED_TERRACOTTA);
+					stack = itemById("minecraft:orange_glazed_terracotta");
 					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§6★ ตำแหน่งที่คุณยืนอยู่: ช่อง " + cellId));
 				} else if (isCommon) {
-					stack = new ItemStack(Items.GRAY_STAINED_GLASS_PANE);
+					stack = itemById("minecraft:gray_stained_glass_pane");
 					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§8พื้นที่ส่วนกลาง: ช่อง " + cellId));
 				} else if (cellData != null) {
 					if (cellData.isOwner(myUuid)) {
-						stack = new ItemStack(Items.LIME_STAINED_GLASS_PANE);
+						stack = itemById("minecraft:lime_stained_glass_pane");
 						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§a✔ เขตของคุณ: ช่อง " + cellId));
 					} else {
-						stack = new ItemStack(Items.RED_STAINED_GLASS_PANE);
+						stack = itemById("minecraft:red_stained_glass_pane");
 						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§c✖ เขตของ " + cellData.ownerName + ": ช่อง " + cellId));
 					}
 				} else {
-					stack = new ItemStack(Items.LIGHT_BLUE_STAINED_GLASS_PANE);
+					stack = itemById("minecraft:light_blue_stained_glass_pane");
 					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§f⬜ เขตว่าง: ช่อง " + cellId));
 				}
 
@@ -67,7 +75,7 @@ public final class ClaimMapGui {
 				if (cellData != null) {
 					lore.add(Component.literal("§eเจ้าของ: §f" + cellData.ownerName));
 					lore.add(Component.literal("§eสมาชิก: §7" + (cellData.members == null || cellData.members.isEmpty() ? "ไม่มี" : cellData.members.size() + " คน")));
-					if (cellData.isOwner(myUuid) || player.hasPermissions(2)) {
+					if (cellData.isOwner(myUuid) || player.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
 						lore.add(Component.literal("§7------------------------"));
 						lore.add(Component.literal("§b[คลิก] เพื่อเปิดเมนูจัดการเขตนี้"));
 					}
@@ -143,11 +151,13 @@ public final class ClaimMapGui {
 						open(sp, regions, config, economy, playerCx, playerCz);
 					} else if (slotIndex == 50) { // Claim current
 						sp.closeContainer();
-						sp.getServer().getCommands().performPrefixedCommand(sp.createCommandSourceStack(), "claim");
+						var server = ClaimMap.getServer();
+						if (server != null) {
+							server.getCommands().performPrefixedCommand(sp.createCommandSourceStack(), "claim");
+						}
 					} else if (slotIndex == 53) { // Close
 						sp.closeContainer();
 					} else {
-						// Grid slots: col 1..7, row 0..4
 						int r = slotIndex / 9;
 						int c = slotIndex % 9;
 						if (r < 5 && c >= 1 && c <= 7) {
@@ -162,13 +172,12 @@ public final class ClaimMapGui {
 
 							RegionManager.CellData cd = regions.get(id);
 							if (cd != null) {
-								if (cd.isOwner(myUuid) || sp.hasPermissions(2)) {
+								if (cd.isOwner(myUuid) || sp.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
 									openCellDetail(sp, cd, regions, config, economy, centerCx, centerCz);
 								} else {
 									sp.sendSystemMessage(Component.literal("§cเขตนี้เป็นของ " + cd.ownerName + " อยู่แล้ว"));
 								}
 							} else {
-								// Unclaimed cell: Claim it!
 								int currentClaims = regions.countClaimedBy(myUuid);
 								boolean isFree = currentClaims < config.freeCellsPerPlayer;
 								if (isFree) {
@@ -257,7 +266,7 @@ public final class ClaimMapGui {
 				container,
 				(slotIndex, button, input, sp) -> {
 					if (slotIndex == 11) { // Abandon
-						boolean ok = regions.unclaim(cell.id, sp.getUUID().toString(), sp.hasPermissions(2));
+						boolean ok = regions.unclaim(cell.id, sp.getUUID().toString(), sp.permissions().hasPermission(Permissions.COMMANDS_ADMIN));
 						if (ok) {
 							sp.sendSystemMessage(Component.literal("§aปล่อยกรรมสิทธิ์เขต " + cell.id + " เรียบร้อยแล้ว"));
 						} else {
