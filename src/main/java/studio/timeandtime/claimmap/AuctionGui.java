@@ -93,12 +93,15 @@ public final class AuctionGui {
 		}
 
 		// Mode buttons (Custom Icon Items)
-		ItemStack itemsBtn = GuiButtons.button(
+		ItemStack buyMarketBtn = GuiButtons.button(
 				GuiButtons.CART,
-				Component.literal((mode == ViewMode.ITEMS ? "§a" : "§f") + "ของที่ผู้เล่นลงขาย"),
-				List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะสินค้าไอเท็ม"))
+				Component.literal("§a[ไปตลาดผู้เล่น] /buy"),
+				List.of(
+						Component.literal("§7คลิกเพื่อเปิดตลาดซื้อขายสินค้าผู้เล่น (/buy)"),
+						Component.literal("§eซื้อไอเท็มในราคาคงที่ทันที (ไม่ต้องแข่งราคา)")
+				)
 		);
-		container.setItem(46, itemsBtn);
+		container.setItem(46, buyMarketBtn);
 
 		ItemStack cellsBtn = GuiButtons.button(
 				GuiButtons.MAP,
@@ -134,17 +137,18 @@ public final class AuctionGui {
 
 		ItemStack howTo = GuiButtons.button(
 				GuiButtons.PARCEL,
-				Component.literal("§a[+] วิธีลงขาย & ประมูล"),
+				Component.literal("§a[+] วิธีประมูล & นำขึ้นประมูล"),
 				List.of(
 						Component.literal("§e[ลงประมูลของให้ผู้เล่น]:"),
 						Component.literal("§7ถือของในมือแล้วพิมพ์: §a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
 						Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
 						Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
-						Component.literal("§7คลิกเขตของตนเองใน §e/claimmap §7แล้วกดเปิดประมูล"),
-						Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่มต้น> [ชั่วโมง]"),
+						Component.literal("§7พิมพ์: §e/claim at <ราคาเริ่มต้น> [ชั่วโมง]"),
+						Component.literal("§e[ต้องการขายราคาคงที่ (ซื้อทันที)]:"),
+						Component.literal("§7ถือของในมือแล้วพิมพ์: §a/buy sell <ราคา>"),
 						Component.literal("§e[เจ้าของยกเลิกการประมูล]:"),
 						Component.literal("§7คลิกที่รายการของคุณแล้วกดปุ่ม §c[ยกเลิกการประมูล]"),
-						Component.literal("§7หากมีผู้เสนอราคา ระบบจะคืนเงินให้ผู้เสนอราคาทันที")
+						Component.literal("§7(หากมีผู้เสนอราคา ระบบจะคืนเงินให้ผู้เสนอราคาทันที)")
 				)
 		);
 		container.setItem(51, howTo);
@@ -159,8 +163,8 @@ public final class AuctionGui {
 		}
 
 		String titleStr = switch (mode) {
-			case ALL -> "§0ตลาดผู้เล่น (หน้า " + (curPage + 1) + "/" + maxPages + ")";
-			case ITEMS -> "§0ของที่ผู้เล่นลงขาย (หน้า " + (curPage + 1) + "/" + maxPages + ")";
+			case ALL -> "§0ตลาดประมูล (หน้า " + (curPage + 1) + "/" + maxPages + ")";
+			case ITEMS -> "§0ไอเท็มประมูล (หน้า " + (curPage + 1) + "/" + maxPages + ")";
 			case CELLS -> "§0ประมูลที่ดิน (หน้า " + (curPage + 1) + "/" + maxPages + ")";
 		};
 
@@ -179,7 +183,9 @@ public final class AuctionGui {
 					} else if (slotIndex == 53 && curPage < maxPages - 1) {
 						open(sp, auctions, economy, currency, curPage + 1, mode);
 					} else if (slotIndex == 46) {
-						open(sp, auctions, economy, currency, 0, ViewMode.ITEMS);
+						if (ClaimMap.instance() != null) {
+							BuyGui.open(sp, ClaimMap.instance().playerMarket(), economy, currency);
+						}
 					} else if (slotIndex == 47) {
 						open(sp, auctions, economy, currency, 0, ViewMode.CELLS);
 					} else if (slotIndex == 48) {

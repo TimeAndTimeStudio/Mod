@@ -81,19 +81,19 @@ public final class SellGui {
 		);
 		container.setItem(49, gold);
 
-		// Slot 50: [ปุ่มลงขายให้ผู้เล่น / ประมูล]
+		// Slot 50: [ตลาดผู้เล่น /buy]
 		ItemStack sellPlayerBtn = GuiButtons.button(
-				GuiButtons.GAVEL,
-				Component.literal("§a[ลงขาย] ให้ผู้เล่นอื่น (ตลาดประมูล)"),
+				GuiButtons.CART,
+				Component.literal("§a[ตลาดผู้เล่น] ไปที่ /buy (ของที่ผู้เล่นขาย)"),
 				List.of(
 						Component.literal("§7ต้องการขายของให้ผู้เล่นคนอื่นในราคาที่คุณต้องการ?"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§eวิธีลงขายของในมือให้ผู้เล่น:"),
 						Component.literal("§fถือไอเท็มในมือแล้วพิมพ์:"),
-						Component.literal("§a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
-						Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
+						Component.literal("§a/buy sell <ราคา>"),
+						Component.literal("§7ตัวอย่าง: §b/buy sell 500"),
 						Component.literal("§7--------------------------------"),
-						Component.literal("§e[คลิกที่นี่] §fเพื่อเปิดดูตลาดที่ผู้เล่นลงขาย (/ah)"),
+						Component.literal("§e[คลิกที่นี่] §fเพื่อเปิดดูตลาดที่ผู้เล่นลงขาย (/buy)"),
 						Component.literal("§7(ระบบจะขายของในช่อง 1-45 ให้ก่อนเปลี่ยนหน้า)")
 				)
 		);
@@ -120,8 +120,10 @@ public final class SellGui {
 				(slotIndex, button, input, sp) -> {
 					if (slotIndex == 50) { // ลงขายให้ผู้เล่น
 						doSell.run();
-						AuctionGui.open(sp, auctions, economy, currency, 0, AuctionGui.ViewMode.ITEMS);
-						sp.sendSystemMessage(Component.literal("§e[แนะนำลงขาย]: §fหากต้องการนำไอเท็มลงขายให้ผู้เล่น ให้ถือไอเท็มในมือแล้วพิมพ์ §a/ah sell <ราคาเริ่ม> [ชั่วโมง]"));
+						if (ClaimMap.instance() != null) {
+							BuyGui.open(sp, ClaimMap.instance().playerMarket(), economy, currency);
+						}
+						sp.sendSystemMessage(Component.literal("§e[แนะนำลงขาย]: §fหากต้องการนำไอเท็มลงขายให้ผู้เล่น ให้ถือไอเท็มในมือแล้วพิมพ์ §a/buy sell <ราคา>"));
 					} else if (slotIndex == 48) { // ดูราคาร้านค้า
 						doSell.run();
 						PriceGui.open(sp, prices, shop, currency, 0, 0);

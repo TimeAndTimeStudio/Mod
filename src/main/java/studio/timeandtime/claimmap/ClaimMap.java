@@ -68,6 +68,10 @@ public class ClaimMap implements ModInitializer {
 		return homeManager;
 	}
 
+	public PlayerMarket playerMarket() {
+		return playerMarket;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
@@ -195,7 +199,7 @@ public class ClaimMap implements ModInitializer {
 		worldManager.attachTeleports(teleports);
 
 		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices,
-				admin, teleports, homeManager, worldManager).register();
+				admin, teleports, homeManager, worldManager, playerMarket).register();
 		new AuctionTicker(auctions, playerMarket).register();
 		protection.register();
 		authGate.registerHooks();

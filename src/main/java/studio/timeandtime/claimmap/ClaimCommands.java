@@ -56,6 +56,7 @@ public final class ClaimCommands {
 	private final TeleportManager teleports;
 	private final HomeManager homeManager;
 	private final studio.timeandtime.claimmap.world.WorldManager worldManager;
+	private final PlayerMarket playerMarket;
 	private final Map<UUID, SellAllPlan> sellAllPlans = new HashMap<>();
 
 	private record SellAllPlan(Map<String, Integer> items, long expiresAt) {
@@ -79,6 +80,15 @@ public final class ClaimCommands {
 			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
 			AuctionManager auctions, PriceService prices, AdminService admin, TeleportManager teleports,
 			HomeManager homeManager, studio.timeandtime.claimmap.world.WorldManager worldManager) {
+		this(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices, admin,
+				teleports, homeManager, worldManager, null);
+	}
+
+	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
+			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
+			AuctionManager auctions, PriceService prices, AdminService admin, TeleportManager teleports,
+			HomeManager homeManager, studio.timeandtime.claimmap.world.WorldManager worldManager,
+			PlayerMarket playerMarket) {
 		this.regions = regions;
 		this.links = links;
 		this.accounts = accounts;
@@ -93,6 +103,7 @@ public final class ClaimCommands {
 		this.teleports = teleports != null ? teleports : new TeleportManager();
 		this.homeManager = homeManager;
 		this.worldManager = worldManager;
+		this.playerMarket = playerMarket;
 	}
 
 	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
@@ -128,6 +139,23 @@ public final class ClaimCommands {
 							.executes(ctx -> runSellAllSummary(ctx.getSource()))
 							.then(Commands.literal("confirm")
 									.executes(ctx -> runSellAllConfirm(ctx.getSource())))));
+
+			dispatcher.register(Commands.literal("buy").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runBuyGui(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runBuyGui(ctx.getSource())))
+					.then(Commands.literal("sell")
+							.then(Commands.argument("price", StringArgumentType.word())
+									.executes(ctx -> runBuySell(ctx.getSource(),
+											StringArgumentType.getString(ctx, "price")))))
+					.then(Commands.literal("cancel")
+							.then(Commands.argument("id", StringArgumentType.word())
+									.executes(ctx -> runBuyCancel(ctx.getSource(),
+											StringArgumentType.getString(ctx, "id")))))
+					.then(Commands.argument("item", StringArgumentType.word())
+							.then(Commands.argument("qty", StringArgumentType.word())
+									.executes(ctx -> runBuy(ctx.getSource(),
+											StringArgumentType.getString(ctx, "item"),
+											StringArgumentType.getString(ctx, "qty"))))));
 
 			dispatcher.register(Commands.literal("mail").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runMailGui(ctx.getSource())));
@@ -523,8 +551,103 @@ public final class ClaimCommands {
 	private int runBuyGui(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		AuctionGui.open(player, auctions, economy, config.currencyName, 0, AuctionGui.ViewMode.ITEMS);
+		if (playerMarket == null) {
+			player.sendSystemMessage(Component.literal("§cระบบตลาดยังไม่พร้อมใช้งาน"));
+			return 0;
+		}
+		BuyGui.open(player, playerMarket, economy, config.currencyName);
 		return 1;
+	}
+
+	private int runBuySell(CommandSourceStack src, String priceText) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		if (playerMarket == null || playerMarket.isDisabled()) {
+			player.sendSystemMessage(Component.literal("§cระบบตลาดผู้เล่นปิดปรับปรุงชั่วคราว"));
+			return 0;
+		}
+		long price;
+		try {
+			price = Long.parseLong(priceText);
+		} catch (NumberFormatException e) {
+			player.sendSystemMessage(Component.literal("§cกรุณาระบุราคาเป็นตัวเลขจำนวนเต็มที่ถูกต้อง"));
+			return 0;
+		}
+		if (price < 1 || price > EconomyManager.MAX_MONEY) {
+			player.sendSystemMessage(Component.literal("§cราคาต้องอยู่ระหว่าง 1 ถึง " + EconomyManager.MAX_MONEY));
+			return 0;
+		}
+		ItemStack hand = player.getMainHandItem();
+		if (hand == null || hand.isEmpty()) {
+			player.sendSystemMessage(Component.literal("§cกรุณาถือไอเท็มที่ต้องการขายไว้ในมือหลัก"));
+			return 0;
+		}
+		String itemId = ItemCodecs.idOf(hand);
+		if (prices.isBlocked(itemId) || !ItemRegistryAdapter.exists(itemId)) {
+			player.sendSystemMessage(Component.literal("§cไอเท็มนี้ไม่อนุญาตให้นำมาลงขาย"));
+			return 0;
+		}
+		var server = ClaimMap.getServer();
+		if (server == null) return 0;
+		String itemJson = ItemCodecs.encode(hand, server.registryAccess());
+		int count = hand.getCount();
+		String label = ItemRegistryAdapter.label(itemId);
+
+		PlayerMarket.CreatePlan plan = new PlayerMarket.CreatePlan(
+				player.getUUID().toString(),
+				player.getGameProfile().name(),
+				itemJson,
+				itemId,
+				count,
+				label,
+				price
+		);
+
+		ItemStack backup = hand.copy();
+		hand.setCount(0);
+
+		PlayerMarket.CreateOutcome out = playerMarket.create(plan);
+		if (out.result() != PlayerMarket.Result.OK) {
+			player.getInventory().setItem(player.getInventory().getSelectedSlot(), backup);
+			player.sendSystemMessage(Component.literal("§cไม่สามารถลงขายได้: " + marketErrorText(out.result())));
+			return 0;
+		}
+		player.sendSystemMessage(Component.literal("§a[ตลาดผู้เล่น] ลงขายสำเร็จ! §f" + label + " x" + count
+				+ " §aราคา §6" + price + " " + config.currencyName + " §7(ตรวจสอบได้ที่ /buy)"));
+		return 1;
+	}
+
+	private int runBuyCancel(CommandSourceStack src, String id) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		if (playerMarket == null || playerMarket.isDisabled()) {
+			player.sendSystemMessage(Component.literal("§cระบบตลาดผู้เล่นปิดปรับปรุงชั่วคราว"));
+			return 0;
+		}
+		PlayerMarket.Result r = playerMarket.cancel(player.getUUID(), false, id);
+		if (r == PlayerMarket.Result.OK) {
+			player.sendSystemMessage(Component.literal("§a[ตลาดผู้เล่น] ยกเลิกการลงขายสำเร็จ! ไอเท็มถูกส่งเข้า /mail"));
+			return 1;
+		} else {
+			player.sendSystemMessage(Component.literal("§c[ตลาดผู้เล่น] ไม่สามารถยกเลิกได้: " + marketErrorText(r)));
+			return 0;
+		}
+	}
+
+	private static String marketErrorText(PlayerMarket.Result r) {
+		return switch (r) {
+			case OWN_LISTING -> "ไม่สามารถซื้อไอเท็มของตัวเองได้";
+			case INSUFFICIENT -> "เงินในบัญชีของคุณไม่เพียงพอ";
+			case FROZEN -> "บัญชีการเงินของคุณถูกระงับ";
+			case CLOSED -> "รายการนี้ถูกซื้อหรือปิดไปแล้ว";
+			case NOT_FOUND -> "ไม่พบรายการสินค้านี้";
+			case LIMIT_REACHED -> "คุณลงขายสินค้าครบจำนวนจำกัดแล้ว";
+			case DISABLED -> "ระบบตลาดซื้อขายปิดปรับปรุงชั่วคราว";
+			case FORBIDDEN -> "คุณไม่มีสิทธิ์จัดการรายการนี้";
+			case IO_ERROR -> "กล่องรับของปลายทางเต็ม หรือเกิดข้อผิดพลาดในการส่งไอเท็ม";
+			case BAD_REQUEST -> "ข้อมูลไม่ถูกต้อง";
+			default -> "เกิดข้อผิดพลาด (" + r + ")";
+		};
 	}
 
 	private long pricesSell(String itemId) {
@@ -534,7 +657,7 @@ public final class ClaimCommands {
 	private int runBuy(CommandSourceStack src, String item, String qtyText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		player.sendSystemMessage(Component.literal("§eร้านค้าเซิร์ฟเวอร์เปิดรับซื้อไอเท็มเท่านั้น หากต้องการซื้อของจากผู้เล่น กรุณาพิมพ์ §a/ah §eเพื่อเปิดดูตลาดประมูลระหว่างผู้เล่น"));
+		player.sendSystemMessage(Component.literal("§eหากต้องการเลือกซื้อสินค้าจากผู้เล่น กรุณาพิมพ์ §a/buy §eเพื่อเปิดตลาดซื้อขายสินค้าผู้เล่น"));
 		return 0;
 	}
 

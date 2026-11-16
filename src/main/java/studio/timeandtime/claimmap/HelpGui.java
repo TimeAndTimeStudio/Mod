@@ -98,6 +98,23 @@ public final class HelpGui {
 		);
 		container.setItem(16, sellItem);
 
+		// Slot 20: /buy - ตลาดซื้อของที่ผู้เล่นขาย
+		ItemStack buyItem = GuiButtons.button(
+				GuiButtons.CART,
+				Component.literal("§a/buy §f- ตลาดซื้อของที่ผู้เล่นขาย"),
+				List.of(
+						Component.literal("§7ตลาดซื้อขายไอเท็มระหว่างผู้เล่นแบบราคาคงที่ (ซื้อทันที)"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§eคำสั่งที่ใช้งานได้:"),
+						Component.literal("§a/buy §7- เปิดดูตลาดสินค้าผู้เล่นและเลือกซื้อทันที"),
+						Component.literal("§a/buy sell <ราคา> §7- นำไอเท็มในมือลงขายในราคาที่ต้องการ"),
+						Component.literal("§a/buy cancel <รหัส> §7- ยกเลิกการลงขาย (รับของคืนใน /mail)"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§b[คลิก] §7เพื่อเปิดดูตลาดสินค้าผู้เล่นทันที")
+				)
+		);
+		container.setItem(20, buyItem);
+
 		// Slot 28: /price - เช็คราคากลาง
 		ItemStack priceItem = GuiButtons.button(
 				GuiButtons.TAG,
@@ -216,6 +233,11 @@ public final class HelpGui {
 					} else if (slotIndex == 16) { // /sell
 						if (prices != null && shop != null && config != null && auctions != null && economy != null) {
 							SellGui.open(sp, shop, auctions, prices, economy, config.currencyName);
+						}
+					} else if (slotIndex == 20) { // /buy
+						sp.closeContainer();
+						if (ClaimMap.instance() != null) {
+							BuyGui.open(sp, ClaimMap.instance().playerMarket(), economy, config != null ? config.currencyName : "Coin");
 						}
 					} else if (slotIndex == 28) { // /price
 						if (prices != null && shop != null && config != null) {
