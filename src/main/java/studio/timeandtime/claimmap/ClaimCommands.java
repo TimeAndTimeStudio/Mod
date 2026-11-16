@@ -165,7 +165,8 @@ public final class ClaimCommands {
 											StringArgumentType.getString(ctx, "id"))))));
 
 			dispatcher.register(Commands.literal("price").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runPriceHand(ctx.getSource()))
+					.executes(ctx -> runPriceDefault(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runPriceGui(ctx.getSource())))
 					.then(Commands.literal("hand").executes(ctx -> runPriceHand(ctx.getSource())))
 					.then(Commands.argument("item", StringArgumentType.word())
 							.executes(ctx -> runPriceItem(ctx.getSource(),
@@ -561,16 +562,36 @@ public final class ClaimCommands {
 		return 1;
 	}
 
+	private int runPriceDefault(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		ItemStack stack = player.getMainHandItem();
+		if (stack != null && !stack.isEmpty()) {
+			PriceGui.openDetail(player, prices, shop, config.currencyName, ItemCodecs.idOf(stack), 0, 0);
+		} else {
+			PriceGui.open(player, prices, shop, config.currencyName, 0, 0);
+		}
+		return 1;
+	}
+
+	private int runPriceGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		PriceGui.open(player, prices, shop, config.currencyName, 0, 0);
+		return 1;
+	}
+
 	private int runPriceHand(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		ItemStack stack = player.getMainHandItem();
 		if (stack == null || stack.isEmpty()) {
-			player.sendSystemMessage(Component.literal("§eกรุณาถือไอเท็มในมือที่ต้องการเช็คราคา หรือพิมพ์ /price <ชื่อไอเท็ม>"));
-			return 0;
+			player.sendSystemMessage(Component.literal("§eในมือหลักว่างเปล่า กำลังเปิดหน้ารวมราคาทั้งหมด..."));
+			PriceGui.open(player, prices, shop, config.currencyName, 0, 0);
+			return 1;
 		}
-		String itemId = ItemCodecs.idOf(stack);
-		return showPrice(player, itemId, stack.getHoverName().getString());
+		PriceGui.openDetail(player, prices, shop, config.currencyName, ItemCodecs.idOf(stack), 0, 0);
+		return 1;
 	}
 
 	private int runPriceItem(CommandSourceStack src, String query) {
@@ -581,25 +602,7 @@ public final class ClaimCommands {
 			player.sendSystemMessage(Component.literal("§cไม่พบไอเท็ม: " + itemId));
 			return 0;
 		}
-		String label = ItemRegistryAdapter.label(itemId);
-		return showPrice(player, itemId, label);
-	}
-
-	private int showPrice(ServerPlayer player, String itemId, String label) {
-		long sellPrice = shop.sellUnitPrice(itemId);
-		long buyPrice = prices.buyPrice(itemId).orElse(0L);
-		double mult = prices.detailsSnapshot().stream()
-				.filter(d -> d.id().equals(itemId))
-				.mapToDouble(PriceService.ItemPriceDetail::multiplier)
-				.findFirst().orElse(1.0);
-		int multPct = (int) Math.round(mult * 100.0);
-		String demandText = multPct > 100 ? "§aความต้องการสูง (+" + (multPct - 100) + "%)"
-				: multPct < 100 ? "§cความต้องการต่ำ (" + multPct + "%)" : "§7ความต้องการปกติ (100%)";
-
-		player.sendSystemMessage(Component.literal("§6[เช็คราคา] §f" + label + " §7(" + itemId + ")"));
-		player.sendSystemMessage(Component.literal("§a  ราคารับซื้อ: §f" + (sellPrice > 0 ? sellPrice + " " + config.currencyName : "§cร้านไม่รับซื้อ")
-				+ " §7| " + demandText));
-		player.sendSystemMessage(Component.literal("§c  ราคาขายออก: §f" + (buyPrice > 0 ? buyPrice + " " + config.currencyName : "§cไม่มีขาย")));
+		PriceGui.openDetail(player, prices, shop, config.currencyName, itemId, 0, 0);
 		return 1;
 	}
 
