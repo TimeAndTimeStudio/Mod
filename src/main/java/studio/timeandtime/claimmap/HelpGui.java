@@ -155,11 +155,14 @@ public final class HelpGui {
 						Component.literal("§7วาร์ปไปหาเพื่อน หรือกลับจุดเริ่มต้น (รอ 5 วิ)"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
+						Component.literal("§f/tpa §7- เปิดเมนูเลือกผู้เล่นและตอบรับคำขอ"),
 						Component.literal("§f/tpa <ชื่อผู้เล่น> §7- ส่งคำขอวาร์ปไปหาเพื่อน"),
 						Component.literal("§f/tpa accept §7- กดยอมรับคำขอวาร์ป (รอ 5 วิ)"),
 						Component.literal("§f/tpa deny §7- ปฏิเสธคำขอวาร์ป"),
 						Component.literal("§f/tpa cancel §7- ยกเลิกคำขอวาร์ป"),
-						Component.literal("§f/spawn §7หรือ §f/main §7- วาร์ปกลับจุดเกิด/โลกหลัก (รอ 5 วิ)")
+						Component.literal("§f/spawn §7หรือ §f/main §7- วาร์ปกลับจุดเกิด/โลกหลัก (รอ 5 วิ)"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§b[คลิก] §7เพื่อเปิดเมนูวาร์ปและเลือกผู้เล่นทันที")
 				)
 		);
 		container.setItem(34, tpaItem);
@@ -223,6 +226,11 @@ public final class HelpGui {
 						var server = ClaimMap.getServer();
 						if (server != null) {
 							server.getCommands().performPrefixedCommand(sp.createCommandSourceStack(), "mail");
+						}
+					} else if (slotIndex == 34) { // /tpa
+						sp.closeContainer();
+						if (ClaimMap.instance() != null) {
+							TpaGui.open(sp, ClaimMap.instance().teleports());
 						}
 					} else if (slotIndex == 38) { // /home
 						sp.closeContainer();

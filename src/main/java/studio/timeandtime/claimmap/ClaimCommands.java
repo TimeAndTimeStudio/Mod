@@ -250,6 +250,8 @@ public final class ClaimCommands {
 					.executes(ctx -> runHelpGui(ctx.getSource())));
 
 			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaGui(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runTpaGui(ctx.getSource())))
 					.then(Commands.literal("accept")
 							.executes(ctx -> runTpaAccept(ctx.getSource(), null))
 							.then(Commands.argument("player", StringArgumentType.word())
@@ -1290,6 +1292,13 @@ public final class ClaimCommands {
 			teleports.request(sender, target);
 			return 1;
 		}
+	}
+
+	private int runTpaGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		TpaGui.open(player, teleports);
+		return 1;
 	}
 
 	private int runTpaRequestOrAccept(CommandSourceStack src, String targetName) {

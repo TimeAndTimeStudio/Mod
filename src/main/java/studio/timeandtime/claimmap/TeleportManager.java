@@ -9,10 +9,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -52,8 +49,8 @@ public class TeleportManager {
 		}
 	}
 
-	// Key: target UUID -> active request
-	private final Map<UUID, Request> pending = new ConcurrentHashMap<>();
+	// Key: target UUID -> (sender UUID -> Request)
+	private final Map<UUID, Map<UUID, Request>> incoming = new ConcurrentHashMap<>();
 	// Key: player UUID -> active warmup
 	private final Map<UUID, WarmupTask> activeWarmups = new ConcurrentHashMap<>();
 
@@ -131,32 +128,75 @@ public class TeleportManager {
 
 		long now = System.currentTimeMillis();
 		Request req = new Request(sender.getUUID(), sender.getScoreboardName(), target.getUUID(), target.getScoreboardName(), now);
-		pending.put(target.getUUID(), req);
+		incoming.computeIfAbsent(target.getUUID(), k -> new ConcurrentHashMap<>()).put(sender.getUUID(), req);
 
 		sender.sendSystemMessage(Component.literal("§6[Teleport] §eส่งคำขอวาร์ปไปยัง §f" + target.getScoreboardName() + " §eแล้ว (มีอายุ 60 วินาที)"));
-		target.sendSystemMessage(Component.literal("§6[Teleport] §f" + sender.getScoreboardName() + " §eต้องการวาร์ปมาหาคุณ\n§7พิมพ์ §a/tpa §7เพื่อยอมรับ (§c/tpa deny §7เพื่อปฏิเสธ)"));
+		target.sendSystemMessage(Component.literal("§6[Teleport] §f" + sender.getScoreboardName() + " §eต้องการวาร์ปมาหาคุณ\n§7พิมพ์ §a/tpa §7เพื่อเปิดเมนูตอบรับ (คลิกซ้ายยอมรับ / คลิกขวาปฏิเสธ)"));
+	}
+
+	public List<Request> getIncomingRequests(UUID targetUuid) {
+		Map<UUID, Request> map = incoming.get(targetUuid);
+		if (map == null || map.isEmpty()) return Collections.emptyList();
+		long now = System.currentTimeMillis();
+		map.values().removeIf(r -> r.isExpired(now));
+		return new ArrayList<>(map.values());
+	}
+
+	public Request getOutgoingRequest(UUID senderUuid) {
+		long now = System.currentTimeMillis();
+		for (Map<UUID, Request> map : incoming.values()) {
+			Request r = map.get(senderUuid);
+			if (r != null) {
+				if (r.isExpired(now)) {
+					map.remove(senderUuid);
+				} else {
+					return r;
+				}
+			}
+		}
+		return null;
 	}
 
 	public boolean hasPending(UUID targetUuid) {
-		Request req = pending.get(targetUuid);
-		return req != null && !req.isExpired(System.currentTimeMillis());
+		return !getIncomingRequests(targetUuid).isEmpty();
 	}
 
 	public void accept(ServerPlayer target, String specificSender) {
 		long now = System.currentTimeMillis();
-		Request req = pending.get(target.getUUID());
-		if (req == null || req.isExpired(now)) {
-			pending.remove(target.getUUID());
+		Map<UUID, Request> map = incoming.get(target.getUUID());
+		if (map == null || map.isEmpty()) {
 			target.sendSystemMessage(Component.literal("§c[Teleport] ไม่มีคำขอวาร์ปที่รอยอมรับ หรือคำขอหมดอายุแล้ว"));
 			return;
 		}
 
-		if (specificSender != null && !specificSender.isBlank() && !req.senderName().equalsIgnoreCase(specificSender.trim())) {
-			target.sendSystemMessage(Component.literal("§c[Teleport] ไม่พบคำขอวาร์ปจากผู้เล่น " + specificSender));
-			return;
+		Request req = null;
+		if (specificSender != null && !specificSender.isBlank()) {
+			String name = specificSender.trim();
+			for (Request r : map.values()) {
+				if (r.senderName().equalsIgnoreCase(name)) {
+					req = r;
+					break;
+				}
+			}
+			if (req == null || req.isExpired(now)) {
+				if (req != null) map.remove(req.senderUuid());
+				target.sendSystemMessage(Component.literal("§c[Teleport] ไม่พบคำขอวาร์ปจากผู้เล่น " + specificSender));
+				return;
+			}
+		} else {
+			for (Request r : map.values()) {
+				if (!r.isExpired(now) && (req == null || r.createdAt() > req.createdAt())) {
+					req = r;
+				}
+			}
+			if (req == null) {
+				map.clear();
+				target.sendSystemMessage(Component.literal("§c[Teleport] ไม่มีคำขอวาร์ปที่รอยอมรับ หรือคำขอหมดอายุแล้ว"));
+				return;
+			}
 		}
 
-		pending.remove(target.getUUID());
+		map.remove(req.senderUuid());
 		var srv = ClaimMap.getServer();
 		if (srv == null) {
 			target.sendSystemMessage(Component.literal("§c[Teleport] เซิร์ฟเวอร์ยังไม่พร้อม"));
@@ -168,13 +208,14 @@ public class TeleportManager {
 			return;
 		}
 
+		final Request chosenReq = req;
 		target.sendSystemMessage(Component.literal("§6[Teleport] §aยอมรับคำขอวาร์ปจาก §f" + sender.getScoreboardName() + " §aแล้ว (ผู้เล่นกำลังเตรียมวาร์ป 5 วินาที)"));
 		startWarmup(sender, Component.literal("หา " + target.getScoreboardName()), () -> {
 			var currentSrv = ClaimMap.getServer();
 			if (currentSrv == null) return;
-			ServerPlayer currentTarget = currentSrv.getPlayerList().getPlayer(req.targetUuid());
+			ServerPlayer currentTarget = currentSrv.getPlayerList().getPlayer(chosenReq.targetUuid());
 			if (currentTarget == null || !currentTarget.isAlive()) {
-				sender.sendSystemMessage(Component.literal("§c[Teleport] ผู้เล่น " + req.targetName() + " ออฟไลน์หรือไม่พร้อม"));
+				sender.sendSystemMessage(Component.literal("§c[Teleport] ผู้เล่น " + chosenReq.targetName() + " ออฟไลน์หรือไม่พร้อม"));
 				return;
 			}
 			doTeleport(sender, currentTarget);
@@ -183,9 +224,9 @@ public class TeleportManager {
 		}, () -> {
 			var currentSrv = ClaimMap.getServer();
 			if (currentSrv != null) {
-				ServerPlayer currentTarget = currentSrv.getPlayerList().getPlayer(req.targetUuid());
+				ServerPlayer currentTarget = currentSrv.getPlayerList().getPlayer(chosenReq.targetUuid());
 				if (currentTarget != null) {
-					currentTarget.sendSystemMessage(Component.literal("§6[Teleport] §cการวาร์ปของ " + req.senderName() + " ถูกยกเลิก"));
+					currentTarget.sendSystemMessage(Component.literal("§6[Teleport] §cการวาร์ปของ " + chosenReq.senderName() + " ถูกยกเลิก"));
 				}
 			}
 		});
@@ -193,12 +234,36 @@ public class TeleportManager {
 
 	public void deny(ServerPlayer target, String specificSender) {
 		long now = System.currentTimeMillis();
-		Request req = pending.remove(target.getUUID());
-		if (req == null || req.isExpired(now)) {
+		Map<UUID, Request> map = incoming.get(target.getUUID());
+		if (map == null || map.isEmpty()) {
 			target.sendSystemMessage(Component.literal("§c[Teleport] ไม่มีคำขอวาร์ปที่รอยอมรับ หรือคำขอหมดอายุแล้ว"));
 			return;
 		}
 
+		Request req = null;
+		if (specificSender != null && !specificSender.isBlank()) {
+			String name = specificSender.trim();
+			for (Request r : map.values()) {
+				if (r.senderName().equalsIgnoreCase(name)) {
+					req = r;
+					break;
+				}
+			}
+		} else {
+			for (Request r : map.values()) {
+				if (!r.isExpired(now) && (req == null || r.createdAt() > req.createdAt())) {
+					req = r;
+				}
+			}
+		}
+
+		if (req == null || req.isExpired(now)) {
+			if (req != null) map.remove(req.senderUuid());
+			target.sendSystemMessage(Component.literal("§c[Teleport] ไม่มีคำขอวาร์ปที่รอยอมรับ หรือคำขอหมดอายุแล้ว"));
+			return;
+		}
+
+		map.remove(req.senderUuid());
 		target.sendSystemMessage(Component.literal("§6[Teleport] §eปฏิเสธคำขอวาร์ปจาก §f" + req.senderName() + " §eแล้ว"));
 		var srv = ClaimMap.getServer();
 		if (srv != null) {
@@ -211,14 +276,17 @@ public class TeleportManager {
 
 	public void cancel(ServerPlayer sender) {
 		UUID sUuid = sender.getUUID();
-		Optional<UUID> targetKey = pending.entrySet().stream()
-				.filter(e -> e.getValue().senderUuid().equals(sUuid))
-				.map(Map.Entry::getKey)
-				.findFirst();
+		Request found = null;
+		for (Map<UUID, Request> map : incoming.values()) {
+			Request r = map.remove(sUuid);
+			if (r != null) {
+				found = r;
+				break;
+			}
+		}
 
-		if (targetKey.isPresent()) {
-			Request req = pending.remove(targetKey.get());
-			sender.sendSystemMessage(Component.literal("§6[Teleport] §eยกเลิกคำขอวาร์ปไปยัง §f" + req.targetName() + " §eแล้ว"));
+		if (found != null) {
+			sender.sendSystemMessage(Component.literal("§6[Teleport] §eยกเลิกคำขอวาร์ปไปยัง §f" + found.targetName() + " §eแล้ว"));
 		} else {
 			sender.sendSystemMessage(Component.literal("§c[Teleport] คุณไม่มีคำขอวาร์ปที่ค้างอยู่"));
 		}
