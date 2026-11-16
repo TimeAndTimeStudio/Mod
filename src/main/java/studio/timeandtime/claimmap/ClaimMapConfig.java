@@ -38,8 +38,8 @@ public final class ClaimMapConfig {
 	public int cellSize = 500;
 	public int freeCellsPerPlayer = 4;
 	public int maxCellsPerPlayer = 0; // 0 = unlimited
-	/** Radius (in cells) around 0,0 treated as a common / spawn area (unclaimable). */
-	public int spawnProtectedCells = 3;
+	/** Radius (in cells) around 0,0 treated as a common / spawn area (unclaimable). 0 = disabled. */
+	public int spawnProtectedCells = 0;
 	/** Map sampling step in blocks; one pixel per {@code renderScale} block. */
 	public int renderScale = 4;
 	/** Debounce delay for flushing map tiles to disk. */

@@ -72,11 +72,16 @@ public class ClaimMap implements ModInitializer {
 		return playerMarket;
 	}
 
+	public WorldSpawnProtection spawnProtection() {
+		return spawnProtection;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
 	private MapRenderer maps;
 	private Protection protection;
+	private WorldSpawnProtection spawnProtection;
 	private LinkManager links;
 	private AccountManager accounts;
 	private EconomyManager economy;
@@ -202,6 +207,8 @@ public class ClaimMap implements ModInitializer {
 				admin, teleports, homeManager, worldManager, playerMarket).register();
 		new AuctionTicker(auctions, playerMarket).register();
 		protection.register();
+		spawnProtection = new WorldSpawnProtection(config.dataDir());
+		spawnProtection.register();
 		authGate.registerHooks();
 
 		// Draw a map of exactly the chunks that are actually loaded / explored.

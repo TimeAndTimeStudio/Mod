@@ -11,7 +11,8 @@
 		"FinishSendMixin",
 		"LevelStoragePathMixin",
 		"ServerLevelsAccessor",
-		"ServerWorldSaveMixin"
+		"ServerWorldSaveMixin",
+		"ServerExplosionMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
