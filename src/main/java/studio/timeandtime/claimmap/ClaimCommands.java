@@ -128,39 +128,36 @@ public final class ClaimCommands {
 					.then(Commands.literal("sell")
 							.then(Commands.argument("startPrice", StringArgumentType.word())
 									.executes(ctx -> runAhSell(ctx.getSource(),
-											StringArgumentType.getString(ctx, "startPrice"), "0", "24"))
-									.then(Commands.argument("buyout", StringArgumentType.word())
+											StringArgumentType.getString(ctx, "startPrice"), "24"))
+									.then(Commands.argument("hours", StringArgumentType.word())
 											.executes(ctx -> runAhSell(ctx.getSource(),
 													StringArgumentType.getString(ctx, "startPrice"),
-													StringArgumentType.getString(ctx, "buyout"), "24"))
-											.then(Commands.argument("hours", StringArgumentType.word())
-													.executes(ctx -> runAhSell(ctx.getSource(),
-															StringArgumentType.getString(ctx, "startPrice"),
-															StringArgumentType.getString(ctx, "buyout"),
-															StringArgumentType.getString(ctx, "hours")))))))
+													StringArgumentType.getString(ctx, "hours"))))))
 					.then(Commands.literal("cell")
 							.then(Commands.argument("cellId", StringArgumentType.word())
 									.then(Commands.argument("startPrice", StringArgumentType.word())
 											.executes(ctx -> runAhCell(ctx.getSource(),
 													StringArgumentType.getString(ctx, "cellId"),
-													StringArgumentType.getString(ctx, "startPrice"), "0", "24"))
-											.then(Commands.argument("buyout", StringArgumentType.word())
+													StringArgumentType.getString(ctx, "startPrice"), "24"))
+											.then(Commands.argument("hours", StringArgumentType.word())
 													.executes(ctx -> runAhCell(ctx.getSource(),
 															StringArgumentType.getString(ctx, "cellId"),
 															StringArgumentType.getString(ctx, "startPrice"),
-															StringArgumentType.getString(ctx, "buyout"), "24"))
-													.then(Commands.argument("hours", StringArgumentType.word())
-															.executes(ctx -> runAhCell(ctx.getSource(),
-																	StringArgumentType.getString(ctx, "cellId"),
-																	StringArgumentType.getString(ctx, "startPrice"),
-																	StringArgumentType.getString(ctx, "buyout"),
-																	StringArgumentType.getString(ctx, "hours"))))))))
+															StringArgumentType.getString(ctx, "hours")))))))
 					.then(Commands.literal("bid")
 							.then(Commands.argument("id", StringArgumentType.word())
 									.then(Commands.argument("amount", StringArgumentType.word())
 											.executes(ctx -> runAhBid(ctx.getSource(),
 													StringArgumentType.getString(ctx, "id"),
 													StringArgumentType.getString(ctx, "amount"))))))
+					.then(Commands.literal("end")
+							.then(Commands.argument("id", StringArgumentType.word())
+									.executes(ctx -> runAhEnd(ctx.getSource(),
+											StringArgumentType.getString(ctx, "id")))))
+					.then(Commands.literal("close")
+							.then(Commands.argument("id", StringArgumentType.word())
+									.executes(ctx -> runAhEnd(ctx.getSource(),
+											StringArgumentType.getString(ctx, "id")))))
 					.then(Commands.literal("cancel")
 							.then(Commands.argument("id", StringArgumentType.word())
 									.executes(ctx -> runAhCancel(ctx.getSource(),
@@ -189,16 +186,11 @@ public final class ClaimCommands {
 					.then(Commands.literal("auction")
 							.then(Commands.argument("startPrice", StringArgumentType.word())
 									.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
-											StringArgumentType.getString(ctx, "startPrice"), "0", "24"))
-									.then(Commands.argument("buyout", StringArgumentType.word())
+											StringArgumentType.getString(ctx, "startPrice"), "24"))
+									.then(Commands.argument("hours", StringArgumentType.word())
 											.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
 													StringArgumentType.getString(ctx, "startPrice"),
-													StringArgumentType.getString(ctx, "buyout"), "24"))
-											.then(Commands.argument("hours", StringArgumentType.word())
-													.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
-															StringArgumentType.getString(ctx, "startPrice"),
-															StringArgumentType.getString(ctx, "buyout"),
-															StringArgumentType.getString(ctx, "hours"))))))));
+													StringArgumentType.getString(ctx, "hours"))))))));
 
 			var timesmpNode = dispatcher.register(Commands.literal("timesmp")
 					.executes(ctx -> runClaimMapGui(ctx.getSource()))
@@ -620,20 +612,19 @@ public final class ClaimCommands {
 			active++;
 			sb.append("- ").append(a.id).append(' ').append(a.label).append(" x").append(a.count)
 					.append(" เริ่ม ").append(a.startPrice);
-			if (a.buyout != null) sb.append(" ซื้อทันที ").append(a.buyout);
 			if (a.highBid > 0) sb.append(" ล่าสุด ").append(a.highBid);
 			long mins = Math.max(0, (a.endsAt - System.currentTimeMillis()) / 60_000L);
 			sb.append(" เหลือ ").append(mins).append(" นาที\n");
 		}
 		if (active == 0) {
-			player.sendSystemMessage(Component.literal("ยังไม่มีการประมูล — เซิร์ฟเวอร์เท่านั้นที่เปิดประมูลได้"));
+			player.sendSystemMessage(Component.literal("ยังไม่มีรายการประมูลที่เปิดอยู่"));
 			return 0;
 		}
 		player.sendSystemMessage(Component.literal(sb.toString()));
 		return 1;
 	}
 
-	private int runAhSell(CommandSourceStack src, String startText, String buyoutText, String hoursText) {
+	private int runAhSell(CommandSourceStack src, String startText, String hoursText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (auctions.isDisabled()) {
@@ -641,11 +632,9 @@ public final class ClaimCommands {
 			return 0;
 		}
 		long start;
-		long buyoutRaw;
 		int hours;
 		try {
 			start = Long.parseLong(startText);
-			buyoutRaw = Long.parseLong(buyoutText);
 			hours = Integer.parseInt(hoursText);
 		} catch (NumberFormatException e) {
 			player.sendSystemMessage(Component.literal("ตัวเลขไม่ถูกต้อง"));
@@ -666,7 +655,7 @@ public final class ClaimCommands {
 		String itemJson = ItemCodecs.encode(hand, server.registryAccess());
 		int count = hand.getCount();
 		String label = ItemRegistryAdapter.label(itemId);
-		Long buyout = buyoutRaw <= 0 ? null : buyoutRaw;
+		Long buyout = null;
 
 		AuctionManager.CreatePlan plan = new AuctionManager.CreatePlan(player.getUUID().toString(),
 				player.getGameProfile().name(), itemJson, itemId, count, label, start, buyout, hours);
@@ -686,12 +675,11 @@ public final class ClaimCommands {
 			return 0;
 		}
 		player.sendSystemMessage(Component.literal("ลงประมูลแล้ว " + o.auctionId() + " " + label + " x" + count
-				+ " ราคาเริ่ม " + start + " " + config.currencyName
-				+ (buyout == null ? "" : " (ซื้อทันที " + buyout + ")")));
+				+ " ราคาเริ่ม " + start + " " + config.currencyName));
 		return 1;
 	}
 
-	private int runClaimAuctionHere(CommandSourceStack src, String startText, String buyoutText, String hoursText) {
+	private int runClaimAuctionHere(CommandSourceStack src, String startText, String hoursText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		int bx = player.getBlockX();
@@ -699,26 +687,24 @@ public final class ClaimCommands {
 		int cx = Math.floorDiv(bx, config.cellSize);
 		int cz = Math.floorDiv(bz, config.cellSize);
 		String cellId = cx + "," + cz;
-		return doCellAuction(player, cellId, startText, buyoutText, hoursText);
+		return doCellAuction(player, cellId, startText, hoursText);
 	}
 
-	private int runAhCell(CommandSourceStack src, String cellId, String startText, String buyoutText, String hoursText) {
+	private int runAhCell(CommandSourceStack src, String cellId, String startText, String hoursText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		return doCellAuction(player, cellId, startText, buyoutText, hoursText);
+		return doCellAuction(player, cellId, startText, hoursText);
 	}
 
-	private int doCellAuction(ServerPlayer player, String cellId, String startText, String buyoutText, String hoursText) {
+	private int doCellAuction(ServerPlayer player, String cellId, String startText, String hoursText) {
 		if (auctions.isDisabled()) {
 			player.sendSystemMessage(Component.literal("ระบบตลาดถูกปิดชั่วคราว"));
 			return 0;
 		}
 		long start;
-		long buyoutRaw;
 		int hours;
 		try {
 			start = Long.parseLong(startText);
-			buyoutRaw = Long.parseLong(buyoutText);
 			hours = Integer.parseInt(hoursText);
 		} catch (NumberFormatException e) {
 			player.sendSystemMessage(Component.literal("ราคาและชั่วโมงต้องเป็นตัวเลขจำนวนเต็ม"));
@@ -728,11 +714,7 @@ public final class ClaimCommands {
 			player.sendSystemMessage(Component.literal("ราคาเริ่มต้นต้องระหว่าง 0 ถึง " + EconomyManager.MAX_MONEY));
 			return 0;
 		}
-		Long buyout = buyoutRaw > 0 ? buyoutRaw : null;
-		if (buyout != null && buyout < start) {
-			player.sendSystemMessage(Component.literal("ราคาซื้อทันทีต้องมากกว่าหรือเท่ากับราคาเริ่มต้น"));
-			return 0;
-		}
+		Long buyout = null;
 		if (hours < 1 || hours > config.auctionMaxHours) {
 			player.sendSystemMessage(Component.literal("ระยะเวลาต้องระหว่าง 1 ถึง " + config.auctionMaxHours + " ชั่วโมง"));
 			return 0;
@@ -745,7 +727,6 @@ public final class ClaimCommands {
 		}
 		player.sendSystemMessage(Component.literal("เปิดประมูลเขต " + cellId + " แล้ว (รหัส " + o.auctionId()
 				+ ") ราคาเริ่ม " + start + " " + config.currencyName
-				+ (buyout == null ? "" : " (ซื้อทันที " + buyout + ")")
 				+ " ระยะเวลา " + hours + " ชม."));
 		return 1;
 	}
@@ -780,6 +761,18 @@ public final class ClaimCommands {
 			player.sendSystemMessage(Component.literal("ยกเลิกแล้ว ของจะอยู่ในกล่องของ พิมพ์ /mail claim"));
 		} else {
 			player.sendSystemMessage(Component.literal("ยกเลิกไม่ได้: " + auctionErrorText(r)));
+		}
+		return 1;
+	}
+
+	private int runAhEnd(CommandSourceStack src, String id) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		AuctionManager.Result r = auctions.closeByOwner(player.getUUID(), id);
+		if (r == AuctionManager.Result.OK) {
+			player.sendSystemMessage(Component.literal("ปิดประมูลแล้ว หากมีผู้เสนอราคาสูงสุด ระบบจะโอนเงินให้คุณและส่งของ/เขตให้ผู้ชนะ"));
+		} else {
+			player.sendSystemMessage(Component.literal("ปิดประมูลไม่ได้: " + auctionErrorText(r)));
 		}
 		return 1;
 	}

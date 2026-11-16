@@ -74,15 +74,10 @@ public final class AuctionGui {
 			lore.add(Component.literal("§eผู้ลงขาย: §f" + a.sellerName));
 			lore.add(Component.literal("§eราคาประมูลปัจจุบัน: §6" + currentPrice + " " + currency
 					+ (a.highBidderName != null ? " §7(" + a.highBidderName + ")" : " §7(ยังไม่มีผู้ประมูล)")));
-			if (a.buyout != null) {
-				lore.add(Component.literal("§eราคาซื้อทันที: §a" + a.buyout + " " + currency));
-			}
+			lore.add(Component.literal("§eราคาเสนอขั้นต่ำ: §a" + minNextBid + " " + currency));
 			lore.add(Component.literal("§eเวลาที่เหลือ: §f" + timeStr));
 			lore.add(Component.literal("§7------------------------"));
-			lore.add(Component.literal("§a[คลิกซ้าย] เพื่อเสนอราคา: §6" + minNextBid + " " + currency));
-			if (a.buyout != null) {
-				lore.add(Component.literal("§6[คลิกขวา] เพื่อซื้อทันที: §a" + a.buyout + " " + currency));
-			}
+			lore.add(Component.literal("§a[คลิก] ดูรายละเอียด & เลือกจำนวนเงินเสนอราคา"));
 
 			displayStack.set(DataComponents.LORE, new ItemLore(lore));
 			container.setItem(slot, displayStack);
@@ -127,12 +122,15 @@ public final class AuctionGui {
 		ItemStack howTo = new ItemStack(Items.EMERALD);
 		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE109 [+] วิธีลงขาย & ประมูล"));
 		howTo.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§e[ลงขายของให้ผู้เล่น]:"),
-				Component.literal("§7ถือของในมือแล้วพิมพ์: §a/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"),
-				Component.literal("§7ตัวอย่าง: §b/ah sell 100 250 24"),
+				Component.literal("§e[ลงประมูลของให้ผู้เล่น]:"),
+				Component.literal("§7ถือของในมือแล้วพิมพ์: §a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
+				Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
 				Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
 				Component.literal("§7คลิกเขตของตนเองใน §e/claimmap §7แล้วกดเปิดประมูล"),
-				Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]")
+				Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่มต้น> [ชั่วโมง]"),
+				Component.literal("§e[เจ้าของปิดประมูลก่อนเวลา]:"),
+				Component.literal("§7คลิกที่รายการของคุณแล้วกดปุ่ม §6[ปิดประมูลทันที]"),
+				Component.literal("§7ผู้ที่เสนอราคาสูงสุดจะได้รับของทันที!")
 		)));
 		container.setItem(51, howTo);
 
@@ -157,28 +155,7 @@ public final class AuctionGui {
 				(slotIndex, button, input, sp) -> {
 					if (slotIndex >= 0 && slotIndex < endIdx - startIdx) {
 						AuctionManager.Auction selected = active.get(startIdx + slotIndex);
-						if (button == 0) { // Left-click: Bid
-							long minBid = auctions.minBid(selected);
-							AuctionManager.BidOutcome bo = auctions.bid(sp.getUUID(), sp.getGameProfile().name(), selected.id, minBid);
-							if (bo.result() == AuctionManager.Result.OK) {
-								sp.sendSystemMessage(Component.literal("§aเสนอราคาประมูลสำเร็จ! " + minBid + " " + currency));
-							} else if (bo.result() == AuctionManager.Result.USE_BUYOUT) {
-								sp.sendSystemMessage(Component.literal("§eราคาประมูลแตะราคาซื้อทันทีแล้ว กรุณาคลิกขวาเพื่อซื้อทันที"));
-							} else {
-								sp.sendSystemMessage(Component.literal("§cประมูลไม่ได้: " + auctionError(bo.result())));
-							}
-							open(sp, auctions, economy, currency, curPage, mode);
-						} else if (button == 1) { // Right-click: Buyout
-							if (selected.buyout != null) {
-								AuctionManager.Result r = auctions.buyout(sp.getUUID(), sp.getGameProfile().name(), selected.id);
-								if (r == AuctionManager.Result.OK) {
-									sp.sendSystemMessage(Component.literal("§aซื้อทันทีสำเร็จ! จ่าย " + selected.buyout + " " + currency + " (ของส่งเข้า /mail เรียบร้อยแล้ว)"));
-								} else {
-									sp.sendSystemMessage(Component.literal("§cซื้อไม่สำเร็จ: " + auctionError(r)));
-								}
-								open(sp, auctions, economy, currency, curPage, mode);
-							}
-						}
+						openAuctionDetail(sp, selected, auctions, economy, currency, curPage, mode);
 					} else if (slotIndex == 45 && curPage > 0) {
 						open(sp, auctions, economy, currency, curPage - 1, mode);
 					} else if (slotIndex == 53 && curPage < maxPages - 1) {
@@ -193,6 +170,186 @@ public final class AuctionGui {
 						open(sp, auctions, economy, currency, curPage, mode);
 					} else if (slotIndex == 50) {
 						open(sp, auctions, economy, currency, 0, ViewMode.ALL);
+					}
+				},
+				null
+		);
+	}
+
+	public static void openAuctionDetail(ServerPlayer player, AuctionManager.Auction a,
+										 AuctionManager auctions, EconomyManager economy,
+										 String currency, int returnPage, ViewMode returnMode) {
+		SimpleContainer container = new SimpleContainer(27);
+		String myUuid = player.getUUID().toString();
+		boolean isOwner = a.seller.equals(myUuid);
+		long balance = economy.balance(player.getUUID());
+		long currentPrice = a.highBid > 0 ? a.highBid : a.startPrice;
+		long minNextBid = auctions.minBid(a);
+		long nowMs = System.currentTimeMillis();
+		long timeLeftMs = Math.max(0L, a.endsAt - nowMs);
+		long minutesLeft = timeLeftMs / 60_000L;
+		String timeStr = minutesLeft >= 60 ? (minutesLeft / 60) + " ชม. " + (minutesLeft % 60) + " นาที" : minutesLeft + " นาที";
+
+		// Slot 0: Back button
+		ItemStack back = new ItemStack(Items.ARROW);
+		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE103 < กลับไปตลาดประมูล"));
+		container.setItem(0, back);
+
+		// Slot 4: Item display
+		ItemStack displayStack;
+		if (a.isCellAuction()) {
+			displayStack = new ItemStack(Items.FILLED_MAP);
+			displayStack.set(DataComponents.CUSTOM_NAME, Component.literal("§eประมูลเขตที่ดิน " + a.cellId));
+		} else {
+			var decoded = ItemCodecs.decode(a.itemJson, player.level().registryAccess());
+			displayStack = decoded.orElseGet(() -> new ItemStack(Items.PAPER));
+			if (a.count > 1) displayStack.setCount(Math.min(a.count, displayStack.getMaxStackSize()));
+		}
+		List<Component> lore = new ArrayList<>();
+		lore.add(Component.literal("§7------------------------"));
+		lore.add(Component.literal("§eผู้ลงประมูล: §f" + a.sellerName));
+		lore.add(Component.literal("§eราคาเริ่มต้น: §7" + a.startPrice + " " + currency));
+		lore.add(Component.literal("§eราคาประมูลปัจจุบัน: §6" + currentPrice + " " + currency));
+		lore.add(Component.literal("§eผู้เสนอราคาสูงสุด: §f" + (a.highBidderName != null ? a.highBidderName : "ยังไม่มีผู้ประมูล")));
+		lore.add(Component.literal("§eราคาขั้นต่ำครั้งถัดไป: §a" + minNextBid + " " + currency));
+		lore.add(Component.literal("§eเวลาที่เหลือ: §f" + timeStr));
+		lore.add(Component.literal("§7------------------------"));
+		displayStack.set(DataComponents.LORE, new ItemLore(lore));
+		container.setItem(4, displayStack);
+
+		// Slot 8: Balance info
+		ItemStack balItem = new ItemStack(Items.GOLD_INGOT);
+		balItem.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE108 [ยอดเงินของคุณ]: " + balance + " " + currency));
+		container.setItem(8, balItem);
+
+		if (isOwner) {
+			// Owner controls: End auction now and settle to highest bidder
+			ItemStack closeBtn = new ItemStack(Items.NETHER_STAR);
+			closeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE105 [ปิดประมูลทันที] ขายให้คนที่จ่ายสูงสุด"));
+			List<Component> closeLore = new ArrayList<>();
+			closeLore.add(Component.literal("§7------------------------"));
+			if (a.highBidder != null) {
+				closeLore.add(Component.literal("§aผู้ชนะที่จะได้รับ: §f" + a.highBidderName));
+				closeLore.add(Component.literal("§aเงินที่คุณจะได้รับ: §6" + a.highBid + " " + currency));
+				closeLore.add(Component.literal("§e[คลิก] เพื่อยุติการประมูลทันทีและส่งมอบสินค้า"));
+			} else {
+				closeLore.add(Component.literal("§7ยังไม่มีผู้ใดเสนอราคา"));
+				closeLore.add(Component.literal("§c[คลิก] เพื่อยกเลิกการประมูลและรับของคืนเข้า /mail"));
+			}
+			closeLore.add(Component.literal("§7------------------------"));
+			closeBtn.set(DataComponents.LORE, new ItemLore(closeLore));
+			container.setItem(13, closeBtn);
+		} else {
+			boolean isTopBidder = myUuid.equals(a.highBidder);
+			if (isTopBidder) {
+				ItemStack topItem = new ItemStack(Items.EMERALD_BLOCK);
+				topItem.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE105 คุณเป็นผู้เสนอราคาสูงสุดอยู่แล้ว"));
+				topItem.set(DataComponents.LORE, new ItemLore(List.of(
+						Component.literal("§7ยอดเสนอราคาของคุณ: §6" + a.highBid + " " + currency),
+						Component.literal("§7รอผู้เล่นอื่นเสนอราคาแข่ง หรือรอเจ้าของกดปิดประมูล")
+				)));
+				container.setItem(13, topItem);
+			} else {
+				// Choices to increase bid:
+				// Option 1: Minimum required bid (Slot 10)
+				ItemStack b1 = new ItemStack(Items.GOLD_NUGGET);
+				b1.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE108 เสนอราคาขั้นต่ำ (" + minNextBid + " " + currency + ")"));
+				b1.set(DataComponents.LORE, new ItemLore(List.of(
+						Component.literal("§7คลิกเพื่อเสนอราคาขั้นต่ำทันที: §6" + minNextBid + " " + currency)
+				)));
+				container.setItem(10, b1);
+
+				// Option 2: Min + 500 (Slot 12)
+				long bid2 = minNextBid + 500L;
+				ItemStack b2 = new ItemStack(Items.GOLD_INGOT);
+				b2.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE108 เพิ่มอีก +500 (" + bid2 + " " + currency + ")"));
+				b2.set(DataComponents.LORE, new ItemLore(List.of(
+						Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid2 + " " + currency)
+				)));
+				container.setItem(12, b2);
+
+				// Option 3: Min + 1,000 (Slot 14)
+				long bid3 = minNextBid + 1_000L;
+				ItemStack b3 = new ItemStack(Items.EMERALD);
+				b3.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE108 เพิ่มอีก +1,000 (" + bid3 + " " + currency + ")"));
+				b3.set(DataComponents.LORE, new ItemLore(List.of(
+						Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid3 + " " + currency)
+				)));
+				container.setItem(14, b3);
+
+				// Option 4: Min + 5,000 (Slot 16)
+				long bid4 = minNextBid + 5_000L;
+				ItemStack b4 = new ItemStack(Items.DIAMOND);
+				b4.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE108 เพิ่มอีก +5,000 (" + bid4 + " " + currency + ")"));
+				b4.set(DataComponents.LORE, new ItemLore(List.of(
+						Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid4 + " " + currency)
+				)));
+				container.setItem(16, b4);
+			}
+
+			// Slot 22: Custom bid in chat
+			ItemStack custom = new ItemStack(Items.NAME_TAG);
+			custom.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE109 [กำหนดราคาเองในแชท]"));
+			custom.set(DataComponents.LORE, new ItemLore(List.of(
+					Component.literal("§7หากต้องการเสนอราคาอื่น สามารถพิมพ์ในแชท:"),
+					Component.literal("§a/ah bid " + a.id + " <จำนวนเงิน>"),
+					Component.literal("§7(ยอดเงินต้องไม่ต่ำกว่า " + minNextBid + " " + currency + ")")
+			)));
+			container.setItem(22, custom);
+		}
+
+		VirtualChestMenu.open(
+				player,
+				Component.literal("§0เสนอราคา: " + (a.isCellAuction() ? "เขต " + a.cellId : a.label)),
+				3,
+				true,
+				container,
+				(slotIndex, button, input, sp) -> {
+					if (slotIndex == 0) {
+						open(sp, auctions, economy, currency, returnPage, returnMode);
+					} else if (isOwner && slotIndex == 13) {
+						String topName = a.highBidderName;
+						long topBid = a.highBid;
+						AuctionManager.Result res = auctions.closeByOwner(sp.getUUID(), a.id);
+						if (res == AuctionManager.Result.OK) {
+							if (topName != null && topBid > 0) {
+								sp.sendSystemMessage(Component.literal("§aปิดประมูลสำเร็จ! ขายให้ " + topName + " ในราคา " + topBid + " " + currency));
+							} else {
+								sp.sendSystemMessage(Component.literal("§eปิดประมูลสำเร็จ! ยังไม่มีผู้เสนอราคา สินค้าถูกส่งคืนเข้ากล่อง /mail"));
+							}
+							open(sp, auctions, economy, currency, returnPage, returnMode);
+						} else {
+							sp.sendSystemMessage(Component.literal("§cไม่สามารถปิดประมูลได้: " + res));
+						}
+					} else if (!isOwner && (slotIndex == 10 || slotIndex == 12 || slotIndex == 14 || slotIndex == 16)) {
+						long targetBid = minNextBid;
+						if (slotIndex == 12) targetBid += 500L;
+						else if (slotIndex == 14) targetBid += 1_000L;
+						else if (slotIndex == 16) targetBid += 5_000L;
+
+						long bal = economy.balance(sp.getUUID());
+						if (bal < targetBid) {
+							sp.sendSystemMessage(Component.literal("§cเงินของคุณไม่พอ ต้องการ " + targetBid + " " + currency + " (คุณมี " + bal + " " + currency + ")"));
+							return;
+						}
+						AuctionManager.BidOutcome bo = auctions.bid(sp.getUUID(), sp.getGameProfile().name(), a.id, targetBid);
+						if (bo.result() == AuctionManager.Result.OK) {
+							sp.sendSystemMessage(Component.literal("§aเสนอราคาประมูลสำเร็จ! ยอดเสนอ " + targetBid + " " + currency));
+							AuctionManager.Auction updated = auctions.byId(a.id);
+							if (updated != null && updated.isActive()) {
+								openAuctionDetail(sp, updated, auctions, economy, currency, returnPage, returnMode);
+							} else {
+								open(sp, auctions, economy, currency, returnPage, returnMode);
+							}
+						} else {
+							sp.sendSystemMessage(Component.literal("§cประมูลไม่ได้: " + auctionError(bo.result())));
+							AuctionManager.Auction updated = auctions.byId(a.id);
+							if (updated != null && updated.isActive()) {
+								openAuctionDetail(sp, updated, auctions, economy, currency, returnPage, returnMode);
+							} else {
+								open(sp, auctions, economy, currency, returnPage, returnMode);
+							}
+						}
 					}
 				},
 				null
@@ -224,12 +381,11 @@ public final class AuctionGui {
 			lore.add(Component.literal("§7------------------------"));
 			lore.add(Component.literal("§eราคาประมูลปัจจุบัน: §6" + currentPrice + " " + currency));
 			lore.add(Component.literal("§eผู้เสนอราคาสูงสุด: §f" + (a.highBidderName != null ? a.highBidderName : "ยังไม่มี")));
-			if (a.buyout != null) lore.add(Component.literal("§eราคาซื้อทันที: §a" + a.buyout + " " + currency));
 			lore.add(Component.literal("§7------------------------"));
-			if (a.highBidder == null) {
-				lore.add(Component.literal("§c[คลิกเพื่อยกเลิก] และรับของคืนเข้า /mail"));
+			if (a.highBidder != null) {
+				lore.add(Component.literal("§6[คลิก] เพื่อดูรายละเอียด & ปิดประมูลให้คนที่จ่ายสูงสุด"));
 			} else {
-				lore.add(Component.literal("§7มีผู้เสนอราคาแล้ว ไม่สามารถยกเลิกได้"));
+				lore.add(Component.literal("§c[คลิก] เพื่อดูรายละเอียด & ยกเลิกรายการ"));
 			}
 
 			displayStack.set(DataComponents.LORE, new ItemLore(lore));
@@ -237,7 +393,7 @@ public final class AuctionGui {
 		}
 
 		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปตลาดผู้เล่น"));
+		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE103 < กลับไปตลาดผู้เล่น"));
 		container.setItem(45, back);
 
 		VirtualChestMenu.open(
@@ -250,14 +406,7 @@ public final class AuctionGui {
 					if (slotIndex == 45) {
 						open(sp, auctions, economy, currency, 0, ViewMode.ALL);
 					} else if (slotIndex >= 0 && slotIndex < Math.min(mine.size(), PAGE_SIZE)) {
-						AuctionManager.Auction a = mine.get(slotIndex);
-						AuctionManager.Result r = auctions.cancel(sp.getUUID(), false, a.id);
-						if (r == AuctionManager.Result.OK) {
-							sp.sendSystemMessage(Component.literal("§aยกเลิกรายการประมูลสำเร็จ! ของถูกส่งคืนเข้า /mail แล้ว"));
-							openMyAuctions(sp, auctions, economy, currency);
-						} else {
-							sp.sendSystemMessage(Component.literal("§cยกเลิกไม่ได้: " + auctionError(r)));
-						}
+						openAuctionDetail(sp, mine.get(slotIndex), auctions, economy, currency, 0, ViewMode.ALL);
 					}
 				},
 				null
@@ -269,14 +418,17 @@ public final class AuctionGui {
 			case OWN_AUCTION -> "ประมูลรายการของตัวเองไม่ได้";
 			case ALREADY_HIGHEST -> "คุณเป็นผู้เสนอราคาสูงสุดอยู่แล้ว";
 			case BID_TOO_LOW -> "ราคาเสนอต่ำเกินไป";
-			case USE_BUYOUT -> "ต้องใช้การซื้อทันที";
+			case USE_BUYOUT -> "ต้องใช้การเสนอราคา";
 			case LIMIT_REACHED -> "ลงขายเกินจำนวนจำกัดแล้ว";
 			case INSUFFICIENT -> "เงินในบัญชีไม่พอ";
 			case FROZEN -> "บัญชีถูกระงับ";
-			case HAS_BIDS -> "มีผู้เสนอราคาแล้ว ไม่สามารถยกเลิกได้";
 			case CLOSED -> "รายการประมูลปิดแล้ว";
 			case NOT_FOUND -> "ไม่พบรายการประมูลนี้";
+			case DISABLED -> "ระบบตลาดปิดปรับปรุง";
 			case ALREADY_OWNER -> "คุณเป็นเจ้าของเขตนี้อยู่แล้ว";
+			case FORBIDDEN -> "ไม่มีสิทธิ์จัดการรายการนี้";
+			case BAD_REQUEST -> "ข้อมูลไม่ถูกต้อง";
+			case IO_ERROR -> "เกิดข้อผิดพลาดในการบันทึกข้อมูล";
 			default -> "เกิดข้อผิดพลาด (" + r + ")";
 		};
 	}

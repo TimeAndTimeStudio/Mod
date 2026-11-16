@@ -232,7 +232,7 @@ public final class AuctionManager {
 			a.count = count;
 			a.label = label;
 			a.startPrice = startPrice;
-			a.buyout = buyout;
+			a.buyout = null;
 			a.highBid = 0;
 			a.createdAt = nowMs;
 			a.endsAt = nowMs + duration * 3_600_000L;
@@ -295,7 +295,7 @@ public final class AuctionManager {
 			a.count = 1;
 			a.label = "เขต " + canonical;
 			a.startPrice = startPrice;
-			a.buyout = buyout;
+			a.buyout = null;
 			a.highBid = 0;
 			a.createdAt = nowMs;
 			a.endsAt = nowMs + duration * 3_600_000L;
@@ -444,7 +444,7 @@ public final class AuctionManager {
 			a.count = p.count();
 			a.label = p.label();
 			a.startPrice = p.startPrice();
-			a.buyout = p.buyout();
+			a.buyout = null;
 			a.highBid = 0;
 			a.createdAt = nowMs;
 			a.endsAt = nowMs + hours * 3_600_000L;
@@ -487,9 +487,6 @@ public final class AuctionManager {
 			}
 			long min = minBid(a);
 			if (amount < min) return new BidOutcome(Result.BID_TOO_LOW, min, a.highBid, a.endsAt);
-			if (a.buyout != null && amount >= a.buyout) {
-				return new BidOutcome(Result.USE_BUYOUT, min, a.highBid, a.endsAt);
-			}
 			if (amount > EconomyManager.MAX_MONEY) return new BidOutcome(Result.BAD_REQUEST, min, a.highBid, a.endsAt);
 
 			List<Move> moves = new ArrayList<>();
@@ -512,6 +509,23 @@ public final class AuctionManager {
 			}
 			save();
 			return new BidOutcome(Result.OK, min, a.highBid, a.endsAt);
+		}
+	}
+
+	// ---- close / settle early by owner -------------------------------------
+
+	public Result closeByOwner(UUID seller, String auctionId) {
+		synchronized (Market.LOCK) {
+			if (disabled) return Result.DISABLED;
+			Auction a = byId(auctionId);
+			if (a == null) return Result.NOT_FOUND;
+			if (!a.isActive()) return Result.CLOSED;
+			if (!a.seller.equals(seller.toString())) return Result.FORBIDDEN;
+			long nowMs = now.getAsLong();
+			a.endsAt = nowMs;
+			settle(a, nowMs);
+			save();
+			return Result.OK;
 		}
 	}
 
