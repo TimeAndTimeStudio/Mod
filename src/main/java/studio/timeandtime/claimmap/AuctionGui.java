@@ -256,18 +256,26 @@ public final class AuctionGui {
 			cancelLore.add(Component.literal("§7------------------------"));
 			if (a.highBidder != null) {
 				cancelLore.add(Component.literal("§eมีผู้เสนอราคาสูงสุด: §f" + a.highBidderName + " (" + a.highBid + " " + currency + ")"));
-				cancelLore.add(Component.literal("§7หากกดยกเลิก ระบบจะคืนเงินเต็มจำนวนให้ผู้เสนอราคา"));
+				cancelLore.add(Component.literal("§7มีผู้เสนอราคาแล้ว ไม่สามารถยกเลิกได้"));
+				cancelLore.add(Component.literal("§7รอเวลาสิ้นสุด ระบบจะส่งเงินให้คุณอัตโนมัติ"));
+				cancelLore.add(Component.literal("§7------------------------"));
+				ItemStack lockedBtn = GuiButtons.button(
+						GuiButtons.TAG,
+						Component.literal("§6[กำลังประมูลแข่งขัน]"),
+						cancelLore
+				);
+				container.setItem(13, lockedBtn);
 			} else {
 				cancelLore.add(Component.literal("§7ยังไม่มีผู้ใดเสนอราคา"));
+				cancelLore.add(Component.literal("§c[คลิก] เพื่อยกเลิกการประมูลและรับของคืนเข้า /mail"));
+				cancelLore.add(Component.literal("§7------------------------"));
+				ItemStack cancelBtn = GuiButtons.button(
+						GuiButtons.ABANDON,
+						Component.literal("§c[ยกเลิกการประมูล]"),
+						cancelLore
+				);
+				container.setItem(13, cancelBtn);
 			}
-			cancelLore.add(Component.literal("§c[คลิก] เพื่อยกเลิกการประมูลและรับของคืนเข้า /mail"));
-			cancelLore.add(Component.literal("§7------------------------"));
-			ItemStack cancelBtn = GuiButtons.button(
-					GuiButtons.ABANDON,
-					Component.literal("§c[ยกเลิกการประมูล]"),
-					cancelLore
-			);
-			container.setItem(13, cancelBtn);
 		} else {
 			boolean isTopBidder = myUuid.equals(a.highBidder);
 			if (isTopBidder) {
@@ -341,10 +349,13 @@ public final class AuctionGui {
 					if (slotIndex == 0) {
 						open(sp, auctions, economy, currency, returnPage, returnMode);
 					} else if (isOwner && slotIndex == 13) {
-						AuctionManager.Result res = auctions.cancel(sp.getUUID(), false, a.id);
+						boolean isAdmin = sp.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN);
+						AuctionManager.Result res = auctions.cancel(sp.getUUID(), isAdmin, a.id);
 						if (res == AuctionManager.Result.OK) {
 							sp.sendSystemMessage(Component.literal("§aยกเลิกการประมูลสำเร็จ! สินค้า/โฉนดถูกส่งคืนเข้ากล่อง /mail"));
 							open(sp, auctions, economy, currency, returnPage, returnMode);
+						} else if (res == AuctionManager.Result.HAS_BIDS) {
+							sp.sendSystemMessage(Component.literal("§cมีผู้เสนอราคาแล้ว ไม่สามารถยกเลิกการประมูลได้"));
 						} else {
 							sp.sendSystemMessage(Component.literal("§cไม่สามารถยกเลิกการประมูลได้: " + res));
 						}

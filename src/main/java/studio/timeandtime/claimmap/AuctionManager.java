@@ -589,6 +589,7 @@ public final class AuctionManager {
 			if (a == null) return Result.NOT_FOUND;
 			if (!a.isActive()) return Result.CLOSED;
 			if (!admin && !a.seller.equals(actor.toString())) return Result.FORBIDDEN;
+			if (!admin && a.highBidder != null) return Result.HAS_BIDS;
 
 			if (a.highBidder != null && a.highBid > 0) {
 				TxResult r = economy.apply(List.of(new Move(Acct.escrow(a.id),
