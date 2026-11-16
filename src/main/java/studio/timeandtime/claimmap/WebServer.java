@@ -59,7 +59,7 @@ public final class WebServer {
 		this.landPrices = landPrices;
 	}
 	private static final Pattern STATIC_PATH =
-			Pattern.compile("^/(css|js|icons|img)/[A-Za-z0-9_./-]+$|^/favicon\\.png$");
+			Pattern.compile("^/(css|js|icons|img)/[A-Za-z0-9_./-]+$|^/favicon\\.png$|^/resourcepack\\.zip$");
 	private final LoginThrottle throttle = new LoginThrottle();
 	private final Map<String, Cached> idempotent = new ConcurrentHashMap<>();
 	private HttpServer server;
@@ -317,7 +317,7 @@ public final class WebServer {
 				handleAdminWorldsScan(ex);
 			}
 			default -> {
-				if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/icons/") || path.startsWith("/img/") || path.equals("/favicon.png")) {
+				if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/icons/") || path.startsWith("/img/") || path.equals("/favicon.png") || path.equals("/resourcepack.zip")) {
 					requireMethod(ex, method, "GET");
 					handleStatic(ex, path);
 				} else if (path.startsWith("/api/admin/")) {
@@ -417,15 +417,30 @@ public final class WebServer {
 		}
 		String rel = path.substring(1);
 		byte[] data;
-		InputStream resourceStream = WebServer.class.getResourceAsStream("/timesmp-web/" + rel);
-		if (resourceStream == null) {
-			resourceStream = WebServer.class.getResourceAsStream("/claimmap-web/" + rel);
-		}
-		try (InputStream in = resourceStream) {
-			if (in == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
-			data = in.readAllBytes();
-		} catch (IOException e) {
-			throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+		if (rel.equals("resourcepack.zip")) {
+			java.nio.file.Path diskRp = net.fabricmc.loader.api.FabricLoader.getInstance()
+					.getGameDir().resolve("resourcepack.zip");
+			if (java.nio.file.Files.exists(diskRp)) {
+				data = java.nio.file.Files.readAllBytes(diskRp);
+			} else {
+				InputStream in = WebServer.class.getResourceAsStream("/resourcepack.zip");
+				if (in == null) in = WebServer.class.getResourceAsStream("/timesmp-web/resourcepack.zip");
+				if (in == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+				try (in) {
+					data = in.readAllBytes();
+				}
+			}
+		} else {
+			InputStream resourceStream = WebServer.class.getResourceAsStream("/timesmp-web/" + rel);
+			if (resourceStream == null) {
+				resourceStream = WebServer.class.getResourceAsStream("/claimmap-web/" + rel);
+			}
+			try (InputStream in = resourceStream) {
+				if (in == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+				data = in.readAllBytes();
+			} catch (IOException e) {
+				throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
+			}
 		}
 		String type = contentType(rel);
 		if (type == null) throw new Json.ApiError(404, "not_found", "ไม่พบไฟล์ที่เรียก");
@@ -451,6 +466,7 @@ public final class WebServer {
 		if (rel.endsWith(".png")) return "image/png";
 		if (rel.endsWith(".svg")) return "image/svg+xml";
 		if (rel.endsWith(".html")) return "text/html; charset=utf-8";
+		if (rel.endsWith(".zip")) return "application/zip";
 		return null;
 	}
 

@@ -51,21 +51,21 @@ public final class ClaimMapGui {
 				ItemStack stack;
 				if (isPlayerHere) {
 					stack = itemById("minecraft:orange_glazed_terracotta");
-					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§6★ ตำแหน่งที่คุณยืนอยู่: ช่อง " + cellId));
+					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE10F ตำแหน่งที่คุณยืนอยู่: ช่อง " + cellId));
 				} else if (isCommon) {
 					stack = itemById("minecraft:gray_stained_glass_pane");
-					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§8พื้นที่ส่วนกลาง: ช่อง " + cellId));
+					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§8\uE108 พื้นที่ส่วนกลาง: ช่อง " + cellId));
 				} else if (cellData != null) {
 					if (cellData.isOwner(myUuid)) {
 						stack = itemById("minecraft:lime_stained_glass_pane");
-						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§a✔ เขตของคุณ: ช่อง " + cellId));
+						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE10A เขตของคุณ: ช่อง " + cellId));
 					} else {
 						stack = itemById("minecraft:red_stained_glass_pane");
-						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§c✖ เขตของ " + cellData.ownerName + ": ช่อง " + cellId));
+						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§c\uE10A เขตของ " + cellData.ownerName + ": ช่อง " + cellId));
 					}
 				} else {
 					stack = itemById("minecraft:light_blue_stained_glass_pane");
-					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§f⬜ เขตว่าง: ช่อง " + cellId));
+					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§f\uE10B เขตว่าง: ช่อง " + cellId));
 				}
 
 				List<Component> lore = new ArrayList<>();
@@ -105,36 +105,36 @@ public final class ClaimMapGui {
 
 		// Navigation buttons
 		ItemStack west = new ItemStack(Items.ARROW);
-		west.set(DataComponents.CUSTOM_NAME, Component.literal("§e◀ เลื่อนไปทางทิศตะวันตก (West)"));
+		west.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE104 เลื่อนไปทางทิศตะวันตก (West)"));
 		container.setItem(45, west);
 
 		ItemStack north = new ItemStack(Items.ARROW);
-		north.set(DataComponents.CUSTOM_NAME, Component.literal("§e▲ เลื่อนไปทางทิศเหนือ (North)"));
+		north.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE105 เลื่อนไปทางทิศเหนือ (North)"));
 		container.setItem(46, north);
 
 		ItemStack south = new ItemStack(Items.ARROW);
-		south.set(DataComponents.CUSTOM_NAME, Component.literal("§e▼ เลื่อนไปทางทิศใต้ (South)"));
+		south.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE106 เลื่อนไปทางทิศใต้ (South)"));
 		container.setItem(47, south);
 
 		ItemStack east = new ItemStack(Items.ARROW);
-		east.set(DataComponents.CUSTOM_NAME, Component.literal("§e▶ เลื่อนไปทางทิศตะวันออก (East)"));
+		east.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE103 เลื่อนไปทางทิศตะวันออก (East)"));
 		container.setItem(48, east);
 
 		ItemStack center = new ItemStack(Items.COMPASS);
-		center.set(DataComponents.CUSTOM_NAME, Component.literal("§6🎯 กลับมายังตำแหน่งปัจจุบัน"));
+		center.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE10F กลับมายังตำแหน่งปัจจุบัน"));
 		container.setItem(49, center);
 
 		ItemStack claimHere = new ItemStack(Items.EMERALD);
-		claimHere.set(DataComponents.CUSTOM_NAME, Component.literal("§a➕ จองเขตที่ยืนอยู่ทันที"));
+		claimHere.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE107 จองเขตที่ยืนอยู่ทันที"));
 		container.setItem(50, claimHere);
 
 		ItemStack close = new ItemStack(Items.BARRIER);
-		close.set(DataComponents.CUSTOM_NAME, Component.literal("§c🚪 ปิดแผนที่"));
+		close.set(DataComponents.CUSTOM_NAME, Component.literal("§c\uE108 ปิดแผนที่"));
 		container.setItem(53, close);
 
 		VirtualChestMenu.open(
 				player,
-				Component.literal("§0แผนที่เขต (ศูนย์กลาง: " + centerCx + "," + centerCz + ")"),
+				Component.literal("§0\uE109 แผนที่เขต (ศูนย์กลาง: " + centerCx + "," + centerCz + ")"),
 				6,
 				true,
 				container,

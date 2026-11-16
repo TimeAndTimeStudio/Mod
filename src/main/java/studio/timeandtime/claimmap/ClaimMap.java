@@ -90,6 +90,7 @@ public class ClaimMap implements ModInitializer {
 	public void onInitialize() {
 		INSTANCE = this;
 		seedDefaultServerIconIfMissing();
+		seedDefaultResourcePackIfMissing();
 
 		config = new ClaimMapConfig();
 		config.load();
@@ -250,6 +251,24 @@ public class ClaimMap implements ModInitializer {
 			}
 		} catch (Exception e) {
 			LOGGER.warn("[timesmp] Could not seed default server-icon.png: {}", e.getMessage());
+		}
+	}
+
+	private static void seedDefaultResourcePackIfMissing() {
+		try {
+			java.nio.file.Path rpFile = net.fabricmc.loader.api.FabricLoader.getInstance()
+					.getGameDir().resolve("resourcepack.zip");
+			if (java.nio.file.Files.exists(rpFile)) return;
+			try (var in = ClaimMap.class.getResourceAsStream("/resourcepack.zip")) {
+				if (in != null) {
+					java.nio.file.Files.copy(in, rpFile);
+					LOGGER.info("[timesmp] Seeded default resourcepack.zip for server resource pack");
+				} else {
+					LOGGER.warn("[timesmp] Could not find /resourcepack.zip in mod resources");
+				}
+			}
+		} catch (Exception e) {
+			LOGGER.warn("[timesmp] Could not seed default resourcepack.zip: {}", e.getMessage());
 		}
 	}
 }

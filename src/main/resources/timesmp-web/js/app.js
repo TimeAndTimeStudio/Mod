@@ -888,8 +888,6 @@ async function pageMap(view) {
     dialog.append(form);
     dialog.showModal();
   }
-    dialog.showModal();
-  }
 
   let down = null;
   canvas.addEventListener('pointerdown', (event) => {
