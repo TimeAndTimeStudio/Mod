@@ -89,50 +89,44 @@ public final class ClaimMapGui {
 		}
 
 		// Info item
-		ItemStack info = new ItemStack(Items.BOOK);
-		info.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ข้อมูล] การถือครองเขต"));
-		info.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7ถือครองแล้ว: §f" + myClaimCount + " ช่อง"),
-				Component.literal("§7สิทธิ์ฟรี: §a" + Math.min(myClaimCount, config.freeCellsPerPlayer) + "/" + config.freeCellsPerPlayer + " ช่อง (ซื้อเพิ่มได้ไม่จำกัด)"),
-				Component.literal("§7ราคาที่ดินปัจจุบัน: §6" + landPrice + " " + config.currencyName),
-				Component.literal("§7เงินของคุณ: §6" + economy.balance(player.getUUID()) + " " + config.currencyName)
-		)));
+		ItemStack info = GuiButtons.button(
+				GuiButtons.BRAND,
+				Component.literal("§e[ข้อมูล] การถือครองเขต"),
+				List.of(
+						Component.literal("§7ถือครองแล้ว: §f" + myClaimCount + " ช่อง"),
+						Component.literal("§7สิทธิ์ฟรี: §a" + Math.min(myClaimCount, config.freeCellsPerPlayer) + "/" + config.freeCellsPerPlayer + " ช่อง (ซื้อเพิ่มได้ไม่จำกัด)"),
+						Component.literal("§7ราคาที่ดินปัจจุบัน: §6" + landPrice + " " + config.currencyName),
+						Component.literal("§7เงินของคุณ: §6" + economy.balance(player.getUUID()) + " " + config.currencyName)
+				)
+		);
 		container.setItem(0, info);
 
-		// Navigation buttons
-		ItemStack west = new ItemStack(Items.ARROW);
-		west.set(DataComponents.CUSTOM_NAME, Component.literal("§eตะวันตก (West)"));
+		// Navigation buttons (Custom Icon Items)
+		ItemStack west = GuiButtons.button(GuiButtons.NAV_WEST, Component.literal("§eตะวันตก (West)"), List.of());
 		container.setItem(45, west);
 
-		ItemStack north = new ItemStack(Items.ARROW);
-		north.set(DataComponents.CUSTOM_NAME, Component.literal("§eเหนือ (North)"));
+		ItemStack north = GuiButtons.button(GuiButtons.NAV_NORTH, Component.literal("§eเหนือ (North)"), List.of());
 		container.setItem(46, north);
 
-		ItemStack south = new ItemStack(Items.ARROW);
-		south.set(DataComponents.CUSTOM_NAME, Component.literal("§eใต้ (South)"));
+		ItemStack south = GuiButtons.button(GuiButtons.NAV_SOUTH, Component.literal("§eใต้ (South)"), List.of());
 		container.setItem(47, south);
 
-		ItemStack east = new ItemStack(Items.ARROW);
-		east.set(DataComponents.CUSTOM_NAME, Component.literal("§eตะวันออก (East)"));
+		ItemStack east = GuiButtons.button(GuiButtons.NAV_EAST, Component.literal("§eตะวันออก (East)"), List.of());
 		container.setItem(48, east);
 
-		ItemStack center = new ItemStack(Items.COMPASS);
-		center.set(DataComponents.CUSTOM_NAME, Component.literal("§6เลื่อนไปยังตำแหน่งของคุณ (" + playerCx + ", " + playerCz + ")"));
-		center.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7คลิกเพื่อเลื่อนศูนย์กลางแผนที่มาที่ตัวคุณ")
-		)));
+		ItemStack center = GuiButtons.button(
+				GuiButtons.NAV_CENTER,
+				Component.literal("§6เลื่อนไปยังตำแหน่งของคุณ (" + playerCx + ", " + playerCz + ")"),
+				List.of(Component.literal("§7คลิกเพื่อเลื่อนศูนย์กลางแผนที่มาที่ตัวคุณ"))
+		);
 		container.setItem(49, center);
 
-		ItemStack claimHere = new ItemStack(Items.GRASS_BLOCK);
-		claimHere.set(DataComponents.CUSTOM_NAME, Component.literal("§aจองเขตที่ยืนอยู่ทันที"));
+		ItemStack claimHere = GuiButtons.button(
+				GuiButtons.CLAIM,
+				Component.literal("§aจองเขตที่ยืนอยู่ทันที"),
+				List.of(Component.literal("§7คลิกเพื่อจับจองแปลงที่ดิน ณ พิกัดปัจจุบันของคุณ"))
+		);
 		container.setItem(50, claimHere);
-
-		ItemStack close = new ItemStack(Items.IRON_DOOR);
-		close.set(DataComponents.CUSTOM_NAME, Component.literal("§cปิดแผนที่"));
-		close.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7คลิกเพื่อปิดหน้าต่าง หรือกดปุ่ม Esc")
-		)));
-		container.setItem(53, close);
 
 		VirtualChestMenu.open(
 				player,
@@ -159,8 +153,6 @@ public final class ClaimMapGui {
 						if (server != null) {
 							server.getCommands().performPrefixedCommand(sp.createCommandSourceStack(), "claim");
 						}
-					} else if (slotIndex == 53) { // Close
-						sp.closeContainer();
 					} else {
 						int r = slotIndex / 9;
 						int c = slotIndex % 9;
@@ -236,49 +228,60 @@ public final class ClaimMapGui {
 		boolean hasAuction = ClaimMap.instance() != null && ClaimMap.instance().auctions() != null
 				&& ClaimMap.instance().auctions().hasActiveCellAuction(cell.id);
 
-		ItemStack cellInfo = new ItemStack(Items.FILLED_MAP);
-		cellInfo.set(DataComponents.CUSTOM_NAME, Component.literal("§6เขต " + cell.id));
-		cellInfo.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§eเจ้าของ: §f" + cell.ownerName),
-				Component.literal("§eสมาชิก: §7" + (cell.members == null || cell.members.isEmpty() ? "ไม่มี" : cell.members.size() + " คน")),
-				Component.literal("§7พิกัด: " + (cell.cx * config.cellSize) + ", " + (cell.cz * config.cellSize)),
-				hasAuction ? Component.literal("§a[ประมูล] กำลังเปิดประมูลอยู่") : Component.literal("§7สถานะ: ปกติ")
-		)));
+		ItemStack cellInfo = GuiButtons.button(
+				GuiButtons.MAP,
+				Component.literal("§6เขต " + cell.id),
+				List.of(
+						Component.literal("§eเจ้าของ: §f" + cell.ownerName),
+						Component.literal("§eสมาชิก: §7" + (cell.members == null || cell.members.isEmpty() ? "ไม่มี" : cell.members.size() + " คน")),
+						Component.literal("§7พิกัด: " + (cell.cx * config.cellSize) + ", " + (cell.cz * config.cellSize)),
+						hasAuction ? Component.literal("§a[ประมูล] กำลังเปิดประมูลอยู่") : Component.literal("§7สถานะ: ปกติ")
+				)
+		);
 		container.setItem(4, cellInfo);
 
-		ItemStack abandon = new ItemStack(Items.LAVA_BUCKET);
-		abandon.set(DataComponents.CUSTOM_NAME, Component.literal("§c[!] ปล่อยสิทธิ์เขตนี้"));
-		abandon.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
-				Component.literal("§cไม่สามารถปล่อยเขตได้เนื่องจากกำลังเปิดประมูลอยู่")
-		) : List.of(
-				Component.literal("§7ของในเขตจะไม่ถูกลบ แต่พื้นที่จะกลับเป็นที่ว่าง"),
-				Component.literal("§cคลิกเพื่อปล่อยเขตทันที")
-		)));
+		ItemStack abandon = GuiButtons.button(
+				GuiButtons.ABANDON,
+				Component.literal("§c[!] ปล่อยสิทธิ์เขตนี้"),
+				hasAuction ? List.of(
+						Component.literal("§cไม่สามารถปล่อยเขตได้เนื่องจากกำลังเปิดประมูลอยู่")
+				) : List.of(
+						Component.literal("§7ของในเขตจะไม่ถูกลบ แต่พื้นที่จะกลับเป็นที่ว่าง"),
+						Component.literal("§cคลิกเพื่อปล่อยเขตทันที")
+				)
+		);
 		container.setItem(11, abandon);
 
-		ItemStack warp = new ItemStack(Items.ENDER_PEARL);
-		warp.set(DataComponents.CUSTOM_NAME, Component.literal("§b[วาร์ป] เทเลพอร์ตไปยังเขตนี้"));
-		warp.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7สุ่มตำแหน่ง X, Z ในเขตอย่างปลอดภัย"),
-				Component.literal("§7คำนวณความสูง Y อัตโนมัติไม่ให้ติดบล็อก"),
-				Component.literal("§bคลิกเพื่อวาร์ปทันที")
-		)));
+		ItemStack warp = GuiButtons.button(
+				GuiButtons.WARP,
+				Component.literal("§b[วาร์ป] เทเลพอร์ตไปยังเขตนี้"),
+				List.of(
+						Component.literal("§7สุ่มตำแหน่ง X, Z ในเขตอย่างปลอดภัย"),
+						Component.literal("§7คำนวณความสูง Y อัตโนมัติไม่ให้ติดบล็อก"),
+						Component.literal("§bคลิกเพื่อวาร์ปทันที")
+				)
+		);
 		container.setItem(13, warp);
 
-		ItemStack auction = new ItemStack(Items.GOLD_INGOT);
-		auction.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ประมูล] เปิดประมูลเขตนี้"));
-		auction.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
-				Component.literal("§aเขตนี้กำลังเปิดประมูลอยู่แล้วในตลาด /ah"),
-				Component.literal("§7คุณสามารถตรวจสอบสถานะได้ที่คำสั่ง /ah")
-		) : List.of(
-				Component.literal("§7คลิกเพื่อเปิดประมูลเขตนี้ (ระยะเวลา 24 ชม.)"),
-				Component.literal("§7หรือกำหนดราคาเองด้วยคำสั่ง:"),
-				Component.literal("§e/claim auction <ราคาเริ่ม> [ชั่วโมง]")
-		)));
+		ItemStack auction = GuiButtons.button(
+				GuiButtons.GAVEL,
+				Component.literal("§e[ประมูล] เปิดประมูลเขตนี้"),
+				hasAuction ? List.of(
+						Component.literal("§aเขตนี้กำลังเปิดประมูลอยู่แล้วในตลาด /ah"),
+						Component.literal("§7คุณสามารถตรวจสอบสถานะได้ที่คำสั่ง /ah")
+				) : List.of(
+						Component.literal("§7คลิกเพื่อเปิดประมูลเขตนี้ (ระยะเวลา 24 ชม.)"),
+						Component.literal("§7หรือกำหนดราคาเองด้วยคำสั่ง:"),
+						Component.literal("§e/claim auction <ราคาเริ่ม> [ชั่วโมง]")
+				)
+		);
 		container.setItem(15, auction);
 
-		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปยังแผนที่"));
+		ItemStack back = GuiButtons.button(
+				GuiButtons.BACK,
+				Component.literal("§e< กลับไปยังแผนที่"),
+				List.of()
+		);
 		container.setItem(22, back);
 
 		VirtualChestMenu.open(

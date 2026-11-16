@@ -50,56 +50,64 @@ public final class SellGui {
 		}
 
 		// Slot 47: Sign - Information
-		ItemStack sign = new ItemStack(Items.OAK_SIGN);
-		sign.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ช่องขายไอเท็มเข้าร้าน] (ช่อง 1-45)"));
-		sign.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7วางไอเท็มที่ต้องการขายในช่อง 1-45 ด้านบน"),
-				Component.literal("§7เมื่อปิดหน้าต่าง ระบบจะขายให้เซิร์ฟเวอร์ทันที"),
-				Component.literal("§aเงินจะโอนเข้ากระเป๋าของคุณอัตโนมัติ")
-		)));
+		ItemStack sign = GuiButtons.button(
+				GuiButtons.BRAND,
+				Component.literal("§e[ช่องขายไอเท็มเข้าร้าน] (ช่อง 1-45)"),
+				List.of(
+						Component.literal("§7วางไอเท็มที่ต้องการขายในช่อง 1-45 ด้านบน"),
+						Component.literal("§7เมื่อปิดหน้าต่าง ระบบจะขายให้เซิร์ฟเวอร์ทันที"),
+						Component.literal("§aเงินจะโอนเข้ากระเป๋าของคุณอัตโนมัติ")
+				)
+		);
 		container.setItem(47, sign);
 
 		// Slot 48: Price check shortcut
-		ItemStack priceBook = new ItemStack(Items.BOOK);
-		priceBook.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ราคากลาง] ดูราคารับซื้อร้านค้า (/price)"));
-		priceBook.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7คลิกเพื่อเปิดหน้าต่างเช็คราคากลาง"),
-				Component.literal("§eดูราคาขาย, ราคาซื้อ และความต้องการตลาด")
-		)));
+		ItemStack priceBook = GuiButtons.button(
+				GuiButtons.TAG,
+				Component.literal("§b[ราคากลาง] ดูราคารับซื้อร้านค้า (/price)"),
+				List.of(
+						Component.literal("§7คลิกเพื่อเปิดหน้าต่างเช็คราคากลาง"),
+						Component.literal("§eดูราคาขาย, ราคาซื้อ และความต้องการตลาด")
+				)
+		);
 		container.setItem(48, priceBook);
 
 		// Slot 49: Player Balance
 		long balance = economy.balance(player.getUUID());
-		ItemStack gold = new ItemStack(Items.GOLD_INGOT);
-		gold.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency));
-		gold.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7ยอดเงินคงเหลือปัจจุบันของคุณ")
-		)));
+		ItemStack gold = GuiButtons.button(
+				GuiButtons.COIN,
+				Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency),
+				List.of(Component.literal("§7ยอดเงินคงเหลือปัจจุบันของคุณ"))
+		);
 		container.setItem(49, gold);
 
 		// Slot 50: [ปุ่มลงขายให้ผู้เล่น / ประมูล]
-		ItemStack sellPlayerBtn = new ItemStack(Items.CHEST);
-		sellPlayerBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§a[ลงขาย] ให้ผู้เล่นอื่น (ตลาดประมูล)"));
-		sellPlayerBtn.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7ต้องการขายของให้ผู้เล่นคนอื่นในราคาที่คุณต้องการ?"),
-				Component.literal("§7--------------------------------"),
-				Component.literal("§eวิธีลงขายของในมือให้ผู้เล่น:"),
-				Component.literal("§fถือไอเท็มในมือแล้วพิมพ์:"),
-				Component.literal("§a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
-				Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
-				Component.literal("§7--------------------------------"),
-				Component.literal("§e[คลิกที่นี่] §fเพื่อเปิดดูตลาดที่ผู้เล่นลงขาย (/buy)"),
-				Component.literal("§7(ระบบจะขายของในช่อง 1-45 ให้ก่อนเปลี่ยนหน้า)")
-		)));
+		ItemStack sellPlayerBtn = GuiButtons.button(
+				GuiButtons.GAVEL,
+				Component.literal("§a[ลงขาย] ให้ผู้เล่นอื่น (ตลาดประมูล)"),
+				List.of(
+						Component.literal("§7ต้องการขายของให้ผู้เล่นคนอื่นในราคาที่คุณต้องการ?"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§eวิธีลงขายของในมือให้ผู้เล่น:"),
+						Component.literal("§fถือไอเท็มในมือแล้วพิมพ์:"),
+						Component.literal("§a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
+						Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§e[คลิกที่นี่] §fเพื่อเปิดดูตลาดที่ผู้เล่นลงขาย (/buy)"),
+						Component.literal("§7(ระบบจะขายของในช่อง 1-45 ให้ก่อนเปลี่ยนหน้า)")
+				)
+		);
 		container.setItem(50, sellPlayerBtn);
 
 		// Slot 53: Close & Sell button
-		ItemStack closeBtn = new ItemStack(Items.IRON_DOOR);
-		closeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[X] ปิดหน้าต่าง & ขายทันที"));
-		closeBtn.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7คลิกเพื่อปิดหน้าต่างและทำการขายของที่วางอยู่"),
-				Component.literal("§7(หรือกดปุ่ม Esc)")
-		)));
+		ItemStack closeBtn = GuiButtons.button(
+				GuiButtons.CART,
+				Component.literal("§c[X] ปิดหน้าต่าง & ขายทันที"),
+				List.of(
+						Component.literal("§7คลิกเพื่อปิดหน้าต่างและทำการขายของที่วางอยู่"),
+						Component.literal("§7(หรือกดปุ่ม Esc)")
+				)
+		);
 		container.setItem(53, closeBtn);
 
 		boolean[] processed = new boolean[]{false};

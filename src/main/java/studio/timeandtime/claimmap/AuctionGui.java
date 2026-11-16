@@ -84,59 +84,77 @@ public final class AuctionGui {
 		}
 
 		if (curPage > 0) {
-			ItemStack prev = new ItemStack(Items.ARROW);
-			prev.set(DataComponents.CUSTOM_NAME, Component.literal("§e< หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"));
+			ItemStack prev = GuiButtons.button(
+					GuiButtons.BACK,
+					Component.literal("§e< หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"),
+					List.of()
+			);
 			container.setItem(45, prev);
 		}
 
-		// Mode buttons
-		ItemStack itemsBtn = new ItemStack(Items.CHEST);
-		itemsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ITEMS ? "§a" : "§f") + "ของที่ผู้เล่นลงขาย"));
-		itemsBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะสินค้าไอเท็ม"))));
+		// Mode buttons (Custom Icon Items)
+		ItemStack itemsBtn = GuiButtons.button(
+				GuiButtons.CART,
+				Component.literal((mode == ViewMode.ITEMS ? "§a" : "§f") + "ของที่ผู้เล่นลงขาย"),
+				List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะสินค้าไอเท็ม"))
+		);
 		container.setItem(46, itemsBtn);
 
-		ItemStack cellsBtn = new ItemStack(Items.FILLED_MAP);
-		cellsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.CELLS ? "§a" : "§f") + "ที่ดินประมูล"));
-		cellsBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะเขตที่ดิน"))));
+		ItemStack cellsBtn = GuiButtons.button(
+				GuiButtons.MAP,
+				Component.literal((mode == ViewMode.CELLS ? "§a" : "§f") + "ที่ดินประมูล"),
+				List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะเขตที่ดิน"))
+		);
 		container.setItem(47, cellsBtn);
 
-		ItemStack myAuctions = new ItemStack(Items.ENDER_CHEST);
-		myAuctions.set(DataComponents.CUSTOM_NAME, Component.literal("§b[รายการของฉัน]"));
-		myAuctions.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อดูและจัดการรายการที่คุณลงขาย"))));
+		ItemStack myAuctions = GuiButtons.button(
+				GuiButtons.TAG,
+				Component.literal("§b[รายการของฉัน]"),
+				List.of(Component.literal("§7คลิกเพื่อดูและจัดการรายการที่คุณลงขาย"))
+		);
 		container.setItem(48, myAuctions);
 
 		long balance = economy.balance(player.getUUID());
-		ItemStack info = new ItemStack(Items.GOLD_INGOT);
-		info.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency));
-		info.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7หน้า " + (curPage + 1) + "/" + maxPages + " (ทั้งหมด " + active.size() + " รายการ)"),
-				Component.literal("§eคลิกเพื่อรีเฟรช")
-		)));
+		ItemStack info = GuiButtons.button(
+				GuiButtons.COIN,
+				Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency),
+				List.of(
+						Component.literal("§7หน้า " + (curPage + 1) + "/" + maxPages + " (ทั้งหมด " + active.size() + " รายการ)"),
+						Component.literal("§eคลิกเพื่อรีเฟรช")
+				)
+		);
 		container.setItem(49, info);
 
-		ItemStack allBtn = new ItemStack(Items.NETHER_STAR);
-		allBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ALL ? "§a" : "§f") + "แสดงทั้งหมด"));
-		allBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7แสดงทั้งสินค้าไอเท็มและที่ดิน"))));
+		ItemStack allBtn = GuiButtons.button(
+				GuiButtons.BRAND,
+				Component.literal((mode == ViewMode.ALL ? "§a" : "§f") + "แสดงทั้งหมด"),
+				List.of(Component.literal("§7แสดงทั้งสินค้าไอเท็มและที่ดิน"))
+		);
 		container.setItem(50, allBtn);
 
-		ItemStack howTo = new ItemStack(Items.EMERALD);
-		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a[+] วิธีลงขาย & ประมูล"));
-		howTo.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§e[ลงประมูลของให้ผู้เล่น]:"),
-				Component.literal("§7ถือของในมือแล้วพิมพ์: §a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
-				Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
-				Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
-				Component.literal("§7คลิกเขตของตนเองใน §e/claimmap §7แล้วกดเปิดประมูล"),
-				Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่มต้น> [ชั่วโมง]"),
-				Component.literal("§e[เจ้าของปิดประมูลก่อนเวลา]:"),
-				Component.literal("§7คลิกที่รายการของคุณแล้วกดปุ่ม §6[ปิดประมูลทันที]"),
-				Component.literal("§7ผู้ที่เสนอราคาสูงสุดจะได้รับของทันที!")
-		)));
+		ItemStack howTo = GuiButtons.button(
+				GuiButtons.PARCEL,
+				Component.literal("§a[+] วิธีลงขาย & ประมูล"),
+				List.of(
+						Component.literal("§e[ลงประมูลของให้ผู้เล่น]:"),
+						Component.literal("§7ถือของในมือแล้วพิมพ์: §a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
+						Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
+						Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
+						Component.literal("§7คลิกเขตของตนเองใน §e/claimmap §7แล้วกดเปิดประมูล"),
+						Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่มต้น> [ชั่วโมง]"),
+						Component.literal("§e[เจ้าของปิดประมูลก่อนเวลา]:"),
+						Component.literal("§7คลิกที่รายการของคุณแล้วกดปุ่ม §6[ปิดประมูลทันที]"),
+						Component.literal("§7ผู้ที่เสนอราคาสูงสุดจะได้รับของทันที!")
+				)
+		);
 		container.setItem(51, howTo);
 
 		if (curPage < maxPages - 1) {
-			ItemStack next = new ItemStack(Items.ARROW);
-			next.set(DataComponents.CUSTOM_NAME, Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"));
+			ItemStack next = GuiButtons.button(
+					GuiButtons.NEXT,
+					Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"),
+					List.of()
+			);
 			container.setItem(53, next);
 		}
 
@@ -191,15 +209,21 @@ public final class AuctionGui {
 		String timeStr = minutesLeft >= 60 ? (minutesLeft / 60) + " ชม. " + (minutesLeft % 60) + " นาที" : minutesLeft + " นาที";
 
 		// Slot 0: Back button
-		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปตลาดประมูล"));
+		ItemStack back = GuiButtons.button(
+				GuiButtons.BACK,
+				Component.literal("§e< กลับไปตลาดประมูล"),
+				List.of()
+		);
 		container.setItem(0, back);
 
 		// Slot 4: Item display
 		ItemStack displayStack;
 		if (a.isCellAuction()) {
-			displayStack = new ItemStack(Items.FILLED_MAP);
-			displayStack.set(DataComponents.CUSTOM_NAME, Component.literal("§eประมูลเขตที่ดิน " + a.cellId));
+			displayStack = GuiButtons.button(
+					GuiButtons.MAP,
+					Component.literal("§eประมูลเขตที่ดิน " + a.cellId),
+					List.of()
+			);
 		} else {
 			var decoded = ItemCodecs.decode(a.itemJson, player.level().registryAccess());
 			displayStack = decoded.orElseGet(() -> new ItemStack(Items.PAPER));
@@ -218,14 +242,15 @@ public final class AuctionGui {
 		container.setItem(4, displayStack);
 
 		// Slot 8: Balance info
-		ItemStack balItem = new ItemStack(Items.GOLD_INGOT);
-		balItem.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency));
+		ItemStack balItem = GuiButtons.button(
+				GuiButtons.COIN,
+				Component.literal("§6[ยอดเงินของคุณ]: " + balance + " " + currency),
+				List.of()
+		);
 		container.setItem(8, balItem);
 
 		if (isOwner) {
 			// Owner controls: End auction now and settle to highest bidder
-			ItemStack closeBtn = new ItemStack(Items.BELL);
-			closeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§6[ปิดประมูลทันที] ขายให้คนที่จ่ายสูงสุด"));
 			List<Component> closeLore = new ArrayList<>();
 			closeLore.add(Component.literal("§7------------------------"));
 			if (a.highBidder != null) {
@@ -237,64 +262,72 @@ public final class AuctionGui {
 				closeLore.add(Component.literal("§c[คลิก] เพื่อยกเลิกการประมูลและรับของคืนเข้า /mail"));
 			}
 			closeLore.add(Component.literal("§7------------------------"));
-			closeBtn.set(DataComponents.LORE, new ItemLore(closeLore));
+			ItemStack closeBtn = GuiButtons.button(
+					GuiButtons.GAVEL,
+					Component.literal("§6[ปิดประมูลทันที] ขายให้คนที่จ่ายสูงสุด"),
+					closeLore
+			);
 			container.setItem(13, closeBtn);
 		} else {
 			boolean isTopBidder = myUuid.equals(a.highBidder);
 			if (isTopBidder) {
-				ItemStack topItem = new ItemStack(Items.EMERALD_BLOCK);
-				topItem.set(DataComponents.CUSTOM_NAME, Component.literal("§aคุณเป็นผู้เสนอราคาสูงสุดอยู่แล้ว"));
-				topItem.set(DataComponents.LORE, new ItemLore(List.of(
-						Component.literal("§7ยอดเสนอราคาของคุณ: §6" + a.highBid + " " + currency),
-						Component.literal("§7รอผู้เล่นอื่นเสนอราคาแข่ง หรือรอเจ้าของกดปิดประมูล")
-				)));
+				ItemStack topItem = GuiButtons.button(
+						GuiButtons.TAG,
+						Component.literal("§aคุณเป็นผู้เสนอราคาสูงสุดอยู่แล้ว"),
+						List.of(
+								Component.literal("§7ยอดเสนอราคาของคุณ: §6" + a.highBid + " " + currency),
+								Component.literal("§7รอผู้เล่นอื่นเสนอราคาแข่ง หรือรอเจ้าของกดปิดประมูล")
+						)
+				);
 				container.setItem(13, topItem);
 			} else {
 				// Choices to increase bid:
 				// Option 1: Minimum required bid (Slot 10)
-				ItemStack b1 = new ItemStack(Items.COPPER_INGOT);
-				b1.set(DataComponents.CUSTOM_NAME, Component.literal("§aเสนอราคาขั้นต่ำ (" + minNextBid + " " + currency + ")"));
-				b1.set(DataComponents.LORE, new ItemLore(List.of(
-						Component.literal("§7คลิกเพื่อเสนอราคาขั้นต่ำทันที: §6" + minNextBid + " " + currency)
-				)));
+				ItemStack b1 = GuiButtons.button(
+						GuiButtons.COIN,
+						Component.literal("§aเสนอราคาขั้นต่ำ (" + minNextBid + " " + currency + ")"),
+						List.of(Component.literal("§7คลิกเพื่อเสนอราคาขั้นต่ำทันที: §6" + minNextBid + " " + currency))
+				);
 				container.setItem(10, b1);
 
 				// Option 2: Min + 500 (Slot 12)
 				long bid2 = minNextBid + 500L;
-				ItemStack b2 = new ItemStack(Items.IRON_INGOT);
-				b2.set(DataComponents.CUSTOM_NAME, Component.literal("§aเพิ่มอีก +500 (" + bid2 + " " + currency + ")"));
-				b2.set(DataComponents.LORE, new ItemLore(List.of(
-						Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid2 + " " + currency)
-				)));
+				ItemStack b2 = GuiButtons.button(
+						GuiButtons.COIN,
+						Component.literal("§aเพิ่มอีก +500 (" + bid2 + " " + currency + ")"),
+						List.of(Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid2 + " " + currency))
+				);
 				container.setItem(12, b2);
 
 				// Option 3: Min + 1,000 (Slot 14)
 				long bid3 = minNextBid + 1_000L;
-				ItemStack b3 = new ItemStack(Items.GOLD_INGOT);
-				b3.set(DataComponents.CUSTOM_NAME, Component.literal("§aเพิ่มอีก +1,000 (" + bid3 + " " + currency + ")"));
-				b3.set(DataComponents.LORE, new ItemLore(List.of(
-						Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid3 + " " + currency)
-				)));
+				ItemStack b3 = GuiButtons.button(
+						GuiButtons.COIN,
+						Component.literal("§aเพิ่มอีก +1,000 (" + bid3 + " " + currency + ")"),
+						List.of(Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid3 + " " + currency))
+				);
 				container.setItem(14, b3);
 
 				// Option 4: Min + 5,000 (Slot 16)
 				long bid4 = minNextBid + 5_000L;
-				ItemStack b4 = new ItemStack(Items.DIAMOND);
-				b4.set(DataComponents.CUSTOM_NAME, Component.literal("§aเพิ่มอีก +5,000 (" + bid4 + " " + currency + ")"));
-				b4.set(DataComponents.LORE, new ItemLore(List.of(
-						Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid4 + " " + currency)
-				)));
+				ItemStack b4 = GuiButtons.button(
+						GuiButtons.COIN,
+						Component.literal("§aเพิ่มอีก +5,000 (" + bid4 + " " + currency + ")"),
+						List.of(Component.literal("§7คลิกเพื่อเสนอราคา: §6" + bid4 + " " + currency))
+				);
 				container.setItem(16, b4);
 			}
 
 			// Slot 22: Custom bid in chat
-			ItemStack custom = new ItemStack(Items.WRITABLE_BOOK);
-			custom.set(DataComponents.CUSTOM_NAME, Component.literal("§e[กำหนดราคาเองในแชท]"));
-			custom.set(DataComponents.LORE, new ItemLore(List.of(
-					Component.literal("§7หากต้องการเสนอราคาอื่น สามารถพิมพ์ในแชท:"),
-					Component.literal("§a/ah bid " + a.id + " <จำนวนเงิน>"),
-					Component.literal("§7(ยอดเงินต้องไม่ต่ำกว่า " + minNextBid + " " + currency + ")")
-			)));
+			ItemStack custom = GuiButtons.button(
+					GuiButtons.CHAT,
+					Component.literal("§e[กำหนดราคาเองในแชท]"),
+					List.of(
+							Component.literal("§7หากต้องการเสนอราคาอื่น สามารถพิมพ์ในแชท:"),
+							Component.literal("§a/ah bid " + a.id + " <จำนวนเงิน>"),
+							Component.literal("§7(ยอดเงินต้องไม่ต่ำกว่า " + minNextBid + " " + currency + ")")
+					)
+			);
 			container.setItem(22, custom);
 		}
 
@@ -392,8 +425,11 @@ public final class AuctionGui {
 			container.setItem(i, displayStack);
 		}
 
-		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปตลาดผู้เล่น"));
+		ItemStack back = GuiButtons.button(
+				GuiButtons.BACK,
+				Component.literal("§e< กลับไปตลาดผู้เล่น"),
+				List.of()
+		);
 		container.setItem(45, back);
 
 		VirtualChestMenu.open(

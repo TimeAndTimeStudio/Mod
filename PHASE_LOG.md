@@ -40,7 +40,7 @@
 | POST | `/api/command` | **master เท่านั้น** | `{"command"}` | `{"ok":true}` · 503 เมื่อเซิร์ฟเวอร์ไม่ทำงาน |
 | – | path อื่น | – | – | `404` text |
 
-### คำตอบ ❓ หัวข้อ C
+### คำตอบ  หัวข้อ C
 
 | # | คำถาม | คำตอบ (ยืนยันจากโค้ด/ซอร์ส) |
 |---|---|---|
@@ -79,7 +79,7 @@
 - `./gradlew build` ผ่านทั้ง 26.3 (default) และ 26.2
 - `./gradlew genSources` สำเร็จ → ซอร์สอยู่ที่ `.gradle/loom-cache/minecraftMaven/...-sources.jar` และแตกอ่านที่ `.gradle/mc-src-26.3/` (ใน `.gradle/` จึงไม่ถูก commit)
 - เพิ่ม JUnit 5.13.4 (`testImplementation`) + `testRuntimeOnly junit-platform-launcher` + `test { useJUnitPlatform() }` และเทสต์เปล่า `src/test/java/studio/timeandtime/claimmap/SmokeTest.java`
-- อ่านโค้ดทั้ง 9 ไฟล์ + `index.html` ครบ และจดตาราง endpoint / คำตอบ ❓ ด้านบน
+- อ่านโค้ดทั้ง 9 ไฟล์ + `index.html` ครบ และจดตาราง endpoint / คำตอบ  ด้านบน
 - `.gitignore`: เพิ่ม `config/` และ `*.corrupt-*` (`run/` มีอยู่แล้ว)
 - รันเซิร์ฟเวอร์ทดสอบ (`./gradlew runServer` + `run/eula.txt`) แล้วเปิด `http://127.0.0.1:8085/` ตรวจหน้าเว็บเดิม
 
@@ -126,13 +126,13 @@
 - [x] `GET /api/login` → 405 · `GET /api/nope` → 404 · body 17 KB → 413
 - [x] bind `0.0.0.0:8085` (log + `http://164.1.1.200:8085/` → 200 จาก IP ของเครื่อง)
 - [x] `./gradlew test` 12 เทสต์ผ่าน (6 config + 5 throttle + 1 smoke)
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 
 **สิ่งที่ทดสอบไม่ได้ในเฟสนี้ (ข้อจำกัด)**
 - `/pass` ในเกมจริง (ต้องมีไคลเอนต์ Minecraft): ตรวจได้แค่โค้ดที่มี guard `config.isAllowed(name)` + unit test ของ `isAllowed` — พฤติกรรมในเกมจะยืนยันในเฟส 3/9
 - "เปิดจากเครื่องอื่น" ทดสอบได้ถึงระดับ bind `0.0.0.0` + เรียกผ่าน LAN IP ของเครื่องเอง ไม่มีเครื่องที่สองในสภาพแวดล้อมนี้
 
-**❓ ที่ยืนยันแล้วเพิ่ม**
+** ที่ยืนยันแล้วเพิ่ม**
 - Fabric API ทั้ง 26.2/26.3 ให้ `HttpServer` ทำงานร่วมกับ server thread ปกติ; `server.execute` มีจริง (ใช้ใน `/api/command`)
 
 **ปัญหาค้าง**
@@ -171,7 +171,7 @@
 - [x] รีสตาร์ทเซิร์ฟเวอร์ → Alice 843 / Bob 1157 เท่าเดิม
 - [x] backup: เขียนตอนปิดเซิร์ฟเวอร์ (`backups/20261114-140611/` มี economy.json, ledger.jsonl, accounts.json) + เทสต์ JUnit ของ `backupNow`
 - [x] จำลองไฟล์เสีย: `economy.json` เป็นขยะ → log SEVERE, ย้ายเป็น `economy.json.corrupt-<ms>`, `/api/wallet` และ `/api/pay` → 503 `market_disabled`, ไม่มี `economy.json` ใหม่ถูกสร้าง
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 
 **ข้อจำกัด/ค้าง**
 - `/bal` และ `/pay` ในเกมไม่ได้ทดสอบกับไคลเอนต์จริง (ทดสอบเฉพาะผ่าน API + unit test ของ `EconomyManager`)
@@ -184,7 +184,7 @@
 **ผล spike dialog (3.1) — สรุป: ใช้ทางสำรอง (คำสั่งแชท)**
 - ตรวจซอร์ส 26.3 และ 26.2 (`genSources`) พบว่ามีระบบ dialog จริง: `net.minecraft.server.dialog.{Dialog,MultiActionDialog,SimpleDialog,ActionButton}`, `input.TextInput`, `DialogAction.WAIT_FOR_RESPONSE`, แพ็กเก็ต `ClientboundShowDialogPacket`, `ServerboundCustomClickActionPacket`, และ `ServerPlayer.openDialog(Holder<Dialog>)` (26.3 บรรทัด 1363 · 26.2 บรรทัด 1309)
 - ค่าจากช่องพิมพ์ถูกส่งกลับผ่าน `dynamic/custom` action → `ClickEvent.Custom` → `ServerboundCustomClickActionPacket` → `MinecraftServer.handleCustomClickAction(...)` ซึ่งเป็น **no-op** (26.3 บรรทัด 2043) และ **ไม่มี Fabric event** ให้ดัก (ตรวจ jar ทุกตัวแล้ว) → ต้องเขียน mixin เพิ่ม
-- ❗ ทดสอบกับไคลเอนต์จริงไม่ได้ในสภาพแวดล้อมนี้ (ไม่มีจอ/ไคลเอนต์เกม) → ตาม A3 เลือก **ทางสำรอง** `/login` `/register` และบันทึกว่า dialog ยังเป็นงานที่ทำต่อได้ในอนาคต
+-  ทดสอบกับไคลเอนต์จริงไม่ได้ในสภาพแวดล้อมนี้ (ไม่มีจอ/ไคลเอนต์เกม) → ตาม A3 เลือก **ทางสำรอง** `/login` `/register` และบันทึกว่า dialog ยังเป็นงานที่ทำต่อได้ในอนาคต
 - ข้อสังเกตเพิ่ม: `TextInput` ไม่มีตัวเลือก mask รหัสผ่าน (`TextInput.java` มีแค่ width/label/initial/maxLength/multiline) → ข้อดีด้านความปลอดภัยของ dialog จึงมีจำกัด (แต่รหัสจะไม่ไปอยู่ใน chat log)
 
 **ไฟล์ที่เพิ่ม**
@@ -213,9 +213,9 @@
 - [x] เปิดเซิร์ฟเวอร์ 26.3 → mixin subsystem โหลด `claimmap.mixins.json` ไม่มี injection error (defaultRequire=1 จะล้มทันทีถ้า inject ไม่ได้) `ServerPlayer`/`Commands` ถูกโหลดตอนสตาร์ท
 - [x] ตรวจลายเซ็น 26.2: `performPrefixedCommand`, `drop(boolean)`, `teleportTo(double,double,double)`, `openDialog` มีเหมือน 26.3 → mixin ใช้ได้ทั้งสองเวอร์ชัน
 - [x] บัญชีเก่า (SHA-256) ล็อกอินเว็บสำเร็จ → `accounts.json` เปลี่ยนเป็น `pbkdf2$210000$...` และ `salt=""`; ล็อกอินซ้ำได้ 200; รหัสผิดได้ 401
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 
-**⚠️ Gate 3 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
+**️ Gate 3 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
 ข้อที่ต้องมีไคลเอนต์ Minecraft จึงจะยืนยันได้: ผู้เล่นใหม่เห็นคำสั่งตั้งรหัส, ผู้เล่นเดิมเห็นคำสั่งใส่รหัส, kick ชื่อนอก whitelist, การ 블็อกขยับ/ทุบ/วาง/ดรอป/เปิดหีบ/แชท/ตี/โดนทำร้าย/คำสั่งอื่น, kick เมื่อผิด 3 ครั้งหรือเงียบ 60 วิ, `/pass` ของผู้ไม่ผ่านรหัส, รหัสเดียวใช้ได้ทั้งเกมและเว็บ
 → โค้ดและ unit test พร้อมแล้ว แต่ **ห้ามถือว่า Gate 3 ผ่าน** จนกว่าจะรันกับไคลเอนต์จริง (เฟส 9)
 
@@ -247,9 +247,9 @@
 - [x] ตั้ง `pricesUrl` เป็นพอร์ตที่ปิด (`127.0.0.1:9`) → log WARN ครั้งเดียว, ตารางเดิมยังใช้ได้, `/api/prices` ยังตอบ 200 และ `stale:true` (cache เก่า 2 ชม.)
 - [x] `grep -i SUPERSECRET` ในหน้าเว็บ/`/api/prices`/log → ไม่พบ; `/api/prices` ไม่มี `pricesUrl`/`jsonbin`
 - [x] ไม่มี session → `/api/prices` = 401
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 
-**❓ ที่ยังค้าง (U6)**
+** ที่ยังค้าง (U6)**
 - ยังไม่มีคีย์/ตัวอย่าง response จริงของ JSONBin → parser อิงรูปแบบ `{"prices":{...}}` ตามที่ระบุในสเปก (ทดสอบด้วย fixture เท่านั้น)
 - เจ้าของต้องรัน `curl` กับ bin จริงแล้วส่งตัวอย่าง (ตัดคีย์) เพื่อยืนยัน; **ต้องหมุนคีย์ที่เคยอยู่ใน `prices.html` สาธารณะ**
 - ต้องยืนยันหน่วยราคา: สเปกตกลงว่า base = เหรียญเต็มต่อ 1 ชิ้น; ถ้าจริงเป็นสตางค์ต้องหยุดถาม
@@ -284,9 +284,9 @@
 - [x] `POST /api/shop/buy {"item":"diamond","qty":2}` → `bought:2 spent:26 balance:817 mailboxCount:1`; `/api/mailbox` มี entry count 2; `CheckLedger` PASS (lastSeq 105)
 - [x] blocked `bedrock` → 409 `item_blocked`; ไม่มีราคา `stone` → 409 `no_price`; ไอเท็มไม่มีจริง → 400 `invalid_item`; qty 1.5 → 400 `invalid_quantity`; qty 2304 (เงินไม่พอ) → 409 `insufficient_funds`
 - [x] ขาย/รับของตอนไม่มีผู้เล่นออนไลน์ → 409 `player_offline`
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 
-**⚠️ Gate 5 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
+**️ Gate 5 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
 ที่ยังยืนยันไม่ได้เพราะไม่มีไคลเอนต์: ขายของ 64 ชิ้นแล้วของหาย/เงินเพิ่มตรง, ปฏิเสธของมี enchant/ชื่อ/ความเสียหาย, `/sell all` สรุปตรงกับเงินจริง, ซื้อตอน inventory เต็มแล้วของเข้ากล่อง + `/mail claim` รับได้บางส่วน, arbitrage test ในเกม, freeze ในการซื้อขาย
 → logic และ unit test พร้อม; การรับของ (`claim`) และการขายถูกทดสอบเฉพาะเส้นทาง error/offline
 
@@ -325,9 +325,9 @@
 - [x] `POST .../buyout` → Bob 857 (−200), Alice +190, Bob ได้มรกต 5, escrow 0
 - [x] `POST .../cancel` โดยไม่ใช่เจ้าของ → 403; เจ้าของ → OK และของกลับเข้ากล่อง (`mb_au_..._return`)
 - [x] `CheckLedger` PASS หลังทุกธุรกรรม (`lastSeq=111`, invariant 0)
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 
-**⚠️ Gate 6 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
+**️ Gate 6 ยังไม่ผ่านครบ — ต้องทดสอบในเกมจริง**
 ที่ยังยืนยันไม่ได้เพราะไม่มีไคลเอนต์: `/ah sell` ถอด stack จริงจากมือและคืนของเมื่อล้ม, `/ah` แสดงผลในแชท, `/ah bid`/`/ah cancel` จากในเกม, พฤติกรรมกล่องของเต็มตอนผู้ชนะรับของ, และการที่ผู้เล่นออฟไลน์ตอนปิดประมูล (ของต้องรอในกล่อง)
 → แกนเงิน/escrow/settle และ API ถูกทดสอบครบทั้ง unit + runtime ด้วย fixture
 
@@ -364,11 +364,11 @@
 - [x] freeze Bob → `POST /api/pay` 409 `account_frozen`; unfreeze → 200
 - [x] `reset-password` ของ Eve → hash ถูกลบ, session ถูกยกเลิก, ชื่อยังอยู่
 - [x] `prices/block` ปลด `bedrock` → `isBlocked=false` (ไฟล์มี `unblocked:["minecraft:bedrock"]`)
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 - [ ] `/eco` ในเกมจริง (ต้องมีไคลเอนต์ + OP) — unit test ของ `AdminService.money` ครอบตรรกะแล้ว
 - [ ] adminCancel ที่มีผู้เสนอราคาใน runtime — unit test `adminCancelRefundsTheBidderAndReturnsTheItemOnce` ครอบ (ลงประมูลในเกมไม่ได้ในสภาพแวดล้อมนี้)
 
-**⚠️ ข้อจำกัด**
+**️ ข้อจำกัด**
 - reset-password ระหว่างที่ผู้เล่นยังไม่ได้ตั้งรหัสใหม่ ใน offline-mode ใครสวมชื่อนั้นเข้าเกมก่อนจะตั้งรหัสได้ → ต้องแจ้งเจ้าของชื่อให้เข้าเกมทันที (จะเตือนใน UI เฟส 8)
 
 ---
@@ -394,7 +394,7 @@
 - แอปแอดมินเห็นเฉพาะ `admin:true`; พิมพ์ `#admin` เองจะถูกพากลับ `#home`
 
 **ผลทดสอบ**
-- [x] `./gradlew test` ผ่าน 84 เทสต์ · build 26.3 ✅ · 26.2 ✅
+- [x] `./gradlew test` ผ่าน 84 เทสต์ · build 26.3  · 26.2 
 - [x] jar มี `claimmap-web/{index.html,css/app.css,js/...}` ครบ (`jar tf`)
 - [x] static: `/` 200 html, `/css/app.css` 200 css, `/js/main.js` 200 js, `/js/apps/admin.js` 200 js, `/icons/nope.png` 404
 - [x] path traversal: `/js/../../config/claimmap/accounts.json`, `/js/%2e%2e/%2e%2e/...`, `/js//main.js`, `/icons/%2e%2e/app.css` → 404 ทั้งหมด
@@ -404,7 +404,7 @@
 - [ ] ทดสอบบนมือถือ/เดสก์ท็อปจริงและกดทุกแอป — สภาพแวดล้อมนี้ไม่มีเบราว์เซอร์/จอ
 - [ ] กดรัว ๆ บนปุ่มเงินเทียบ ledger — ต้องมีเบราว์เซอร์จริง
 
-**⚠️ ข้อจำกัด**
+**️ ข้อจำกัด**
 - ไม่มี Chrome/Playwright ในเครื่อง จึงทดสอบ UI ระดับ DOM ด้วย jsdom และตรวจ HTTP เท่านั้น
 - ไอคอนไอเท็มยังไม่มีไฟล์ PNG; หน้าเว็บใช้ชื่อ/ตัวอักษรแทน (ไม่มีการโหลดภายนอก)
 
@@ -427,7 +427,7 @@
 - [x] รีสตาร์ทเซิร์ฟเวอร์ → `/api/wallet` ของ Bob = 859 เท่าเดิม
 - [x] ตรวจ grep: ไม่มี `double`/`float` ในโค้ดเงิน, ไม่มี `MYTOKEN`, ไม่มีคีย์ JSONBin, ไม่มี `innerHTML` กับข้อมูลเซิร์ฟเวอร์
 
-**⚠️ ยังไม่ได้รัน (ต้องมีไคลเอนต์ Minecraft / เบราว์เซอร์จริง)**
+**️ ยังไม่ได้รัน (ต้องมีไคลเอนต์ Minecraft / เบราว์เซอร์จริง)**
 - AuthGate ในเกมทั้งหมด, การซื้อ/ขาย/รับของ/`/ah sell`/`/eco` ในเกม, การแข่งขัน 2 บัญชี, kill -9 กลางธุรกรรม, การกดปุ่มเงินรัว ๆ บนเบราว์เซอร์, ภาพหน้าจอบนมือถือ
 - รายละเอียดครบใน `docs/TEST_REPORT.md` ข้อ 6 — **Gate 9 ยังไม่ถือว่าผ่านครบจนกว่าจะทดสอบรายการเหล่านี้กับเกมจริง**
 
@@ -460,7 +460,7 @@
 **ผลทดสอบ**
 - [x] `./gradlew test` ผ่าน 92 เทสต์ (เพิ่ม migration, legacy accounts และ dialog encoding)
 - [x] ทดสอบ encode dialog ด้วย `Dialog.CONTEXT_FREE_STREAM_CODEC` ผ่านทั้ง login/register/error
-- [x] build 26.3 ✅ · 26.2 ✅
+- [x] build 26.3  · 26.2 
 - [x] เปิดเซิร์ฟเวอร์จริง: mixin ไม่มี injection error, สร้าง `backups/pre-upgrade-20261114-182839-478/` อัตโนมัติจากข้อมูลเดิม และเซิร์ฟเวอร์ทำงานปกติ
 - [x] รัน `./gradlew test` กับโมดูลที่ bootstrap แล้ว (SharedConstants + Bootstrap) ไม่มี error
 - [ ] ทดสอบกับไคลเอนต์จริง: หน้าต่างขึ้นก่อนเข้าโลก, กด Esc, ปิดเกมกลางคัน, ส่งแพ็กเก็ตปลอม, ผิด 3 ครั้ง/60 วินาที — เครื่องนี้ไม่มีไคลเอนต์ Minecraft จึงยังยืนยันไม่ได้ (โค้ดฝั่งเซิร์ฟเวอร์กันครบตาม mixin ข้างต้น)
@@ -480,7 +480,7 @@
 - `FinishSendMixin.java` — ปรับลำดับ AuthGate ตอนจบ configuration
 
 **ผลทดสอบ**
-- [x] `./gradlew build` 26.3 ✅ · 26.2 ✅
+- [x] `./gradlew build` 26.3  · 26.2 
 - [x] `./gradlew test` ผ่าน รวม `TradeManagerTest` ใหม่ 8 เทสต์ (ส่งของครั้งเดียว, รับซ้ำไม่ได้, ยกเลิกเฉพาะเจ้าของ/แอดมิน, หมดอายุรับไม่ได้แต่คืนของได้, กล่องเต็มไม่ปิดข้อเสนอ, จำกัด 10, input ผิด, อยู่รอดหลังรีสตาร์ท)
 - [ ] ลงขาย/เทรดจากกล่องจริงในเกม + เบราว์เซอร์มือถือ — ต้องมีไคลเอนต์ Minecraft
 

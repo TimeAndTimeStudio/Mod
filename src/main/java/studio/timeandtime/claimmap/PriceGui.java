@@ -142,44 +142,56 @@ public final class PriceGui {
 		}
 
 		if (curPage > 0) {
-			ItemStack prev = new ItemStack(Items.ARROW);
-			prev.set(DataComponents.CUSTOM_NAME, Component.literal("§e< หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"));
+			ItemStack prev = GuiButtons.button(
+					GuiButtons.BACK,
+					Component.literal("§e< หน้าก่อนหน้า (" + curPage + "/" + maxPages + ")"),
+					List.of()
+			);
 			container.setItem(45, prev);
 		}
 
-		ItemStack catBtn = new ItemStack(Items.COMPASS);
-		catBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§6หมวดหมู่: " + cat.label));
-		catBtn.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7หมวดหมู่ปัจจุบัน: " + cat.label),
-				Component.literal("§e[คลิก] §7เพื่อสลับหมวดหมู่ถัดไป")
-		)));
+		ItemStack catBtn = GuiButtons.button(
+				GuiButtons.GEAR,
+				Component.literal("§6หมวดหมู่: " + cat.label),
+				List.of(
+						Component.literal("§7หมวดหมู่ปัจจุบัน: " + cat.label),
+						Component.literal("§e[คลิก] §7เพื่อสลับหมวดหมู่ถัดไป")
+				)
+		);
 		container.setItem(48, catBtn);
 
-		ItemStack infoBtn = new ItemStack(Items.CHEST);
 		long bal = ClaimMap.instance() != null && ClaimMap.instance().economy() != null
 				? ClaimMap.instance().economy().balance(player.getUUID()) : 0L;
-		infoBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ตลาดราคากลาง]"));
-		infoBtn.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7รายการในหมวดนี้: §f" + allDetails.size() + " ชิ้น"),
-				Component.literal("§7หน้า " + (curPage + 1) + "/" + maxPages),
-				Component.literal("§6ยอดเงินของคุณ: §f" + bal + " " + currency),
-				Component.literal("§7พิมพ์ §e/sell §7เพื่อเปิดเมนูขายของทันที")
-		)));
+		ItemStack infoBtn = GuiButtons.button(
+				GuiButtons.BRAND,
+				Component.literal("§e[ตลาดราคากลาง]"),
+				List.of(
+						Component.literal("§7รายการในหมวดนี้: §f" + allDetails.size() + " ชิ้น"),
+						Component.literal("§7หน้า " + (curPage + 1) + "/" + maxPages),
+						Component.literal("§6ยอดเงินของคุณ: §f" + bal + " " + currency),
+						Component.literal("§7พิมพ์ §e/sell §7เพื่อเปิดเมนูขายของทันที")
+				)
+		);
 		container.setItem(49, infoBtn);
 
-		ItemStack handBtn = new ItemStack(Items.SPYGLASS);
 		ItemStack held = player.getMainHandItem();
 		boolean hasHeld = held != null && !held.isEmpty();
-		handBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ค้นหา] เช็คของที่ถือในมือ"));
-		handBtn.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal(hasHeld ? "§7ในมือถือ: §f" + held.getHoverName().getString() : "§7(มือหลักว่างเปล่า)"),
-				Component.literal("§e[คลิก] §7เพื่อเปิดดูราคาของที่ถือในมือทันที")
-		)));
+		ItemStack handBtn = GuiButtons.button(
+				GuiButtons.MAP,
+				Component.literal("§b[ค้นหา] เช็คของที่ถือในมือ"),
+				List.of(
+						Component.literal(hasHeld ? "§7ในมือถือ: §f" + held.getHoverName().getString() : "§7(มือหลักว่างเปล่า)"),
+						Component.literal("§e[คลิก] §7เพื่อเปิดดูราคาของที่ถือในมือทันที")
+				)
+		);
 		container.setItem(50, handBtn);
 
 		if (curPage < maxPages - 1) {
-			ItemStack next = new ItemStack(Items.ARROW);
-			next.set(DataComponents.CUSTOM_NAME, Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"));
+			ItemStack next = GuiButtons.button(
+					GuiButtons.NEXT,
+					Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"),
+					List.of()
+			);
 			container.setItem(53, next);
 		}
 
@@ -254,25 +266,32 @@ public final class PriceGui {
 		icon.set(DataComponents.LORE, new ItemLore(lore));
 		container.setItem(13, icon);
 
-		ItemStack sellBtn = new ItemStack(Items.EMERALD);
-		sellBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§a[ขาย] เปิดเมนูขายของ (/sell)"));
-		sellBtn.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7คลิกเพื่อเปิดหน้าต่างวางของขายทันที"),
-				Component.literal("§eของที่วางในกล่องจะถูกประเมินและขายอัตโนมัติ")
-		)));
+		ItemStack sellBtn = GuiButtons.button(
+				GuiButtons.TAG,
+				Component.literal("§a[ขาย] เปิดเมนูขายของ (/sell)"),
+				List.of(
+						Component.literal("§7คลิกเพื่อเปิดหน้าต่างวางของขายทันที"),
+						Component.literal("§eของที่วางในกล่องจะถูกประเมินและขายอัตโนมัติ")
+				)
+		);
 		container.setItem(11, sellBtn);
 
-		ItemStack ahBtn = new ItemStack(Items.GOLD_INGOT);
-		ahBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ประมูล] ลงประมูลไอเท็มนี้ (/ah)"));
-		ahBtn.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7หากต้องการเปิดประมูลให้ผู้เล่นอื่นแข่งราคา"),
-				Component.literal("§7ถือของในมือแล้วพิมพ์:"),
-				Component.literal("§e/ah sell <ราคาเริ่ม> [ชั่วโมง]")
-		)));
+		ItemStack ahBtn = GuiButtons.button(
+				GuiButtons.GAVEL,
+				Component.literal("§e[ประมูล] ลงประมูลไอเท็มนี้ (/ah)"),
+				List.of(
+						Component.literal("§7หากต้องการเปิดประมูลให้ผู้เล่นอื่นแข่งราคา"),
+						Component.literal("§7ถือของในมือแล้วพิมพ์:"),
+						Component.literal("§e/ah sell <ราคาเริ่ม> [ชั่วโมง]")
+				)
+		);
 		container.setItem(15, ahBtn);
 
-		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปยังรายการราคาทั้งหมด"));
+		ItemStack back = GuiButtons.button(
+				GuiButtons.BACK,
+				Component.literal("§e< กลับไปยังรายการราคาทั้งหมด"),
+				List.of()
+		);
 		container.setItem(22, back);
 
 		VirtualChestMenu.open(
