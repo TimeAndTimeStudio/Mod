@@ -89,6 +89,7 @@ public class ClaimMap implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		INSTANCE = this;
+		seedDefaultServerIconIfMissing();
 
 		config = new ClaimMapConfig();
 		config.load();
@@ -189,6 +190,7 @@ public class ClaimMap implements ModInitializer {
 
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			this.server = server;
+			seedDefaultServerIconIfMissing();
 			worldManager.start(server);
 			ItemRegistryAdapter.init(server);
 			auctions.closeExpired(System.currentTimeMillis());
@@ -230,6 +232,24 @@ public class ClaimMap implements ModInitializer {
 			}
 		} catch (Exception e) {
 			LOGGER.warn("[timesmp] Could not seed default-prices.json: {}", e.getMessage());
+		}
+	}
+
+	private static void seedDefaultServerIconIfMissing() {
+		try {
+			java.nio.file.Path iconFile = net.fabricmc.loader.api.FabricLoader.getInstance()
+					.getGameDir().resolve("server-icon.png");
+			if (java.nio.file.Files.exists(iconFile)) return;
+			try (var in = ClaimMap.class.getResourceAsStream("/server-icon.png")) {
+				if (in != null) {
+					java.nio.file.Files.copy(in, iconFile);
+					LOGGER.info("[timesmp] Seeded default server-icon.png for server list");
+				} else {
+					LOGGER.warn("[timesmp] Could not find /server-icon.png in mod resources");
+				}
+			}
+		} catch (Exception e) {
+			LOGGER.warn("[timesmp] Could not seed default server-icon.png: {}", e.getMessage());
 		}
 	}
 }
