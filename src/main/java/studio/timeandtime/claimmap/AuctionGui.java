@@ -135,6 +135,17 @@ public final class AuctionGui {
 		);
 		container.setItem(50, allBtn);
 
+		// Slot 51: Next page
+		if (curPage < maxPages - 1) {
+			ItemStack next = GuiButtons.button(
+					GuiButtons.NEXT,
+					Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"),
+					List.of()
+			);
+			container.setItem(51, next);
+		}
+
+		// Slot 53: How to auction (Bottom right corner)
 		ItemStack howTo = GuiButtons.button(
 				GuiButtons.PARCEL,
 				Component.literal("§a[+] วิธีประมูล & นำขึ้นประมูล"),
@@ -151,16 +162,7 @@ public final class AuctionGui {
 						Component.literal("§7(หากมีผู้เสนอราคา ระบบจะคืนเงินให้ผู้เสนอราคาทันที)")
 				)
 		);
-		container.setItem(51, howTo);
-
-		if (curPage < maxPages - 1) {
-			ItemStack next = GuiButtons.button(
-					GuiButtons.NEXT,
-					Component.literal("§eหน้าถัดไป > (" + (curPage + 2) + "/" + maxPages + ")"),
-					List.of()
-			);
-			container.setItem(53, next);
-		}
+		container.setItem(53, howTo);
 
 		String titleStr = switch (mode) {
 			case ALL -> "§0ตลาดประมูล (หน้า " + (curPage + 1) + "/" + maxPages + ")";
@@ -180,7 +182,7 @@ public final class AuctionGui {
 						openAuctionDetail(sp, selected, auctions, economy, currency, curPage, mode);
 					} else if (slotIndex == 45 && curPage > 0) {
 						open(sp, auctions, economy, currency, curPage - 1, mode);
-					} else if (slotIndex == 53 && curPage < maxPages - 1) {
+					} else if (slotIndex == 51 && curPage < maxPages - 1) {
 						open(sp, auctions, economy, currency, curPage + 1, mode);
 					} else if (slotIndex == 46) {
 						if (ClaimMap.instance() != null) {
