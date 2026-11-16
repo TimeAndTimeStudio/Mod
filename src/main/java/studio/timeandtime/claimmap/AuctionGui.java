@@ -94,10 +94,13 @@ public final class AuctionGui {
 		container.setItem(49, info);
 
 		ItemStack howTo = new ItemStack(Items.EMERALD);
-		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a➕ วิธีลงประมูลของ"));
+		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a➕ วิธีลงประมูลของ & ที่ดิน"));
 		howTo.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7ถือของในมือแล้วพิมพ์คำสั่ง:"),
-				Component.literal("§e/ah sell <ราคาเริ่มต้น> [ซื้อทันที] [ชั่วโมง]")
+				Component.literal("§e[ลงประมูลไอเท็ม]:"),
+				Component.literal("§7ถือของในมือแล้วพิมพ์: §e/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"),
+				Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
+				Component.literal("§7คลิกเขตของตนเองใน §e/claimmap §7แล้วกดเปิดประมูล"),
+				Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]")
 		)));
 		container.setItem(50, howTo);
 

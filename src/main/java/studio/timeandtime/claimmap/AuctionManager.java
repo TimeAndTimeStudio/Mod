@@ -246,6 +246,12 @@ public final class AuctionManager {
 
 	/** Creates an admin-owned auction for a cell. The cell may be free or owned. */
 	public CreateOutcome createCellAuction(String cellId, long startPrice, Long buyout, int hours) {
+		return createCellAuction(cellId, null, null, startPrice, buyout, hours);
+	}
+
+	/** Creates an auction for a cell, owned by the server (if sellerUuid is null) or a player. */
+	public CreateOutcome createCellAuction(String cellId, String sellerUuid, String sellerName,
+										   long startPrice, Long buyout, int hours) {
 		int[] coords = parseCellId(cellId);
 		if (coords == null || startPrice < 0 || startPrice > EconomyManager.MAX_MONEY) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
@@ -257,9 +263,20 @@ public final class AuctionManager {
 		if (rm == null || rm.isCommonArea(coords[0], coords[1])) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
+		String canonical = coords[0] + "," + coords[1];
+		boolean isServer = sellerUuid == null || ConsignmentManager.SERVER.equals(sellerUuid);
+		if (!isServer) {
+			try {
+				UUID sid = UUID.fromString(sellerUuid);
+				if (!isCellOwner(canonical, sid)) {
+					return new CreateOutcome(Result.FORBIDDEN, null);
+				}
+			} catch (IllegalArgumentException e) {
+				return new CreateOutcome(Result.BAD_REQUEST, null);
+			}
+		}
 		int duration = hours <= 0 ? cfg.auctionDefaultHours : hours;
 		if (duration < 1 || duration > cfg.auctionMaxHours) return new CreateOutcome(Result.BAD_REQUEST, null);
-		String canonical = coords[0] + "," + coords[1];
 		synchronized (Market.LOCK) {
 			if (disabled) return new CreateOutcome(Result.DISABLED, null);
 			for (Auction a : auctions) {
@@ -270,8 +287,8 @@ public final class AuctionManager {
 			long nowMs = now.getAsLong();
 			Auction a = new Auction();
 			a.id = newId();
-			a.seller = ConsignmentManager.SERVER;
-			a.sellerName = "เซิร์ฟเวอร์";
+			a.seller = isServer ? ConsignmentManager.SERVER : sellerUuid;
+			a.sellerName = isServer ? "เซิร์ฟเวอร์" : (sellerName == null ? "ผู้เล่น" : sellerName);
 			a.kind = "CELL";
 			a.cellId = canonical;
 			a.itemId = "cell";
@@ -283,10 +300,24 @@ public final class AuctionManager {
 			a.createdAt = nowMs;
 			a.endsAt = nowMs + duration * 3_600_000L;
 			a.status = ACTIVE;
-			a.serverOwned = true;
+			a.serverOwned = isServer;
 			auctions.add(a);
 			save();
 			return new CreateOutcome(Result.OK, a.id);
+		}
+	}
+
+	public boolean hasActiveCellAuction(String cellId) {
+		int[] coords = parseCellId(cellId);
+		if (coords == null) return false;
+		String canonical = coords[0] + "," + coords[1];
+		synchronized (Market.LOCK) {
+			for (Auction a : auctions) {
+				if (a.isActive() && a.isCellAuction() && canonical.equals(a.cellId)) {
+					return true;
+				}
+			}
+			return false;
 		}
 	}
 

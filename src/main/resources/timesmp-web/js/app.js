@@ -369,14 +369,8 @@ document.addEventListener('pointerdown', (event) => {
 
 /* ---------- shell ---------- */
 const NAV = [
-  { id: 'home', label: 'หน้าแรก' },
   { id: 'map', label: 'แผนที่' },
-  { id: 'prices', label: 'เช็คราคา' },
-  { id: 'buy', label: 'ซื้อ' },
-  { id: 'sell', label: 'ขาย' },
   { id: 'auction', label: 'ประมูล' },
-  { id: 'wallet', label: 'เงิน' },
-  { id: 'about', label: 'ช่วยเหลือ' },
 ];
 
 function renderShell() {
@@ -390,16 +384,15 @@ function renderShell() {
   const tabs = $('#tabbar');
   clear(tabs);
   const primary = [
-    { id: 'home', label: 'หน้าแรก' },
     { id: 'map', label: 'แผนที่' },
-    { id: 'prices', label: 'เช็คราคา' },
-    { id: 'buy', label: 'ซื้อ' },
-    { id: 'sell', label: 'ขาย' },
+    { id: 'auction', label: 'ประมูล' },
   ];
   for (const item of primary) {
     tabs.append(el('button', { type: 'button', 'aria-current': active(item.id) ? 'page' : null, onclick: () => go(item.id) }, item.label));
   }
-  tabs.append(el('button', { type: 'button', onclick: openMenu }, 'เพิ่มเติม'));
+  if (state.me?.admin) {
+    tabs.append(el('button', { type: 'button', 'aria-current': active('admin') ? 'page' : null, onclick: () => go('admin') }, 'แอดมิน'));
+  }
 
   $('#balance').textContent = state.me ? money(state.balance) : '—';
   $('#mailcount').textContent = state.me && state.mail > 0 ? 'กล่อง ' + state.mail : '';
@@ -499,9 +492,13 @@ function render() {
   closeMenu();
   if (pageTimer) { clearInterval(pageTimer); pageTimer = null; }
   if (mapCleanup) { mapCleanup(); mapCleanup = null; }
-  const route = location.hash.replace(/^#\/?/, '') || 'home';
-  if (route === 'trends') { location.hash = '#home'; return; }
-  if (route !== 'login' && route !== 'home' && route !== 'about' && !state.me) {
+  const rawRoute = location.hash.replace(/^#\/?/, '');
+  let route = rawRoute || 'map';
+  if (route === 'home' || route === 'trends' || route === 'buy' || route === 'sell' || route === 'prices' || route === 'wallet' || route === 'about') {
+    location.hash = '#map';
+    return;
+  }
+  if (route !== 'login' && !state.me) {
     go('login');
     return;
   }
@@ -509,7 +506,7 @@ function render() {
   const view = $('#view');
   clear(view);
   const page = (PAGES[route] || page404)(view);
-  document.title = (route === 'home' ? 'Time SMP' : `${navLabel(route)} · Time SMP`);
+  document.title = (route === 'map' ? 'แผนที่ · Time SMP' : `${navLabel(route)} · Time SMP`);
   window.scrollTo(0, 0);
   view.focus({ preventScroll: true });
   if (page?.then) page.catch((error) => { clear(view); view.append(errorState(error)); });
@@ -528,12 +525,12 @@ function pageHead(route, title, desc) {
 }
 function page404(view) {
   view.append(el('div', { class: 'page' }, pageHead('404', 'ไม่พบหน้านี้', 'ลิงก์อาจเก่าหรือถูกเปลี่ยน'),
-    el('a', { class: 'btn primary', href: '#home' }, 'กลับหน้าแรก')));
+    el('a', { class: 'btn primary', href: '#map' }, 'กลับหน้าแผนที่')));
 }
 
 /* ---------- login ---------- */
 async function pageLogin(view) {
-  if (state.me) { go('home'); return; }
+  if (state.me) { go('map'); return; }
   const page = el('div', { class: 'page' });
   page.append(pageHead('login', 'เข้าสู่ระบบ', 'ใช้ชื่อที่ลงทะเบียนกับเซิร์ฟเวอร์'));
   view.append(page);
@@ -1436,8 +1433,8 @@ async function auctionList(panel, mineOnly) {
   try {
     const data = await api('GET', '/api/auctions');
     clear(box);
-    const list = (mineOnly ? (data.mine || []) : (data.auctions || [])).filter(a => a.kind !== 'CELL');
-    if (!list.length) { box.append(emptyState(mineOnly ? 'ยังไม่มีประวัติ' : 'ยังไม่มีรายการประมูล', 'แอดมินเป็นผู้เปิดรายการจากของที่ผู้เล่นฝากไว้')); return; }
+    const list = mineOnly ? (data.mine || []) : (data.auctions || []);
+    if (!list.length) { box.append(emptyState(mineOnly ? 'ยังไม่มีประวัติ' : 'ยังไม่มีรายการประมูล', 'ผู้เล่นสามารถลงประมูลไอเท็มหรือที่ดินได้ในเกมด้วยคำสั่ง /ah sell หรือ /claim auction')); return; }
     const rows = el('div', { class: 'rows' });
     const live = [];
     for (const a of list) {
@@ -1446,16 +1443,16 @@ async function auctionList(panel, mineOnly) {
       const bid = el('input', { class: 'input', type: 'text', min: String(a.minBid || a.startPrice), value: String(a.minBid || a.startPrice), inputmode: 'numeric', 'aria-label': isCell ? 'ราคาประมูลเขต' : 'ราคาประมูล' });
       const main = isCell
         ? el('div', { class: 'item-main' },
-            el('span', { class: 'item-title' }, 'เขต ' + txt(a.cellId, '-')),
-            el('span', { class: 'item-meta' }, `เจ้าของปัจจุบัน ${txt(a.cellOwnerName, 'ที่ว่าง')} · ผู้ชนะจะได้รับกรรมสิทธิ์เขต`))
+            el('span', { class: 'item-title' }, '🏛️ ประมูลเขตที่ดิน [' + txt(a.cellId, '-') + ']'),
+            el('span', { class: 'item-meta' }, `เจ้าของปัจจุบัน: ${txt(a.cellOwnerName || a.sellerName, 'เซิร์ฟเวอร์')} · ผู้ชนะประมูลจะได้รับกรรมสิทธิ์เขตนี้ทันที`))
         : itemHeading(a.itemId, `${txt(a.label, txt(a.itemId, 'ไอเท็ม'))} ×${num(a.count)}`);
       const timingEl = el('span', { class: 'mono' }, auctionTiming(a));
-      main.append(el('span', { class: 'item-meta' }, `ผู้ขาย ${txt(a.sellerName, 'ไม่ทราบชื่อ')} · เริ่ม ${money(a.startPrice)} · สูงสุด ${a.highBid ? money(a.highBid) + ' โดย ' + txt(a.highBidderName, '-') : 'ยังไม่มี'} · `, timingEl));
+      main.append(el('span', { class: 'item-meta' }, `ผู้ลงขาย ${txt(a.sellerName, 'เซิร์ฟเวอร์')} · เริ่ม ${money(a.startPrice)} · สูงสุด ${a.highBid ? money(a.highBid) + ' โดย ' + txt(a.highBidderName, '-') : 'ยังไม่มี'} · `, timingEl));
       const side = el('div', { class: 'item-side' });
       const controls = [];
       if (a.buyout) side.append(el('span', { class: 'mono muted' }, 'ซื้อทันที ' + money(a.buyout)));
       if (a.canBid && open) {
-        const bidBtn = el('button', { class: 'btn primary', type: 'button', onclick: () => placeBid(a, num(bid.value)) }, 'เสนอ');
+        const bidBtn = el('button', { class: 'btn primary', type: 'button', onclick: () => placeBid(a, num(bid.value)) }, 'เสนอราคา');
         controls.push(bid, bidBtn);
         side.append(el('div', { class: 'item-form' },
           el('div', { class: 'field' }, el('label', {}, isCell ? 'ประมูลเขต' : 'ประมูล'), bid),
@@ -1534,12 +1531,20 @@ async function placeBid(a, amount) {
 }
 async function buyout(a) {
   if (!a.canBuyout || !auctionOpen(a)) { toast('รายการนี้หมดเวลาประมูลแล้ว', 'error'); return; }
-  if (!await confirmDialog({ title: 'ซื้อทันที', body: `จ่าย ${money(a.buyout)} ${state.currency}`, confirm: 'ซื้อทันที' })) return;
-  try { const data = await api('POST', `/api/auctions/${a.id}/buyout`, {}); toast('ซื้อแล้ว ของอยู่ในกล่อง'); state.balance = data.balance; state.mail = data.mailboxCount; renderShell(); render(); }
-  catch (error) { toastError(error); }
+  const isCell = a.kind === 'CELL';
+  if (!await confirmDialog({ title: 'ซื้อทันที', body: `จ่าย ${money(a.buyout)} ${state.currency} เพื่อซื้อ${isCell ? 'กรรมสิทธิ์เขต ' + a.cellId : 'ไอเท็ม'}ทันทีหรือไม่?`, confirm: 'ซื้อทันที' })) return;
+  try {
+    const data = await api('POST', `/api/auctions/${a.id}/buyout`, {});
+    toast(isCell ? 'ซื้อเขตสำเร็จ! ได้รับกรรมสิทธิ์แล้ว' : 'ซื้อแล้ว ของอยู่ในกล่อง /mail');
+    state.balance = data.balance;
+    state.mail = data.mailboxCount;
+    renderShell();
+    render();
+  } catch (error) { toastError(error); }
 }
 async function cancelAuction(a) {
-  if (!await confirmDialog({ title: 'ยกเลิกประมูล', body: 'ของจะถูกส่งคืน', confirm: 'ยืนยัน', danger: true })) return;
+  const isCell = a.kind === 'CELL';
+  if (!await confirmDialog({ title: 'ยกเลิกประมูล', body: isCell ? 'ยืนยันยกเลิกการประมูลเขตนี้หรือไม่?' : 'ของจะถูกส่งคืนเข้ากล่อง /mail', confirm: 'ยืนยัน', danger: true })) return;
   try { await api('POST', `/api/auctions/${a.id}/cancel`, {}); toast('ยกเลิกแล้ว'); render(); }
   catch (error) { toastError(error); }
 }

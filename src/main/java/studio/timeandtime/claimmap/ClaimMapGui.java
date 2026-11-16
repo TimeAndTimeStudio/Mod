@@ -229,18 +229,24 @@ public final class ClaimMapGui {
 									  EconomyManager economy, int returnCx, int returnCz) {
 		SimpleContainer container = new SimpleContainer(27);
 
+		boolean hasAuction = ClaimMap.instance() != null && ClaimMap.instance().auctions() != null
+				&& ClaimMap.instance().auctions().hasActiveCellAuction(cell.id);
+
 		ItemStack cellInfo = new ItemStack(Items.FILLED_MAP);
 		cellInfo.set(DataComponents.CUSTOM_NAME, Component.literal("§6เขต " + cell.id));
 		cellInfo.set(DataComponents.LORE, new ItemLore(List.of(
 				Component.literal("§eเจ้าของ: §f" + cell.ownerName),
 				Component.literal("§eสมาชิก: §7" + (cell.members == null || cell.members.isEmpty() ? "ไม่มี" : cell.members.size() + " คน")),
-				Component.literal("§7พิกัด: " + (cell.cx * config.cellSize) + ", " + (cell.cz * config.cellSize))
+				Component.literal("§7พิกัด: " + (cell.cx * config.cellSize) + ", " + (cell.cz * config.cellSize)),
+				hasAuction ? Component.literal("§a⚖ กำลังเปิดประมูลอยู่") : Component.literal("§7สถานะ: ปกติ")
 		)));
 		container.setItem(4, cellInfo);
 
 		ItemStack abandon = new ItemStack(Items.LAVA_BUCKET);
 		abandon.set(DataComponents.CUSTOM_NAME, Component.literal("§c⚠ ปล่อยสิทธิ์เขตนี้"));
-		abandon.set(DataComponents.LORE, new ItemLore(List.of(
+		abandon.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
+				Component.literal("§cไม่สามารถปล่อยเขตได้เนื่องจากกำลังเปิดประมูลอยู่")
+		) : List.of(
 				Component.literal("§7ของในเขตจะไม่ถูกลบ แต่พื้นที่จะกลับเป็นที่ว่าง"),
 				Component.literal("§cคลิกเพื่อปล่อยเขตทันที")
 		)));
@@ -248,9 +254,13 @@ public final class ClaimMapGui {
 
 		ItemStack auction = new ItemStack(Items.GOLD_INGOT);
 		auction.set(DataComponents.CUSTOM_NAME, Component.literal("§e⚖ เปิดประมูลเขตนี้"));
-		auction.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§7สามารถเปิดประมูลเขตผ่านคำสั่งหรือหน้าเว็บแอดมิน"),
-				Component.literal("§7ผู้ชนะการประมูลจะได้รับสิทธิ์ครอบครองเขตนี้")
+		auction.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
+				Component.literal("§aเขตนี้กำลังเปิดประมูลอยู่แล้วในตลาด /ah และหน้าเว็บ"),
+				Component.literal("§7คุณสามารถตรวจสอบสถานะได้ที่คำสั่ง /ah")
+		) : List.of(
+				Component.literal("§7คลิกเพื่อเปิดประมูลเขตนี้ (ระยะเวลา 24 ชม.)"),
+				Component.literal("§7หรือกำหนดราคาเองด้วยคำสั่ง:"),
+				Component.literal("§e/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]")
 		)));
 		container.setItem(15, auction);
 
@@ -266,6 +276,11 @@ public final class ClaimMapGui {
 				container,
 				(slotIndex, button, input, sp) -> {
 					if (slotIndex == 11) { // Abandon
+						if (ClaimMap.instance() != null && ClaimMap.instance().auctions() != null
+								&& ClaimMap.instance().auctions().hasActiveCellAuction(cell.id)) {
+							sp.sendSystemMessage(Component.literal("§cไม่สามารถปล่อยเขตนี้ได้เนื่องจากกำลังเปิดประมูลอยู่"));
+							return;
+						}
 						boolean ok = regions.unclaim(cell.id, sp.getUUID().toString(), sp.permissions().hasPermission(Permissions.COMMANDS_ADMIN));
 						if (ok) {
 							sp.sendSystemMessage(Component.literal("§aปล่อยกรรมสิทธิ์เขต " + cell.id + " เรียบร้อยแล้ว"));
@@ -273,6 +288,27 @@ public final class ClaimMapGui {
 							sp.sendSystemMessage(Component.literal("§cไม่สามารถปล่อยเขตนี้ได้"));
 						}
 						open(sp, regions, config, economy, returnCx, returnCz);
+					} else if (slotIndex == 15) { // Auction
+						if (ClaimMap.instance() != null && ClaimMap.instance().auctions() != null) {
+							var am = ClaimMap.instance().auctions();
+							if (am.hasActiveCellAuction(cell.id)) {
+								sp.sendSystemMessage(Component.literal("§cเขตนี้กำลังอยู่ระหว่างการประมูล"));
+								return;
+							}
+							long defaultStart = 50_000L;
+							if (ClaimMap.instance().landPrices() != null) {
+								defaultStart = Math.max(10_000L, ClaimMap.instance().landPrices().currentPrice() / 2);
+							}
+							var outcome = am.createCellAuction(cell.id, sp.getUUID().toString(), sp.getGameProfile().name(), defaultStart, null, 24);
+							if (outcome.result() == AuctionManager.Result.OK) {
+								sp.sendSystemMessage(Component.literal("§aเปิดประมูลเขต " + cell.id + " สำเร็จ! (รหัส " + outcome.auctionId()
+										+ " ราคาเริ่ม " + defaultStart + " " + config.currencyName + " ระยะเวลา 24 ชม.)"));
+								sp.sendSystemMessage(Component.literal("§7คุณสามารถกำหนดราคาเองได้ด้วย: §e/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"));
+								sp.closeContainer();
+							} else {
+								sp.sendSystemMessage(Component.literal("§cเปิดประมูลไม่สำเร็จ: " + outcome.result()));
+							}
+						}
 					} else if (slotIndex == 22) { // Back
 						open(sp, regions, config, economy, returnCx, returnCz);
 					}

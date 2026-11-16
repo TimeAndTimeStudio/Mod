@@ -136,6 +136,23 @@ public final class ClaimCommands {
 															StringArgumentType.getString(ctx, "startPrice"),
 															StringArgumentType.getString(ctx, "buyout"),
 															StringArgumentType.getString(ctx, "hours")))))))
+					.then(Commands.literal("cell")
+							.then(Commands.argument("cellId", StringArgumentType.word())
+									.then(Commands.argument("startPrice", StringArgumentType.word())
+											.executes(ctx -> runAhCell(ctx.getSource(),
+													StringArgumentType.getString(ctx, "cellId"),
+													StringArgumentType.getString(ctx, "startPrice"), "0", "24"))
+											.then(Commands.argument("buyout", StringArgumentType.word())
+													.executes(ctx -> runAhCell(ctx.getSource(),
+															StringArgumentType.getString(ctx, "cellId"),
+															StringArgumentType.getString(ctx, "startPrice"),
+															StringArgumentType.getString(ctx, "buyout"), "24"))
+													.then(Commands.argument("hours", StringArgumentType.word())
+															.executes(ctx -> runAhCell(ctx.getSource(),
+																	StringArgumentType.getString(ctx, "cellId"),
+																	StringArgumentType.getString(ctx, "startPrice"),
+																	StringArgumentType.getString(ctx, "buyout"),
+																	StringArgumentType.getString(ctx, "hours"))))))))
 					.then(Commands.literal("bid")
 							.then(Commands.argument("id", StringArgumentType.word())
 									.then(Commands.argument("amount", StringArgumentType.word())
@@ -165,7 +182,20 @@ public final class ClaimCommands {
 					.then(Commands.literal("transfer")
 							.then(Commands.argument("player", StringArgumentType.word())
 									.executes(ctx -> runClaimTransferHere(ctx.getSource(),
-											StringArgumentType.getString(ctx, "player"))))));
+											StringArgumentType.getString(ctx, "player")))))
+					.then(Commands.literal("auction")
+							.then(Commands.argument("startPrice", StringArgumentType.word())
+									.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
+											StringArgumentType.getString(ctx, "startPrice"), "0", "24"))
+									.then(Commands.argument("buyout", StringArgumentType.word())
+											.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
+													StringArgumentType.getString(ctx, "startPrice"),
+													StringArgumentType.getString(ctx, "buyout"), "24"))
+											.then(Commands.argument("hours", StringArgumentType.word())
+													.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
+															StringArgumentType.getString(ctx, "startPrice"),
+															StringArgumentType.getString(ctx, "buyout"),
+															StringArgumentType.getString(ctx, "hours"))))))));
 
 			var timesmpNode = dispatcher.register(Commands.literal("timesmp")
 					.executes(ctx -> runClaimMapGui(ctx.getSource()))
@@ -678,6 +708,65 @@ public final class ClaimCommands {
 		return 1;
 	}
 
+	private int runClaimAuctionHere(CommandSourceStack src, String startText, String buyoutText, String hoursText) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		int bx = player.getBlockX();
+		int bz = player.getBlockZ();
+		int cx = Math.floorDiv(bx, config.cellSize);
+		int cz = Math.floorDiv(bz, config.cellSize);
+		String cellId = cx + "," + cz;
+		return doCellAuction(player, cellId, startText, buyoutText, hoursText);
+	}
+
+	private int runAhCell(CommandSourceStack src, String cellId, String startText, String buyoutText, String hoursText) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		return doCellAuction(player, cellId, startText, buyoutText, hoursText);
+	}
+
+	private int doCellAuction(ServerPlayer player, String cellId, String startText, String buyoutText, String hoursText) {
+		if (auctions.isDisabled()) {
+			player.sendSystemMessage(Component.literal("ระบบตลาดถูกปิดชั่วคราว"));
+			return 0;
+		}
+		long start;
+		long buyoutRaw;
+		int hours;
+		try {
+			start = Long.parseLong(startText);
+			buyoutRaw = Long.parseLong(buyoutText);
+			hours = Integer.parseInt(hoursText);
+		} catch (NumberFormatException e) {
+			player.sendSystemMessage(Component.literal("ราคาและชั่วโมงต้องเป็นตัวเลขจำนวนเต็ม"));
+			return 0;
+		}
+		if (start < 0 || start > EconomyManager.MAX_MONEY) {
+			player.sendSystemMessage(Component.literal("ราคาเริ่มต้นต้องระหว่าง 0 ถึง " + EconomyManager.MAX_MONEY));
+			return 0;
+		}
+		Long buyout = buyoutRaw > 0 ? buyoutRaw : null;
+		if (buyout != null && buyout < start) {
+			player.sendSystemMessage(Component.literal("ราคาซื้อทันทีต้องมากกว่าหรือเท่ากับราคาเริ่มต้น"));
+			return 0;
+		}
+		if (hours < 1 || hours > config.auctionMaxHours) {
+			player.sendSystemMessage(Component.literal("ระยะเวลาต้องระหว่าง 1 ถึง " + config.auctionMaxHours + " ชั่วโมง"));
+			return 0;
+		}
+		AuctionManager.CreateOutcome o = auctions.createCellAuction(
+				cellId, player.getUUID().toString(), player.getGameProfile().name(), start, buyout, hours);
+		if (o.result() != AuctionManager.Result.OK) {
+			player.sendSystemMessage(Component.literal("เปิดประมูลเขตไม่ได้: " + auctionErrorText(o.result())));
+			return 0;
+		}
+		player.sendSystemMessage(Component.literal("เปิดประมูลเขต " + cellId + " แล้ว (รหัส " + o.auctionId()
+				+ ") ราคาเริ่ม " + start + " " + config.currencyName
+				+ (buyout == null ? "" : " (ซื้อทันที " + buyout + ")")
+				+ " ระยะเวลา " + hours + " ชม."));
+		return 1;
+	}
+
 	private int runAhBid(CommandSourceStack src, String id, String amountText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
@@ -897,6 +986,10 @@ public final class ClaimCommands {
 		}
 		if (targetUuid.equals(player.getUUID())) {
 			player.sendSystemMessage(Component.literal("ไม่สามารถโอนเขตให้ตัวเองได้"));
+			return 0;
+		}
+		if (auctions.hasActiveCellAuction(id)) {
+			player.sendSystemMessage(Component.literal("ไม่สามารถโอนเขตได้ เขตนี้กำลังเปิดประมูลอยู่"));
 			return 0;
 		}
 		boolean admin = src.permissions().hasPermission(Permissions.COMMANDS_ADMIN);

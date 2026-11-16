@@ -48,6 +48,18 @@ public class ClaimMap implements ModInitializer {
 		return landPrices;
 	}
 
+	public RegionManager regions() {
+		return regions;
+	}
+
+	public EconomyManager economy() {
+		return economy;
+	}
+
+	public AuctionManager auctions() {
+		return auctions;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
