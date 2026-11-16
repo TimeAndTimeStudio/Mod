@@ -6,11 +6,14 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -154,10 +157,6 @@ public final class ClaimCommands {
 							.then(Commands.argument("id", StringArgumentType.word())
 									.executes(ctx -> runAhEnd(ctx.getSource(),
 											StringArgumentType.getString(ctx, "id")))))
-					.then(Commands.literal("close")
-							.then(Commands.argument("id", StringArgumentType.word())
-									.executes(ctx -> runAhEnd(ctx.getSource(),
-											StringArgumentType.getString(ctx, "id")))))
 					.then(Commands.literal("cancel")
 							.then(Commands.argument("id", StringArgumentType.word())
 									.executes(ctx -> runAhCancel(ctx.getSource(),
@@ -179,6 +178,18 @@ public final class ClaimCommands {
 
 			dispatcher.register(Commands.literal("claim").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaim(ctx.getSource()))
+					.then(Commands.literal("add")
+							.then(Commands.argument("player", StringArgumentType.word())
+									.executes(ctx -> runClaimAddHere(ctx.getSource(),
+											StringArgumentType.getString(ctx, "player")))))
+					.then(Commands.literal("remove")
+							.then(Commands.argument("player", StringArgumentType.word())
+									.executes(ctx -> runClaimRemoveHere(ctx.getSource(),
+											StringArgumentType.getString(ctx, "player")))))
+					.then(Commands.literal("tp")
+							.then(Commands.argument("cellId", StringArgumentType.word())
+									.executes(ctx -> runClaimTp(ctx.getSource(),
+											StringArgumentType.getString(ctx, "cellId")))))
 					.then(Commands.literal("transfer")
 							.then(Commands.argument("player", StringArgumentType.word())
 									.executes(ctx -> runClaimTransferHere(ctx.getSource(),
@@ -976,6 +987,162 @@ public final class ClaimCommands {
 			player.sendSystemMessage(Component.literal("ไม่สามารถโอนเขตได้ (คุณไม่ใช่เจ้าของเขตนี้)"));
 		}
 		return ok ? 1 : 0;
+	}
+
+	private int runClaimAddHere(CommandSourceStack src, String targetName) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		int bx = player.getBlockX();
+		int bz = player.getBlockZ();
+		int cx = Math.floorDiv(bx, config.cellSize);
+		int cz = Math.floorDiv(bz, config.cellSize);
+		String id = cx + "," + cz;
+		RegionManager.CellData c = regions.get(id);
+		String uuid = player.getUUID().toString();
+		boolean admin = src.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
+		if (c == null || (!c.isOwner(uuid) && !admin)) {
+			player.sendSystemMessage(Component.literal("คุณต้องเป็นเจ้าของเขต " + id + " นี้เพื่อเพิ่มสมาชิก"));
+			return 0;
+		}
+		UUID targetUuid = accounts.uuidOf(targetName).orElse(null);
+		String resolvedName = targetName;
+		if (targetUuid == null) {
+			ServerPlayer tp = src.getServer().getPlayerList().getPlayerByName(targetName);
+			if (tp != null) {
+				targetUuid = tp.getUUID();
+				resolvedName = tp.getGameProfile().name();
+			}
+		}
+		if (targetUuid == null) {
+			player.sendSystemMessage(Component.literal("ไม่พบผู้เล่น " + targetName));
+			return 0;
+		}
+		if (targetUuid.equals(player.getUUID())) {
+			player.sendSystemMessage(Component.literal("คุณเป็นเจ้าของเขตนี้อยู่แล้ว"));
+			return 0;
+		}
+		boolean ok = regions.addMember(id, c.ownerUuid, targetUuid.toString(), resolvedName);
+		if (ok) {
+			player.sendSystemMessage(Component.literal("เพิ่ม " + resolvedName + " เป็นสมาชิกในเขต " + id + " สำเร็จ (สามารถสร้างและเปิดกล่องได้)"));
+		} else {
+			player.sendSystemMessage(Component.literal("เพิ่มสมาชิกไม่สำเร็จ"));
+		}
+		return ok ? 1 : 0;
+	}
+
+	private int runClaimRemoveHere(CommandSourceStack src, String targetName) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		int bx = player.getBlockX();
+		int bz = player.getBlockZ();
+		int cx = Math.floorDiv(bx, config.cellSize);
+		int cz = Math.floorDiv(bz, config.cellSize);
+		String id = cx + "," + cz;
+		RegionManager.CellData c = regions.get(id);
+		String uuid = player.getUUID().toString();
+		boolean admin = src.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
+		if (c == null || (!c.isOwner(uuid) && !admin)) {
+			player.sendSystemMessage(Component.literal("คุณต้องเป็นเจ้าของเขต " + id + " นี้เพื่อลบสมาชิก"));
+			return 0;
+		}
+		UUID targetUuid = accounts.uuidOf(targetName).orElse(null);
+		String resolvedName = targetName;
+		if (targetUuid == null) {
+			ServerPlayer tp = src.getServer().getPlayerList().getPlayerByName(targetName);
+			if (tp != null) {
+				targetUuid = tp.getUUID();
+				resolvedName = tp.getGameProfile().name();
+			}
+		}
+		String targetUuidStr = targetUuid != null ? targetUuid.toString() : null;
+		if (targetUuidStr == null && c.members != null) {
+			for (String m : c.members) {
+				var nameOpt = accounts.nameOf(UUID.fromString(m));
+				if (nameOpt.isPresent() && nameOpt.get().equalsIgnoreCase(targetName)) {
+					targetUuidStr = m;
+					resolvedName = nameOpt.get();
+					break;
+				}
+			}
+		}
+		if (targetUuidStr == null) {
+			player.sendSystemMessage(Component.literal("ไม่พบผู้เล่น " + targetName + " ในระบบ"));
+			return 0;
+		}
+		boolean ok = regions.removeMember(id, c.ownerUuid, targetUuidStr);
+		if (ok) {
+			player.sendSystemMessage(Component.literal("ลบสิทธิ์ " + resolvedName + " ออกจากเขต " + id + " เรียบร้อยแล้ว"));
+		} else {
+			player.sendSystemMessage(Component.literal("ลบสมาชิกไม่สำเร็จ (ผู้เล่นนี้อาจไม่ได้เป็นสมาชิกในเขตนี้)"));
+		}
+		return ok ? 1 : 0;
+	}
+
+	private int runClaimTp(CommandSourceStack src, String cellId) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		int cx, cz;
+		try {
+			if (cellId.contains(",")) {
+				String[] parts = cellId.split(",");
+				cx = Integer.parseInt(parts[0].trim());
+				cz = Integer.parseInt(parts[1].trim());
+			} else {
+				player.sendSystemMessage(Component.literal("รูปแบบเขตไม่ถูกต้อง (ตัวอย่าง: /claim tp 5,5)"));
+				return 0;
+			}
+		} catch (Exception e) {
+			player.sendSystemMessage(Component.literal("รูปแบบเขตไม่ถูกต้อง (ตัวอย่าง: /claim tp 5,5)"));
+			return 0;
+		}
+		teleportToCell(player, cx, cz, config);
+		return 1;
+	}
+
+	public static boolean teleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
+		var level = player.serverLevel();
+		int minX = cx * config.cellSize;
+		int minZ = cz * config.cellSize;
+		int margin = Math.min(2, Math.max(0, (config.cellSize - 2) / 2));
+		int span = Math.max(1, config.cellSize - 2 * margin);
+		int rx = minX + margin + (int) (Math.random() * span);
+		int rz = minZ + margin + (int) (Math.random() * span);
+
+		int minY = level.getMinY();
+		int maxY = level.getMaxY();
+		int targetY = -1;
+
+		for (int y = Math.min(maxY - 2, 319); y >= minY + 1; y--) {
+			BlockPos posBelow = new BlockPos(rx, y - 1, rz);
+			BlockPos posFeet = new BlockPos(rx, y, rz);
+			BlockPos posHead = new BlockPos(rx, y + 1, rz);
+
+			var stateBelow = level.getBlockState(posBelow);
+			var stateFeet = level.getBlockState(posFeet);
+			var stateHead = level.getBlockState(posHead);
+
+			if (stateBelow.isSolid() && !stateBelow.is(Blocks.LAVA)
+					&& !stateBelow.is(Blocks.FIRE)
+					&& !stateBelow.is(Blocks.MAGMA_BLOCK)
+					&& !stateBelow.is(Blocks.CACTUS)) {
+				if ((stateFeet.isAir() || !stateFeet.isSolid())
+						&& (stateHead.isAir() || !stateHead.isSolid())
+						&& !stateFeet.is(Blocks.LAVA)
+						&& !stateHead.is(Blocks.LAVA)) {
+					targetY = y;
+					break;
+				}
+			}
+		}
+
+		if (targetY == -1) {
+			targetY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, rx, rz) + 1;
+			if (targetY < minY) targetY = 64;
+		}
+
+		player.teleportTo(level, rx + 0.5, targetY, rz + 0.5, java.util.Set.of(), player.getYRot(), player.getXRot(), true);
+		player.sendSystemMessage(Component.literal("วาร์ปไปยังเขต " + cx + "," + cz + " พิกัด (" + rx + ", " + targetY + ", " + rz + ") สำเร็จ"));
+		return true;
 	}
 
 	private int runAdminTransfer(CommandSourceStack src, int cx, int cz, String targetName) {

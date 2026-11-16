@@ -101,31 +101,37 @@ public final class ClaimMapGui {
 
 		// Navigation buttons
 		ItemStack west = new ItemStack(Items.ARROW);
-		west.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10D ตะวันตก (West)"));
+		west.set(DataComponents.CUSTOM_NAME, Component.literal("§eตะวันตก (West)"));
 		container.setItem(45, west);
 
 		ItemStack north = new ItemStack(Items.ARROW);
-		north.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10B เหนือ (North)"));
+		north.set(DataComponents.CUSTOM_NAME, Component.literal("§eเหนือ (North)"));
 		container.setItem(46, north);
 
 		ItemStack south = new ItemStack(Items.ARROW);
-		south.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10C ใต้ (South)"));
+		south.set(DataComponents.CUSTOM_NAME, Component.literal("§eใต้ (South)"));
 		container.setItem(47, south);
 
 		ItemStack east = new ItemStack(Items.ARROW);
-		east.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE10E ตะวันออก (East)"));
+		east.set(DataComponents.CUSTOM_NAME, Component.literal("§eตะวันออก (East)"));
 		container.setItem(48, east);
 
 		ItemStack center = new ItemStack(Items.COMPASS);
-		center.set(DataComponents.CUSTOM_NAME, Component.literal("§6\uE10F [ศูนย์กลาง 0, 0]"));
+		center.set(DataComponents.CUSTOM_NAME, Component.literal("§6เลื่อนไปยังตำแหน่งของคุณ (" + playerCx + ", " + playerCz + ")"));
+		center.set(DataComponents.LORE, new ItemLore(List.of(
+				Component.literal("§7คลิกเพื่อเลื่อนศูนย์กลางแผนที่มาที่ตัวคุณ")
+		)));
 		container.setItem(49, center);
 
-		ItemStack claimHere = new ItemStack(Items.EMERALD);
-		claimHere.set(DataComponents.CUSTOM_NAME, Component.literal("§a\uE109 จองเขตที่ยืนอยู่ทันที"));
+		ItemStack claimHere = new ItemStack(Items.GRASS_BLOCK);
+		claimHere.set(DataComponents.CUSTOM_NAME, Component.literal("§aจองเขตที่ยืนอยู่ทันที"));
 		container.setItem(50, claimHere);
 
-		ItemStack close = new ItemStack(Items.BARRIER);
-		close.set(DataComponents.CUSTOM_NAME, Component.literal("§c\uE106 ปิดแผนที่"));
+		ItemStack close = new ItemStack(Items.IRON_DOOR);
+		close.set(DataComponents.CUSTOM_NAME, Component.literal("§cปิดแผนที่"));
+		close.set(DataComponents.LORE, new ItemLore(List.of(
+				Component.literal("§7คลิกเพื่อปิดหน้าต่าง หรือกดปุ่ม Esc")
+		)));
 		container.setItem(53, close);
 
 		VirtualChestMenu.open(
@@ -143,8 +149,10 @@ public final class ClaimMapGui {
 						open(sp, regions, config, economy, centerCx, centerCz + 1);
 					} else if (slotIndex == 48) { // East
 						open(sp, regions, config, economy, centerCx + 1, centerCz);
-					} else if (slotIndex == 49) { // Reset center to origin (0, 0)
-						open(sp, regions, config, economy, 0, 0);
+					} else if (slotIndex == 49) { // Move center to player's current location
+						int pcx = Math.floorDiv(sp.getBlockX(), config.cellSize);
+						int pcz = Math.floorDiv(sp.getBlockZ(), config.cellSize);
+						open(sp, regions, config, economy, pcx, pcz);
 					} else if (slotIndex == 50) { // Claim current
 						sp.closeContainer();
 						var server = ClaimMap.getServer();
@@ -239,7 +247,7 @@ public final class ClaimMapGui {
 		container.setItem(4, cellInfo);
 
 		ItemStack abandon = new ItemStack(Items.LAVA_BUCKET);
-		abandon.set(DataComponents.CUSTOM_NAME, Component.literal("§c\uE106 [!] ปล่อยสิทธิ์เขตนี้"));
+		abandon.set(DataComponents.CUSTOM_NAME, Component.literal("§c[!] ปล่อยสิทธิ์เขตนี้"));
 		abandon.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
 				Component.literal("§cไม่สามารถปล่อยเขตได้เนื่องจากกำลังเปิดประมูลอยู่")
 		) : List.of(
@@ -248,20 +256,29 @@ public final class ClaimMapGui {
 		)));
 		container.setItem(11, abandon);
 
+		ItemStack warp = new ItemStack(Items.ENDER_PEARL);
+		warp.set(DataComponents.CUSTOM_NAME, Component.literal("§b[วาร์ป] เทเลพอร์ตไปยังเขตนี้"));
+		warp.set(DataComponents.LORE, new ItemLore(List.of(
+				Component.literal("§7สุ่มตำแหน่ง X, Z ในเขตอย่างปลอดภัย"),
+				Component.literal("§7คำนวณความสูง Y อัตโนมัติไม่ให้ติดบล็อก"),
+				Component.literal("§bคลิกเพื่อวาร์ปทันที")
+		)));
+		container.setItem(13, warp);
+
 		ItemStack auction = new ItemStack(Items.GOLD_INGOT);
-		auction.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE102 [ประมูล] เปิดประมูลเขตนี้"));
+		auction.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ประมูล] เปิดประมูลเขตนี้"));
 		auction.set(DataComponents.LORE, new ItemLore(hasAuction ? List.of(
-				Component.literal("§aเขตนี้กำลังเปิดประมูลอยู่แล้วในตลาด /ah และหน้าเว็บ"),
+				Component.literal("§aเขตนี้กำลังเปิดประมูลอยู่แล้วในตลาด /ah"),
 				Component.literal("§7คุณสามารถตรวจสอบสถานะได้ที่คำสั่ง /ah")
 		) : List.of(
 				Component.literal("§7คลิกเพื่อเปิดประมูลเขตนี้ (ระยะเวลา 24 ชม.)"),
 				Component.literal("§7หรือกำหนดราคาเองด้วยคำสั่ง:"),
-				Component.literal("§e/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]")
+				Component.literal("§e/claim auction <ราคาเริ่ม> [ชั่วโมง]")
 		)));
 		container.setItem(15, auction);
 
 		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e\uE103 < กลับไปยังแผนที่"));
+		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e< กลับไปยังแผนที่"));
 		container.setItem(22, back);
 
 		VirtualChestMenu.open(
@@ -284,6 +301,9 @@ public final class ClaimMapGui {
 							sp.sendSystemMessage(Component.literal("§cไม่สามารถปล่อยเขตนี้ได้"));
 						}
 						open(sp, regions, config, economy, returnCx, returnCz);
+					} else if (slotIndex == 13) { // Warp
+						sp.closeContainer();
+						ClaimCommands.teleportToCell(sp, cell.cx, cell.cz, config);
 					} else if (slotIndex == 15) { // Auction
 						if (ClaimMap.instance() != null && ClaimMap.instance().auctions() != null) {
 							var am = ClaimMap.instance().auctions();
@@ -299,7 +319,7 @@ public final class ClaimMapGui {
 							if (outcome.result() == AuctionManager.Result.OK) {
 								sp.sendSystemMessage(Component.literal("§aเปิดประมูลเขต " + cell.id + " สำเร็จ! (รหัส " + outcome.auctionId()
 										+ " ราคาเริ่ม " + defaultStart + " " + config.currencyName + " ระยะเวลา 24 ชม.)"));
-								sp.sendSystemMessage(Component.literal("§7คุณสามารถกำหนดราคาเองได้ด้วย: §e/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"));
+								sp.sendSystemMessage(Component.literal("§7คุณสามารถกำหนดราคาเองได้ด้วย: §e/claim auction <ราคาเริ่ม> [ชั่วโมง]"));
 								sp.closeContainer();
 							} else {
 								sp.sendSystemMessage(Component.literal("§cเปิดประมูลไม่สำเร็จ: " + outcome.result()));
