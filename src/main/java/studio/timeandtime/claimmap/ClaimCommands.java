@@ -165,7 +165,8 @@ public final class ClaimCommands {
 											StringArgumentType.getString(ctx, "qty"))))));
 
 			dispatcher.register(Commands.literal("mail").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runMailGui(ctx.getSource())));
+					.executes(ctx -> runMailGui(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runMailGui(ctx.getSource()))));
 
 			dispatcher.register(Commands.literal("ah").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runAhGui(ctx.getSource()))
@@ -709,65 +710,7 @@ public final class ClaimCommands {
 	private int runMailGui(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (mailbox.isDisabled()) {
-			player.sendSystemMessage(Component.literal("§cระบบกล่องของถูกปิดชั่วคราว"));
-			return 0;
-		}
-		List<MailboxManager.MailEntry> entries = mailbox.list(player.getUUID());
-		if (entries.isEmpty()) {
-			player.sendSystemMessage(Component.literal("§eกล่องของว่างเปล่า ไม่มีไอเท็มค้างอยู่"));
-			return 1;
-		}
-
-		SimpleContainer container = new SimpleContainer(54);
-		int slot = 0;
-		for (MailboxManager.MailEntry entry : entries) {
-			if (slot >= 54) break;
-			var decoded = ItemCodecs.decode(entry.itemJson(), player.level().registryAccess());
-			if (decoded.isPresent()) {
-				ItemStack stack = decoded.get();
-				stack.setCount(Math.min(entry.count(), stack.getMaxStackSize()));
-				container.setItem(slot++, stack);
-			}
-		}
-
-		VirtualChestMenu.open(
-				player,
-				Component.literal("§0กล่องของของคุณ (หยิบของเข้าตัว)"),
-				6,
-				false,
-				container,
-				null,
-				(sp, cont) -> {
-					List<MailboxManager.MailEntry> remaining = new ArrayList<>();
-					for (int i = 0; i < cont.getContainerSize(); i++) {
-						ItemStack stack = cont.getItem(i);
-						if (stack != null && !stack.isEmpty()) {
-							String json = ItemCodecs.encode(stack, sp.level().registryAccess());
-							if (json != null) {
-								ItemCodecs.ItemView v = ItemCodecs.view(stack);
-								remaining.add(new MailboxManager.MailEntry(
-										UUID.randomUUID().toString().substring(0, 8),
-										json, v.itemId(), v.count(), v.label(), "mailbox",
-										System.currentTimeMillis()
-								));
-							}
-						}
-					}
-					if (entries.size() > 54) {
-						for (int i = 54; i < entries.size(); i++) {
-							remaining.add(entries.get(i));
-						}
-					}
-					mailbox.setAll(sp.getUUID(), remaining);
-					int taken = entries.size() - remaining.size();
-					if (taken > 0) {
-						sp.sendSystemMessage(Component.literal("§aคุณได้รับของเข้าตัวเรียบร้อยแล้ว (คงเหลือในกล่อง " + remaining.size() + " รายการ)"));
-					} else if (remaining.isEmpty()) {
-						sp.sendSystemMessage(Component.literal("§aคุณได้รับของทั้งหมดในกล่องเรียบร้อยแล้ว"));
-					}
-				}
-		);
+		MailGui.open(player, mailbox, playerMarket, auctions, economy, config.currencyName);
 		return 1;
 	}
 
