@@ -232,7 +232,7 @@ public final class AuctionManager {
 			a.count = count;
 			a.label = label;
 			a.startPrice = startPrice;
-			a.buyout = null;
+			a.buyout = buyout;
 			a.highBid = 0;
 			a.createdAt = nowMs;
 			a.endsAt = nowMs + duration * 3_600_000L;
@@ -295,7 +295,7 @@ public final class AuctionManager {
 			a.count = 1;
 			a.label = "เขต " + canonical;
 			a.startPrice = startPrice;
-			a.buyout = null;
+			a.buyout = buyout;
 			a.highBid = 0;
 			a.createdAt = nowMs;
 			a.endsAt = nowMs + duration * 3_600_000L;
@@ -444,7 +444,7 @@ public final class AuctionManager {
 			a.count = p.count();
 			a.label = p.label();
 			a.startPrice = p.startPrice();
-			a.buyout = null;
+			a.buyout = p.buyout();
 			a.highBid = 0;
 			a.createdAt = nowMs;
 			a.endsAt = nowMs + hours * 3_600_000L;
@@ -487,6 +487,9 @@ public final class AuctionManager {
 			}
 			long min = minBid(a);
 			if (amount < min) return new BidOutcome(Result.BID_TOO_LOW, min, a.highBid, a.endsAt);
+			if (a.buyout != null && amount >= a.buyout) {
+				return new BidOutcome(Result.USE_BUYOUT, min, a.highBid, a.endsAt);
+			}
 			if (amount > EconomyManager.MAX_MONEY) return new BidOutcome(Result.BAD_REQUEST, min, a.highBid, a.endsAt);
 
 			List<Move> moves = new ArrayList<>();
