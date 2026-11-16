@@ -82,7 +82,12 @@ public final class WorldManager {
 	private volatile Path directory;
 	private volatile LevelStorageSource storageSource;
 	private volatile boolean stopping;
+	private volatile studio.timeandtime.claimmap.TeleportManager teleports;
 	private int tickCounter;
+
+	public void attachTeleports(studio.timeandtime.claimmap.TeleportManager teleports) {
+		this.teleports = teleports;
+	}
 
 	public record MainWorldPos(double x, double y, double z, float yaw, float pitch) {
 	}
@@ -506,6 +511,14 @@ public final class WorldManager {
 	}
 
 	private void teleportLocked(ServerPlayer player, WorldDefinition def) {
+		if (teleports != null) {
+			teleports.startWarmup(player, Component.literal("โลก " + def.name()), () -> executeTeleportLocked(player, def));
+		} else {
+			executeTeleportLocked(player, def);
+		}
+	}
+
+	private void executeTeleportLocked(ServerPlayer player, WorldDefinition def) {
 		ServerLevel destination = def.level;
 		if (destination == null) throw new IllegalStateException("โลกยังโหลดไม่เสร็จ");
 
@@ -558,6 +571,17 @@ public final class WorldManager {
 			player.sendSystemMessage(Component.literal("คุณอยู่ในโลกหลักอยู่แล้ว"));
 			return;
 		}
+		if (teleports != null) {
+			teleports.startWarmup(player, Component.literal("โลกหลัก"), () -> executeTeleportToMainWorld(player));
+		} else {
+			executeTeleportToMainWorld(player);
+		}
+	}
+
+	private void executeTeleportToMainWorld(ServerPlayer player) {
+		MinecraftServer s = server;
+		if (s == null) return;
+		ServerLevel mainWorld = s.overworld();
 		MainWorldPos saved = mainWorldPositions.get(player.getUUID());
 		Vec3 target;
 		float yaw = 0f;
@@ -702,30 +726,6 @@ public final class WorldManager {
 			teleportToMainWorld(p);
 			return 1;
 		}));
-
-		dispatcher.register(Commands.literal("world")
-				.then(Commands.argument("name", StringArgumentType.word())
-						.executes(ctx -> {
-							ServerPlayer p = ctx.getSource().getPlayer();
-							if (p == null) {
-								ctx.getSource().sendFailure(Component.literal("คำสั่งนี้ใช้ได้เฉพาะผู้เล่น"));
-								return 0;
-							}
-							String name = StringArgumentType.getString(ctx, "name").toLowerCase(Locale.ROOT);
-							if (name.equals("main") || name.equals("world") || name.equals("overworld")) {
-								teleportToMainWorld(p);
-								return 1;
-							}
-							try {
-								WorldDefinition def = require(name);
-								loadLocked(def);
-								teleportLocked(p, def);
-								return 1;
-							} catch (Exception e) {
-								ctx.getSource().sendFailure(Component.literal(e.getMessage()));
-								return 0;
-							}
-						})));
 	}
 
 	private int createCommand(CommandSourceStack source, String name) {

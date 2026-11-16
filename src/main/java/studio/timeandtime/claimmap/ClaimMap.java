@@ -60,6 +60,14 @@ public class ClaimMap implements ModInitializer {
 		return auctions;
 	}
 
+	public TeleportManager teleports() {
+		return teleports;
+	}
+
+	public HomeManager homeManager() {
+		return homeManager;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
@@ -79,6 +87,7 @@ public class ClaimMap implements ModInitializer {
 	private AdminService admin;
 	private SalesTracker salesTracker;
 	private TeleportManager teleports;
+	private HomeManager homeManager;
 	private studio.timeandtime.claimmap.world.WorldManager worldManager;
 	private LandPriceService landPrices;
 	private AuthGate authGate;
@@ -141,6 +150,7 @@ public class ClaimMap implements ModInitializer {
 		web.attachLandPrices(landPrices);
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
+			if (teleports != null) teleports.tick(srv);
 			if (worldManager != null) worldManager.tick();
 			if (srv.getTickCount() % 20 == 0) {
 				for (net.minecraft.server.level.ServerPlayer p : srv.getPlayerList().getPlayers()) {
@@ -180,8 +190,12 @@ public class ClaimMap implements ModInitializer {
 		prices.start(priceExecutor);
 
 		teleports = new TeleportManager();
+		homeManager = new HomeManager(config.dataDir().resolve("homes.json"));
+		homeManager.load();
+		worldManager.attachTeleports(teleports);
+
 		new ClaimCommands(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices,
-				admin, teleports).register();
+				admin, teleports, homeManager, worldManager).register();
 		new AuctionTicker(auctions, playerMarket).register();
 		protection.register();
 		authGate.registerHooks();
@@ -202,6 +216,7 @@ public class ClaimMap implements ModInitializer {
 		});
 
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+			if (homeManager != null) homeManager.save();
 			if (worldManager != null) worldManager.shutdown();
 			web.stop();
 			PlayerPositions.save();

@@ -93,7 +93,7 @@ public final class SellGui {
 						Component.literal("§a/ah sell <ราคาเริ่มต้น> [ชั่วโมง]"),
 						Component.literal("§7ตัวอย่าง: §b/ah sell 100 24"),
 						Component.literal("§7--------------------------------"),
-						Component.literal("§e[คลิกที่นี่] §fเพื่อเปิดดูตลาดที่ผู้เล่นลงขาย (/buy)"),
+						Component.literal("§e[คลิกที่นี่] §fเพื่อเปิดดูตลาดที่ผู้เล่นลงขาย (/ah)"),
 						Component.literal("§7(ระบบจะขายของในช่อง 1-45 ให้ก่อนเปลี่ยนหน้า)")
 				)
 		);

@@ -36,10 +36,11 @@ public final class HelpGui {
 						Component.literal("§7--------------------------------"),
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
 						Component.literal("§a/claim §7- ยืนยันจับจองแปลงที่ดิน ณ จุดที่คุณยืน"),
-						Component.literal("§a/claim trust <ชื่อ> §7- ให้สิทธิ์เพื่อนสร้าง/เปิดกล่องในแปลง"),
-						Component.literal("§a/claim untrust <ชื่อ> §7- ยกเลิกสิทธิ์เพื่อนในแปลง"),
-						Component.literal("§a/claim auction <ราคา> [ชม.] §7- นำโฉนดที่ดินขึ้นประมูล"),
-						Component.literal("§a/claim abandon §7- ยกเลิกกรรมสิทธิ์ ปล่อยเป็นแปลงว่าง"),
+						Component.literal("§a/claim add <ชื่อ> §7- ให้สิทธิ์เพื่อนสร้าง/เปิดกล่องในแปลง"),
+						Component.literal("§a/claim remove <ชื่อ> §7- ยกเลิกสิทธิ์เพื่อนในแปลง"),
+						Component.literal("§a/claim tf <ชื่อ> §7- โอนกรรมสิทธิ์แปลงนี้ให้เพื่อน"),
+						Component.literal("§a/claim at <ราคา> [ชม.] §7- นำโฉนดที่ดินขึ้นประมูล"),
+						Component.literal("§a/claim tp <cx,cz> §7- วาร์ปไปยังแปลงที่ระบุ (รอ 5 วิ)"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§b[คลิก] §7เพื่อเปิดดูแผนที่ที่ดินรอบตัว (/map)")
 				)
@@ -107,7 +108,6 @@ public final class HelpGui {
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
 						Component.literal("§e/price §7- เปิดเมนูดูราคากลางแยกตามหมวดหมู่"),
 						Component.literal("§e/price hand §7- เช็คราคาไอเท็มที่ถือในมือ"),
-						Component.literal("§e/price <ชื่อ> §7- ค้นหาราคาตามชื่อไอเท็ม"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§b[คลิก] §7เพื่อเปิดหน้าต่างเช็คราคาทันที")
 				)
@@ -152,17 +152,35 @@ public final class HelpGui {
 				GuiButtons.WARP,
 				Component.literal("§c/tpa §f- การวาร์ปและเดินทาง"),
 				List.of(
-						Component.literal("§7วาร์ปไปหาเพื่อน หรือกลับจุดเริ่มต้น"),
+						Component.literal("§7วาร์ปไปหาเพื่อน หรือกลับจุดเริ่มต้น (รอ 5 วิ)"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
 						Component.literal("§f/tpa <ชื่อผู้เล่น> §7- ส่งคำขอวาร์ปไปหาเพื่อน"),
-						Component.literal("§f/tpa accept §7- กดยอมรับคำขอวาร์ป"),
+						Component.literal("§f/tpa accept §7- กดยอมรับคำขอวาร์ป (รอ 5 วิ)"),
 						Component.literal("§f/tpa deny §7- ปฏิเสธคำขอวาร์ป"),
 						Component.literal("§f/tpa cancel §7- ยกเลิกคำขอวาร์ป"),
-						Component.literal("§f/spawn §7หรือ §f/main §7- วาร์ปกลับจุดเกิด/โลกหลัก")
+						Component.literal("§f/spawn §7หรือ §f/main §7- วาร์ปกลับจุดเกิด/โลกหลัก (รอ 5 วิ)")
 				)
 		);
 		container.setItem(34, tpaItem);
+
+		// Slot 38: /home - ระบบบ้านส่วนตัว
+		ItemStack homeItem = GuiButtons.button(
+				GuiButtons.WARP,
+				Component.literal("§6/home §f- ระบบบ้านส่วนตัว"),
+				List.of(
+						Component.literal("§7บันทึกตำแหน่งบ้านและวาร์ปกลับได้อย่างสะดวก"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§eคำสั่งที่ใช้งานได้:"),
+						Component.literal("§6/home §7- เปิดหน้าต่างเลือกบ้านที่จะวาร์ป"),
+						Component.literal("§6/home <ชื่อ> §7- วาร์ปไปบ้านที่ระบุทันที (รอ 5 วิ)"),
+						Component.literal("§6/sethome [ชื่อ] §7- บันทึกตำแหน่งบ้าน ณ จุดที่ยืน"),
+						Component.literal("§6/delhome <ชื่อ> §7- ลบจุดเซฟบ้าน"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§b[คลิก] §7เพื่อเปิดหน้าต่างบ้านของคุณ")
+				)
+		);
+		container.setItem(38, homeItem);
 
 		// Slot 49: Help Tip
 		ItemStack tipItem = GuiButtons.button(
@@ -205,6 +223,11 @@ public final class HelpGui {
 						var server = ClaimMap.getServer();
 						if (server != null) {
 							server.getCommands().performPrefixedCommand(sp.createCommandSourceStack(), "mail");
+						}
+					} else if (slotIndex == 38) { // /home
+						sp.closeContainer();
+						if (ClaimMap.instance() != null) {
+							HomeGui.open(sp, ClaimMap.instance().homeManager(), ClaimMap.instance().teleports());
 						}
 					}
 				},

@@ -53,6 +53,8 @@ public final class ClaimCommands {
 	private final PriceService prices;
 	private final AdminService admin;
 	private final TeleportManager teleports;
+	private final HomeManager homeManager;
+	private final studio.timeandtime.claimmap.world.WorldManager worldManager;
 	private final Map<UUID, SellAllPlan> sellAllPlans = new HashMap<>();
 
 	private record SellAllPlan(Map<String, Integer> items, long expiresAt) {
@@ -62,12 +64,20 @@ public final class ClaimCommands {
 			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
 			AuctionManager auctions, PriceService prices, AdminService admin) {
 		this(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices, admin,
-				new TeleportManager());
+				new TeleportManager(), null, null);
 	}
 
 	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
 			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
 			AuctionManager auctions, PriceService prices, AdminService admin, TeleportManager teleports) {
+		this(regions, links, accounts, config, economy, authGate, shop, mailbox, auctions, prices, admin,
+				teleports, null, null);
+	}
+
+	public ClaimCommands(RegionManager regions, LinkManager links, AccountManager accounts, ClaimMapConfig config,
+			EconomyManager economy, AuthGate authGate, ShopManager shop, MailboxManager mailbox,
+			AuctionManager auctions, PriceService prices, AdminService admin, TeleportManager teleports,
+			HomeManager homeManager, studio.timeandtime.claimmap.world.WorldManager worldManager) {
 		this.regions = regions;
 		this.links = links;
 		this.accounts = accounts;
@@ -80,15 +90,24 @@ public final class ClaimCommands {
 		this.prices = prices;
 		this.admin = admin;
 		this.teleports = teleports != null ? teleports : new TeleportManager();
+		this.homeManager = homeManager;
+		this.worldManager = worldManager;
 	}
 
 	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
-			dispatcher.register(Commands.literal("pass").requires(src -> src.getPlayer() != null)
-					.then(Commands.argument("old", StringArgumentType.string())
-							.then(Commands.argument("new", StringArgumentType.string())
-									.executes(ctx -> runPass(ctx.getSource(),
-											StringArgumentType.getString(ctx, "old"),
-											StringArgumentType.getString(ctx, "new"))))));
+			dispatcher.register(Commands.literal("auth")
+					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
+					.then(Commands.literal("reset")
+							.then(Commands.argument("player", StringArgumentType.word())
+									.executes(ctx -> runAdminResetPass(ctx.getSource(),
+											StringArgumentType.getString(ctx, "player"))))));
+
+			dispatcher.register(Commands.literal("pass")
+					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
+					.then(Commands.literal("reset")
+							.then(Commands.argument("player", StringArgumentType.word())
+									.executes(ctx -> runAdminResetPass(ctx.getSource(),
+											StringArgumentType.getString(ctx, "player"))))));
 
 			dispatcher.register(Commands.literal("bal").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runBal(ctx.getSource())));
@@ -109,20 +128,8 @@ public final class ClaimCommands {
 							.then(Commands.literal("confirm")
 									.executes(ctx -> runSellAllConfirm(ctx.getSource())))));
 
-			dispatcher.register(Commands.literal("buy").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runBuyGui(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runBuyGui(ctx.getSource())))
-					.then(Commands.argument("item", StringArgumentType.word())
-							.then(Commands.argument("qty", StringArgumentType.word())
-									.executes(ctx -> runBuy(ctx.getSource(),
-											StringArgumentType.getString(ctx, "item"),
-											StringArgumentType.getString(ctx, "qty"))))));
-
 			dispatcher.register(Commands.literal("mail").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runMailGui(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runMailGui(ctx.getSource())))
-					.then(Commands.literal("claim").executes(ctx -> runMailGui(ctx.getSource())))
-					.then(Commands.literal("list").executes(ctx -> runMailList(ctx.getSource()))));
+					.executes(ctx -> runMailGui(ctx.getSource())));
 
 			dispatcher.register(Commands.literal("ah").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runAhGui(ctx.getSource()))
@@ -161,10 +168,7 @@ public final class ClaimCommands {
 			dispatcher.register(Commands.literal("price").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runPriceDefault(ctx.getSource()))
 					.then(Commands.literal("gui").executes(ctx -> runPriceGui(ctx.getSource())))
-					.then(Commands.literal("hand").executes(ctx -> runPriceHand(ctx.getSource())))
-					.then(Commands.argument("item", StringArgumentType.word())
-							.executes(ctx -> runPriceItem(ctx.getSource(),
-									StringArgumentType.getString(ctx, "item")))));
+					.then(Commands.literal("hand").executes(ctx -> runPriceHand(ctx.getSource()))));
 
 			dispatcher.register(Commands.literal("eco")
 					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
@@ -186,11 +190,11 @@ public final class ClaimCommands {
 							.then(Commands.argument("cellId", StringArgumentType.word())
 									.executes(ctx -> runClaimTp(ctx.getSource(),
 											StringArgumentType.getString(ctx, "cellId")))))
-					.then(Commands.literal("transfer")
+					.then(Commands.literal("tf")
 							.then(Commands.argument("player", StringArgumentType.word())
 									.executes(ctx -> runClaimTransferHere(ctx.getSource(),
 											StringArgumentType.getString(ctx, "player")))))
-					.then(Commands.literal("auction")
+					.then(Commands.literal("at")
 							.then(Commands.argument("startPrice", StringArgumentType.word())
 									.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
 											StringArgumentType.getString(ctx, "startPrice"), "24"))
@@ -198,6 +202,23 @@ public final class ClaimCommands {
 											.executes(ctx -> runClaimAuctionHere(ctx.getSource(),
 													StringArgumentType.getString(ctx, "startPrice"),
 													StringArgumentType.getString(ctx, "hours")))))));
+
+			dispatcher.register(Commands.literal("sethome").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runSetHome(ctx.getSource(), "home"))
+					.then(Commands.argument("name", StringArgumentType.word())
+							.executes(ctx -> runSetHome(ctx.getSource(),
+									StringArgumentType.getString(ctx, "name")))));
+
+			dispatcher.register(Commands.literal("delhome").requires(src -> src.getPlayer() != null)
+					.then(Commands.argument("name", StringArgumentType.word())
+							.executes(ctx -> runDelHome(ctx.getSource(),
+									StringArgumentType.getString(ctx, "name")))));
+
+			dispatcher.register(Commands.literal("home").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runHomeGui(ctx.getSource()))
+					.then(Commands.argument("name", StringArgumentType.word())
+							.executes(ctx -> runHomeTeleport(ctx.getSource(),
+									StringArgumentType.getString(ctx, "name")))));
 
 			var timesmpNode = dispatcher.register(Commands.literal("timesmp")
 					.executes(ctx -> runClaimMapGui(ctx.getSource()))
@@ -246,10 +267,104 @@ public final class ClaimCommands {
 		});
 	}
 
-	private int runPass(CommandSourceStack src, String oldPassword, String newPassword) {
-		ServerPlayer player = src.getPlayer();
+	private int runAdminResetPass(CommandSourceStack source, String targetName) {
+		var srv = ClaimMap.getServer();
+		UUID targetUuid = null;
+		ServerPlayer targetPlayer = srv != null ? srv.getPlayerList().getPlayerByName(targetName) : null;
+		if (targetPlayer != null) {
+			targetUuid = targetPlayer.getUUID();
+		} else {
+			targetUuid = accounts.anyUuidOf(targetName).orElse(null);
+		}
+
+		if (targetUuid == null) {
+			source.sendFailure(Component.literal("§cไม่พบข้อมูลผู้เล่น: " + targetName));
+			return 0;
+		}
+
+		boolean reset = accounts.resetPassword(targetUuid.toString());
+		if (!reset) {
+			source.sendFailure(Component.literal("§cรีเซ็ตรหัสผ่านไม่สำเร็จ (ไม่พบบัญชี)"));
+			return 0;
+		}
+
+		if (targetPlayer != null) {
+			targetPlayer.connection.disconnect(Component.literal(
+					"§c[Time SMP] ผู้ดูแลระบบได้รีเซ็ตรหัสผ่านของคุณ\n§eกรุณาเข้าสู่ระบบใหม่เพื่อตั้งรหัสผ่านใหม่"
+			));
+		}
+
+		source.sendSuccess(() -> Component.literal("§a[Auth] รีเซ็ตรหัสผ่านของ " + targetName
+				+ " สำเร็จ ผู้เล่นจะต้องตั้งรหัสผ่านใหม่เมื่อเข้าสู่เซิร์ฟเวอร์ครั้งถัดไป"), true);
+		return 1;
+	}
+
+	private int runSetHome(CommandSourceStack source, String name) {
+		ServerPlayer player = source.getPlayer();
 		if (player == null) return 0;
-		authGate.handleChangePassword(player, oldPassword, newPassword);
+		if (homeManager == null) {
+			player.sendSystemMessage(Component.literal("§c[Home] ระบบบ้านยังไม่พร้อมใช้งาน"));
+			return 0;
+		}
+		if (!homeManager.isValidName(name)) {
+			player.sendSystemMessage(Component.literal("§c[Home] ชื่อบ้านไม่ถูกต้อง (ต้องเป็นภาษาอังกฤษหรือตัวเลข ไม่เกิน 24 ตัวอักษร)"));
+			return 0;
+		}
+		boolean ok = homeManager.setHome(player.getUUID(), name, player.serverLevel(), player.position(), player.getYRot(), player.getXRot());
+		if (ok) {
+			player.sendSystemMessage(Component.literal("§a[Home] บันทึกจุดเซฟบ้าน \"§e" + name + "§a\" สำเร็จ! (พิมพ์ §b/home §aเพื่อเปิดเมนู)"));
+			return 1;
+		} else {
+			player.sendSystemMessage(Component.literal("§c[Home] ไม่สามารถบันทึกบ้านได้ (จำนวนบ้านถึงขีดจำกัดสูงสุด " + HomeManager.MAX_HOMES + " หลังแล้ว)"));
+			return 0;
+		}
+	}
+
+	private int runDelHome(CommandSourceStack source, String name) {
+		ServerPlayer player = source.getPlayer();
+		if (player == null) return 0;
+		if (homeManager == null) {
+			player.sendSystemMessage(Component.literal("§c[Home] ระบบบ้านยังไม่พร้อมใช้งาน"));
+			return 0;
+		}
+		boolean ok = homeManager.deleteHome(player.getUUID(), name);
+		if (ok) {
+			player.sendSystemMessage(Component.literal("§e[Home] ลบจุดเซฟบ้าน \"§f" + name + "§e\" สำเร็จ"));
+			return 1;
+		} else {
+			player.sendSystemMessage(Component.literal("§c[Home] ไม่พบจุดเซฟบ้านชื่อ \"§f" + name + "§c\""));
+			return 0;
+		}
+	}
+
+	private int runHomeGui(CommandSourceStack source) {
+		ServerPlayer player = source.getPlayer();
+		if (player == null) return 0;
+		if (homeManager == null) {
+			player.sendSystemMessage(Component.literal("§c[Home] ระบบบ้านยังไม่พร้อมใช้งาน"));
+			return 0;
+		}
+		HomeGui.open(player, homeManager, teleports);
+		return 1;
+	}
+
+	private int runHomeTeleport(CommandSourceStack source, String name) {
+		ServerPlayer player = source.getPlayer();
+		if (player == null) return 0;
+		if (homeManager == null) {
+			player.sendSystemMessage(Component.literal("§c[Home] ระบบบ้านยังไม่พร้อมใช้งาน"));
+			return 0;
+		}
+		HomeManager.HomeEntry entry = homeManager.getHome(player.getUUID(), name);
+		if (entry == null) {
+			player.sendSystemMessage(Component.literal("§c[Home] ไม่พบจุดเซฟบ้านชื่อ \"§f" + name + "§c\" (พิมพ์ §e/home §cเพื่อดูรายการทั้งหมด)"));
+			return 0;
+		}
+		if (teleports != null) {
+			teleports.startWarmup(player, Component.literal("บ้าน " + entry.name), () -> homeManager.teleport(player, entry));
+		} else {
+			homeManager.teleport(player, entry);
+		}
 		return 1;
 	}
 
@@ -416,7 +531,7 @@ public final class ClaimCommands {
 	private int runBuy(CommandSourceStack src, String item, String qtyText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		player.sendSystemMessage(Component.literal("§eร้านค้าเซิร์ฟเวอร์เปิดรับซื้อไอเท็มเท่านั้น หากต้องการซื้อของจากผู้เล่น กรุณาพิมพ์ §a/buy §eเพื่อเปิดเมนูของที่ผู้เล่นลงขาย"));
+		player.sendSystemMessage(Component.literal("§eร้านค้าเซิร์ฟเวอร์เปิดรับซื้อไอเท็มเท่านั้น หากต้องการซื้อของจากผู้เล่น กรุณาพิมพ์ §a/ah §eเพื่อเปิดดูตลาดประมูลระหว่างผู้เล่น"));
 		return 0;
 	}
 
@@ -437,7 +552,7 @@ public final class ClaimCommands {
 			}
 			player.sendSystemMessage(Component.literal("- " + e.label() + " x" + e.count()));
 		}
-		player.sendSystemMessage(Component.literal("พิมพ์ /mail claim เพื่อรับของ"));
+		player.sendSystemMessage(Component.literal("พิมพ์ /mail เพื่อเปิดกล่องรับของ"));
 		return 1;
 	}
 
@@ -758,7 +873,7 @@ public final class ClaimCommands {
 		if (player == null) return 0;
 		AuctionManager.Result r = auctions.cancel(player.getUUID(), false, id);
 		if (r == AuctionManager.Result.OK) {
-			player.sendSystemMessage(Component.literal("ยกเลิกแล้ว ของจะอยู่ในกล่องของ พิมพ์ /mail claim"));
+			player.sendSystemMessage(Component.literal("ยกเลิกแล้ว ของจะอยู่ในกล่องของ พิมพ์ /mail"));
 		} else {
 			player.sendSystemMessage(Component.literal("ยกเลิกไม่ได้: " + auctionErrorText(r)));
 		}
@@ -1077,6 +1192,15 @@ public final class ClaimCommands {
 	}
 
 	public static boolean teleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
+		TeleportManager tp = ClaimMap.instance() != null ? ClaimMap.instance().teleports() : null;
+		if (tp != null) {
+			tp.startWarmup(player, Component.literal("เขต (" + cx + "," + cz + ")"), () -> doTeleportToCell(player, cx, cz, config));
+			return true;
+		}
+		return doTeleportToCell(player, cx, cz, config);
+	}
+
+	private static boolean doTeleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
 		if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) return false;
 		int minX = cx * config.cellSize;
 		int minZ = cz * config.cellSize;
