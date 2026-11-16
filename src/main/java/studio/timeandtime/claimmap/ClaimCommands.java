@@ -107,6 +107,8 @@ public final class ClaimCommands {
 									.executes(ctx -> runSellAllConfirm(ctx.getSource())))));
 
 			dispatcher.register(Commands.literal("buy").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runBuyGui(ctx.getSource()))
+					.then(Commands.literal("gui").executes(ctx -> runBuyGui(ctx.getSource())))
 					.then(Commands.argument("item", StringArgumentType.word())
 							.then(Commands.argument("qty", StringArgumentType.word())
 									.executes(ctx -> runBuy(ctx.getSource(),
@@ -415,36 +417,14 @@ public final class ClaimCommands {
 	private int runSellGui(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (shop.isDisabled()) {
-			player.sendSystemMessage(Component.literal("§cระบบร้านค้าถูกปิดชั่วคราว"));
-			return 0;
-		}
-		if (economy.isFrozen(player.getUUID())) {
-			player.sendSystemMessage(Component.literal("§cบัญชีของคุณถูกระงับ"));
-			return 0;
-		}
-		SimpleContainer container = new SimpleContainer(54);
-		VirtualChestMenu.open(
-				player,
-				Component.literal("§0ลากไอเท็มที่ต้องการขายมาวาง"),
-				6,
-				false,
-				container,
-				null,
-				(sp, cont) -> {
-					ShopManager.BulkSellOutcome outcome = shop.sellContainer(sp, cont);
-					if (outcome.soldCount() > 0) {
-						sp.sendSystemMessage(Component.literal(
-								"§aขายไอเท็มสำเร็จ " + outcome.soldCount() + " ชิ้น! รวมเป็นเงิน +"
-										+ outcome.totalEarned() + " " + config.currencyName
-										+ " §7(ยอดเงินคงเหลือ: " + outcome.balance() + ")"));
-					}
-					if (outcome.returnedCount() > 0) {
-						sp.sendSystemMessage(Component.literal(
-								"§eคืนไอเท็มที่ร้านไม่รับซื้อ " + outcome.returnedCount() + " ชิ้น เข้าตัว"));
-					}
-				}
-		);
+		SellGui.open(player, shop, auctions, prices, economy, config.currencyName);
+		return 1;
+	}
+
+	private int runBuyGui(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		AuctionGui.open(player, auctions, economy, config.currencyName, 0, AuctionGui.ViewMode.ITEMS);
 		return 1;
 	}
 
@@ -455,7 +435,7 @@ public final class ClaimCommands {
 	private int runBuy(CommandSourceStack src, String item, String qtyText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		player.sendSystemMessage(Component.literal("§cระบบร้านค้าเปิดรับซื้อไอเท็มจากผู้เล่นเท่านั้น (ไม่มีการเสกขายของจากเซิร์ฟเวอร์) คุณสามารถซื้อของจากผู้เล่นอื่นได้ที่หน้าเว็บตลาด"));
+		player.sendSystemMessage(Component.literal("§eร้านค้าเซิร์ฟเวอร์เปิดรับซื้อไอเท็มเท่านั้น หากต้องการซื้อของจากผู้เล่น กรุณาพิมพ์ §a/buy §eเพื่อเปิดเมนูของที่ผู้เล่นลงขาย"));
 		return 0;
 	}
 

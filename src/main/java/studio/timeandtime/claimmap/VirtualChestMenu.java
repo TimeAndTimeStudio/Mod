@@ -9,8 +9,11 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.Collections;
+import java.util.Set;
 import java.util.function.BiConsumer;
 
 /**
@@ -25,17 +28,25 @@ public class VirtualChestMenu extends ChestMenu {
 	}
 
 	private final boolean readOnly;
+	private final Set<Integer> lockedSlots;
 	private final SlotClickHandler clickHandler;
 	private final BiConsumer<ServerPlayer, Container> closeHandler;
 
 	public VirtualChestMenu(int syncId, Inventory playerInventory, Container container, int rows,
-							boolean readOnly, SlotClickHandler clickHandler,
+							boolean readOnly, Set<Integer> lockedSlots, SlotClickHandler clickHandler,
 							BiConsumer<ServerPlayer, Container> closeHandler) {
 		super(rows <= 3 ? MenuType.GENERIC_9x3 : MenuType.GENERIC_9x6,
 				syncId, playerInventory, container, rows);
 		this.readOnly = readOnly;
+		this.lockedSlots = lockedSlots != null ? lockedSlots : Collections.emptySet();
 		this.clickHandler = clickHandler;
 		this.closeHandler = closeHandler;
+	}
+
+	public VirtualChestMenu(int syncId, Inventory playerInventory, Container container, int rows,
+							boolean readOnly, SlotClickHandler clickHandler,
+							BiConsumer<ServerPlayer, Container> closeHandler) {
+		this(syncId, playerInventory, container, rows, readOnly, Collections.emptySet(), clickHandler, closeHandler);
 	}
 
 	@Override
@@ -50,6 +61,13 @@ public class VirtualChestMenu extends ChestMenu {
 			this.sendAllDataToRemote();
 			return;
 		}
+		if (lockedSlots.contains(slotIndex)) {
+			if (clickHandler != null && player instanceof ServerPlayer sp) {
+				clickHandler.onClick(slotIndex, button, input, sp);
+			}
+			this.sendAllDataToRemote();
+			return;
+		}
 		super.clicked(slotIndex, button, input, player);
 	}
 
@@ -57,6 +75,29 @@ public class VirtualChestMenu extends ChestMenu {
 	public ItemStack quickMoveStack(Player player, int slotIndex) {
 		if (readOnly) {
 			return ItemStack.EMPTY;
+		}
+		if (lockedSlots.contains(slotIndex)) {
+			return ItemStack.EMPTY;
+		}
+		int topSize = this.getContainer().getContainerSize();
+		if (!lockedSlots.isEmpty() && slotIndex >= topSize) {
+			int targetLimit = topSize;
+			for (int s : lockedSlots) {
+				if (s < targetLimit) targetLimit = s;
+			}
+			Slot sourceSlot = this.getSlot(slotIndex);
+			if (sourceSlot == null || !sourceSlot.hasItem()) return ItemStack.EMPTY;
+			ItemStack source = sourceSlot.getItem();
+			ItemStack copy = source.copy();
+			if (!this.moveItemStackTo(source, 0, targetLimit, false)) {
+				return ItemStack.EMPTY;
+			}
+			if (source.isEmpty()) {
+				sourceSlot.set(ItemStack.EMPTY);
+			} else {
+				sourceSlot.setChanged();
+			}
+			return copy;
 		}
 		return super.quickMoveStack(player, slotIndex);
 	}
@@ -72,8 +113,14 @@ public class VirtualChestMenu extends ChestMenu {
 	public static void open(ServerPlayer player, Component title, int rows, boolean readOnly,
 							Container container, SlotClickHandler clickHandler,
 							BiConsumer<ServerPlayer, Container> closeHandler) {
+		open(player, title, rows, readOnly, Collections.emptySet(), clickHandler, closeHandler);
+	}
+
+	public static void open(ServerPlayer player, Component title, int rows, boolean readOnly,
+							Set<Integer> lockedSlots, SlotClickHandler clickHandler,
+							BiConsumer<ServerPlayer, Container> closeHandler) {
 		player.openMenu(new SimpleMenuProvider(
-				(syncId, inv, p) -> new VirtualChestMenu(syncId, inv, container, rows, readOnly, clickHandler, closeHandler),
+				(syncId, inv, p) -> new VirtualChestMenu(syncId, inv, container, rows, readOnly, lockedSlots, clickHandler, closeHandler),
 				title
 		));
 	}

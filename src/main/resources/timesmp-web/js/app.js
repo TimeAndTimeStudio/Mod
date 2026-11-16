@@ -371,6 +371,7 @@ document.addEventListener('pointerdown', (event) => {
 const NAV = [
   { id: 'map', label: 'แผนที่' },
   { id: 'auction', label: 'ประมูล' },
+  { id: 'guide', label: 'วิธีใช้งาน' },
 ];
 
 function renderShell() {
@@ -474,7 +475,7 @@ async function fetchNames() {
 }
 
 /* ---------- router ---------- */
-const PAGES = { home: pageHome, map: pageMap, prices: pagePrices, buy: pageBuy, sell: pageSell, auction: pageAuction, wallet: pageWallet, about: pageAbout, admin: pageAdmin, login: pageLogin };
+const PAGES = { home: pageHome, map: pageMap, prices: pagePrices, buy: pageBuy, sell: pageSell, auction: pageAuction, wallet: pageWallet, about: pageAbout, admin: pageAdmin, login: pageLogin, guide: pageGuide };
 
 function requireAuth(view) {
   if (!state.me) {
@@ -498,7 +499,7 @@ function render() {
     location.hash = '#map';
     return;
   }
-  if (route !== 'login' && !state.me) {
+  if (route !== 'login' && route !== 'guide' && !state.me) {
     go('login');
     return;
   }
@@ -1794,6 +1795,97 @@ function pageAbout(view) {
   for (const [cmd, desc] of commands) rows.append(el('div', { class: 'item' },
     el('div', { class: 'item-main' }, el('span', { class: 'item-title mono' }, cmd), el('span', { class: 'item-meta' }, desc))));
   page.append(rows, el('p', { class: 'hint', style: 'margin-top:32px' }, 'ผู้เล่นสามารถรับของทั้งหมดได้ในเกมด้วยคำสั่ง /mail และขายของได้ด้วยคำสั่ง /sell'));
+  view.append(page);
+}
+
+/* ---------- guide (วิธีใช้งานทั้งหมด) ---------- */
+function pageGuide(view) {
+  const page = el('div', { class: 'page' });
+  const head = el('div', { class: 'page-head' },
+    el('span', { class: 'mono muted eyebrow' }, 'คู่มือเซิร์ฟเวอร์'),
+    el('h1', {}, 'วิธีใช้งานทั้งหมด (Time SMP Guide)'),
+    el('p', { class: 'hint' }, 'รวมวิธีเล่น คำสั่งในเกม ระบบเศรษฐกิจ การประมูล และการใช้งานหน้าเว็บอย่างละเอียด'));
+  page.append(head);
+
+  const grid = el('div', { class: 'guide-grid' });
+
+  // 1. ตลาดซื้อขาย & ประมูลของผู้เล่น
+  const cardAuction = el('div', { class: 'guide-card' },
+    el('h2', {}, '🛍️ ตลาดผู้เล่น & ประมูล (/buy, /ah)'),
+    el('p', {}, 'เซิร์ฟเวอร์นี้ไอเท็มซื้อขายระหว่างผู้เล่นด้วยกันเองผ่านตลาดกลางและระบบประมูล'),
+    el('ul', {},
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/buy'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/ah'), ' — เปิดดูรายการสินค้าและที่ดินที่ผู้เล่นลงขาย'),
+      el('li', {}, '• ', el('strong', {}, 'ซื้อทันที (Buyout):'), ' คลิกขวาที่ไอเท็มเพื่อซื้อตามราคาที่ผู้ขายกำหนด (ของจะถูกส่งเข้า ', el('span', { class: 'guide-cmd' }, '/mail'), ' ทันที)'),
+      el('li', {}, '• ', el('strong', {}, 'เสนอราคาประมูล (Bid):'), ' คลิกซ้ายเพื่อเสนอราคาสูงขึ้น แข่งกับผู้เล่นอื่น'),
+      el('li', {}, '• ', el('strong', {}, 'การนำของในมือลงขาย:'), ' ถือไอเท็มแล้วพิมพ์ ', el('span', { class: 'guide-cmd' }, '/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]'), ' เช่น ', el('span', { class: 'guide-cmd' }, '/ah sell 100 250 24')),
+      el('li', {}, '• ', el('strong', {}, 'ดูของที่ฉันลงขาย:'), ' พิมพ์ ', el('span', { class: 'guide-cmd' }, '/ah my'), ' หรือคลิกรูปหีบในหน้าตลาด สามารถกดยกเลิกเพื่อรับของคืนได้หากยังไม่มีผู้ประมูล')
+    )
+  );
+
+  // 2. ขายของให้เซิร์ฟเวอร์
+  const cardSell = el('div', { class: 'guide-card' },
+    el('h2', {}, '🛒 การขายของเข้าร้านค้า (/sell)'),
+    el('p', {}, 'ผู้เล่นสามารถนำผลผลิต แร่ หรือบล็อกต่าง ๆ มาขายให้เซิร์ฟเวอร์เพื่อรับเงินเข้ากระเป๋าได้'),
+    el('ul', {},
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/sell'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/sell gui'), ' — เปิดเมนูกล่องขายของขนาดใหญ่ (ช่อง 1-45 ด้านบน): ลากไอเท็มที่ต้องการขายมาวาง แล้วปิดหน้าต่าง ระบบจะคำนวณเงินและโอนเข้าตัวทันที!'),
+      el('li', {}, '• ', el('strong', {}, 'ปุ่มลงขายให้ผู้เล่น:'), ' ภายในหน้าต่าง ', el('span', { class: 'guide-cmd' }, '/sell'), ' มีปุ่มมรกตลัดสำหรับนำไอเท็มไปเปิดตลาดขายให้ผู้เล่นอื่น'),
+      el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/sell hand'), ' — ขายไอเท็มที่กำลังถือในมือหลักทันที'),
+      el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/sell all'), ' — สรุปมูลค่าของที่ขายได้ทั้งหมดในตัว จากนั้นพิมพ์ ', el('span', { class: 'guide-cmd' }, '/sell all confirm'), ' ภายใน 30 วินาที')
+    )
+  );
+
+  // 3. เช็คราคากลาง
+  const cardPrice = el('div', { class: 'guide-card' },
+    el('h2', {}, '📊 เช็คราคาสินค้า (/price)'),
+    el('p', {}, 'ตรวจสอบราคารับซื้อ ราคากลาง และแนวโน้มความต้องการของตลาด'),
+    el('ul', {},
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/price'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/price gui'), ' — เปิดสมุดราคากลางแบบ GUI เรียงตามราคาขายจากมากไปน้อย'),
+      el('li', {}, '• กรองตามหมวดหมู่ได้: ⭐ ทั้งหมด, 💎 แร่, 🌾 ผลผลิตเกษตร, 🧱 บล็อกก่อสร้าง, 🏹 มอนสเตอร์ดรอป'),
+      el('li', {}, '• มีระบบนับของในตัวผู้เล่น พร้อมคำนวณมูลค่ารวมถ้าขายทันที'),
+      el('li', {}, '• ดัชนีความต้องการตลาด: มีตัวคูณราคาผันผวนตามปริมาณของในเซิร์ฟเวอร์ (🟢 สูง / 🟡 ปกติ / 🔴 ล้นตลาด)'),
+      el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/price hand'), ' — เช็คราคาไอเท็มที่ถืออยู่ในมือ'),
+      el('li', {}, '• ', el('span', { class: 'guide-cmd' }, '/price <ชื่อไอเท็ม>'), ' — เช่น ', el('span', { class: 'guide-cmd' }, '/price diamond'), ' เพื่อดูรายละเอียดเฉพาะชิ้น')
+    )
+  );
+
+  // 4. ระบบเขต & ที่ดิน
+  const cardLand = el('div', { class: 'guide-card' },
+    el('h2', {}, '🗺️ ระบบเขต & ที่ดิน (Land Claim)'),
+    el('p', {}, 'ป้องกันพื้นที่ ปลูกสร้าง และซื้อขายเขตที่ดินในเซิร์ฟเวอร์'),
+    el('ul', {},
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/claim'), ' — ซื้อหรือจองกรรมสิทธิ์เขตที่ดินในตำแหน่งที่กำลังยืนอยู่'),
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/claimmap'), ' — เปิดหน้าต่างแผนที่เรดาร์ในเกม ดูเขตใกล้เคียงและสถานะ'),
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/claim transfer <ชื่อผู้เล่น>'), ' — โอนกรรมสิทธิ์เขตที่ยืนอยู่ให้ผู้เล่นอื่น'),
+      el('li', {}, '• ', el('strong', {}, 'เปิดประมูลที่ดิน:'), ' พิมพ์ ', el('span', { class: 'guide-cmd' }, '/ah cell <รหัสเขต> <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]'), ' หรือคลิกเขตของตนเองบนหน้าเว็บแผนที่ / หน้าประมูล แล้วกดเปิดประมูล'),
+      el('li', {}, '• ดูขอบเขตที่ดินและผู้ครอบครองทั้งหมดแบบ Real-time ได้ที่แท็บ ', el('a', { href: '#map' }, '🗺️ แผนที่'))
+    )
+  );
+
+  // 5. ระบบเงิน & กล่องจดหมาย
+  const cardEconomy = el('div', { class: 'guide-card' },
+    el('h2', {}, '💰 ระบบเงิน & กล่องจดหมาย (/mail)'),
+    el('p', {}, 'การบริหารจัดการเงินและรับของรางวัลหรือสินค้าที่ซื้อมา'),
+    el('ul', {},
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/bal'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/money'), ' — ตรวจสอบยอดเงินคงเหลือของคุณ'),
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/pay <ชื่อผู้เล่น> <จำนวน>'), ' — โอนเงินให้เพื่อน เช่น ', el('span', { class: 'guide-cmd' }, '/pay Steve 500')),
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/mail'), ' หรือ ', el('span', { class: 'guide-cmd' }, '/mail gui'), ' — เปิดกล่องรับไอเท็มและเงิน (เมื่อชนะประมูล, มีคนซื้อของที่คุณลงขาย, หรือได้รับเงินคืน ของทั้งหมดจะเข้าที่นี่)'),
+      el('li', {}, el('span', { class: 'guide-cmd' }, '/mail list'), ' — ดูรายการข้อความและของที่ยังไม่ได้รับผ่านทางแชท')
+    )
+  );
+
+  // 6. การใช้งานหน้าเว็บไซต์
+  const cardWeb = el('div', { class: 'guide-card' },
+    el('h2', {}, '🌐 การเชื่อมต่อกับหน้าเว็บไซต์ (Web UI)'),
+    el('p', {}, 'เข้าถึงข้อมูลเซิร์ฟเวอร์แบบ Real-time จากเบราว์เซอร์หรือมือถือ'),
+    el('ul', {},
+      el('li', {}, '• ', el('strong', {}, 'วิธีเข้าสู่ระบบ:'), ' เข้าเล่นในเกม แล้วพิมพ์คำสั่ง ', el('span', { class: 'guide-cmd' }, '/link'), ' เพื่อรับรหัส Token แล้วนำมากรอกที่ปุ่ม "เข้าใช้" บนหน้าเว็บ'),
+      el('li', {}, '• ', el('strong', {}, 'หน้าแผนที่ (#map):'), ' ดูพิกัดผู้เล่นแบบสด, ขอบเขตที่ดิน, ค้นหาพิกัด, กดซื้อเขตที่ว่างอยู่, หรือกดเปิดประมูลเขตของตนเอง'),
+      el('li', {}, '• ', el('strong', {}, 'หน้าประมูล (#auction):'), ' ดูรายการประมูลสดทั้งหมด, เสนอราคา (Bid), กดซื้อทันที (Buyout), หรือกดปุ่ม "เปิดประมูลเขตที่ดินของฉัน"')
+    )
+  );
+
+  grid.append(cardAuction, cardSell, cardPrice, cardLand, cardEconomy, cardWeb);
+  page.append(grid);
   view.append(page);
 }
 

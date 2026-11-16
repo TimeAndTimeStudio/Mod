@@ -14,17 +14,32 @@ import java.util.List;
 public final class AuctionGui {
 	private static final int PAGE_SIZE = 45;
 
+	public enum ViewMode {
+		ALL,
+		ITEMS,
+		CELLS
+	}
+
 	private AuctionGui() {
 	}
 
 	public static void open(ServerPlayer player, AuctionManager auctions, EconomyManager economy, String currency, int page) {
+		open(player, auctions, economy, currency, page, ViewMode.ALL);
+	}
+
+	public static void open(ServerPlayer player, AuctionManager auctions, EconomyManager economy, String currency, int page, ViewMode mode) {
 		if (auctions.isDisabled()) {
-			player.sendSystemMessage(Component.literal("§cระบบตลาดประมูลถูกปิดชั่วคราว"));
+			player.sendSystemMessage(Component.literal("§cระบบตลาดถูกปิดชั่วคราว"));
 			return;
 		}
 
 		List<AuctionManager.Auction> active = auctions.all().stream()
 				.filter(AuctionManager.Auction::isActive)
+				.filter(a -> switch (mode) {
+					case ALL -> true;
+					case ITEMS -> a.isItemAuction();
+					case CELLS -> a.isCellAuction();
+				})
 				.toList();
 
 		int maxPages = Math.max(1, (active.size() + PAGE_SIZE - 1) / PAGE_SIZE);
@@ -79,8 +94,19 @@ public final class AuctionGui {
 			container.setItem(45, prev);
 		}
 
-		ItemStack myAuctions = new ItemStack(Items.CHEST);
-		myAuctions.set(DataComponents.CUSTOM_NAME, Component.literal("§b📦 รายการประมูลของฉัน"));
+		// Mode buttons
+		ItemStack itemsBtn = new ItemStack(Items.CHEST);
+		itemsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ITEMS ? "§a✔ " : "§f") + "📦 ของที่ผู้เล่นลงขาย"));
+		itemsBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะสินค้าไอเท็ม"))));
+		container.setItem(46, itemsBtn);
+
+		ItemStack cellsBtn = new ItemStack(Items.FILLED_MAP);
+		cellsBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.CELLS ? "§a✔ " : "§f") + "🗺️ ที่ดินประมูล"));
+		cellsBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อกรองดูเฉพาะเขตที่ดิน"))));
+		container.setItem(47, cellsBtn);
+
+		ItemStack myAuctions = new ItemStack(Items.ENDER_CHEST);
+		myAuctions.set(DataComponents.CUSTOM_NAME, Component.literal("§b🏷️ รายการของฉัน"));
 		myAuctions.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7คลิกเพื่อดูและจัดการรายการที่คุณลงขาย"))));
 		container.setItem(48, myAuctions);
 
@@ -93,16 +119,22 @@ public final class AuctionGui {
 		)));
 		container.setItem(49, info);
 
+		ItemStack allBtn = new ItemStack(Items.NETHER_STAR);
+		allBtn.set(DataComponents.CUSTOM_NAME, Component.literal((mode == ViewMode.ALL ? "§a✔ " : "§f") + "⭐ แสดงทั้งหมด"));
+		allBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7แสดงทั้งสินค้าไอเท็มและที่ดิน"))));
+		container.setItem(50, allBtn);
+
 		ItemStack howTo = new ItemStack(Items.EMERALD);
-		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a➕ วิธีลงประมูลของ & ที่ดิน"));
+		howTo.set(DataComponents.CUSTOM_NAME, Component.literal("§a➕ วิธีลงขาย & ประมูล"));
 		howTo.set(DataComponents.LORE, new ItemLore(List.of(
-				Component.literal("§e[ลงประมูลไอเท็ม]:"),
-				Component.literal("§7ถือของในมือแล้วพิมพ์: §e/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"),
+				Component.literal("§e[ลงขายของให้ผู้เล่น]:"),
+				Component.literal("§7ถือของในมือแล้วพิมพ์: §a/ah sell <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]"),
+				Component.literal("§7ตัวอย่าง: §b/ah sell 100 250 24"),
 				Component.literal("§e[ลงประมูลที่ดิน/เขต]:"),
 				Component.literal("§7คลิกเขตของตนเองใน §e/claimmap §7แล้วกดเปิดประมูล"),
 				Component.literal("§7หรือพิมพ์: §e/claim auction <ราคาเริ่ม> [ซื้อทันที] [ชั่วโมง]")
 		)));
-		container.setItem(50, howTo);
+		container.setItem(51, howTo);
 
 		if (curPage < maxPages - 1) {
 			ItemStack next = new ItemStack(Items.ARROW);
@@ -110,9 +142,15 @@ public final class AuctionGui {
 			container.setItem(53, next);
 		}
 
+		String titleStr = switch (mode) {
+			case ALL -> "§0ตลาดผู้เล่น (หน้า " + (curPage + 1) + "/" + maxPages + ")";
+			case ITEMS -> "§0ของที่ผู้เล่นลงขาย (หน้า " + (curPage + 1) + "/" + maxPages + ")";
+			case CELLS -> "§0ประมูลที่ดิน (หน้า " + (curPage + 1) + "/" + maxPages + ")";
+		};
+
 		VirtualChestMenu.open(
 				player,
-				Component.literal("§0ตลาดประมูล (หน้า " + (curPage + 1) + "/" + maxPages + ")"),
+				Component.literal(titleStr),
 				6,
 				true,
 				container,
@@ -129,7 +167,7 @@ public final class AuctionGui {
 							} else {
 								sp.sendSystemMessage(Component.literal("§cประมูลไม่ได้: " + auctionError(bo.result())));
 							}
-							open(sp, auctions, economy, currency, curPage);
+							open(sp, auctions, economy, currency, curPage, mode);
 						} else if (button == 1) { // Right-click: Buyout
 							if (selected.buyout != null) {
 								AuctionManager.Result r = auctions.buyout(sp.getUUID(), sp.getGameProfile().name(), selected.id);
@@ -138,17 +176,23 @@ public final class AuctionGui {
 								} else {
 									sp.sendSystemMessage(Component.literal("§cซื้อไม่สำเร็จ: " + auctionError(r)));
 								}
-								open(sp, auctions, economy, currency, curPage);
+								open(sp, auctions, economy, currency, curPage, mode);
 							}
 						}
 					} else if (slotIndex == 45 && curPage > 0) {
-						open(sp, auctions, economy, currency, curPage - 1);
+						open(sp, auctions, economy, currency, curPage - 1, mode);
 					} else if (slotIndex == 53 && curPage < maxPages - 1) {
-						open(sp, auctions, economy, currency, curPage + 1);
+						open(sp, auctions, economy, currency, curPage + 1, mode);
+					} else if (slotIndex == 46) {
+						open(sp, auctions, economy, currency, 0, ViewMode.ITEMS);
+					} else if (slotIndex == 47) {
+						open(sp, auctions, economy, currency, 0, ViewMode.CELLS);
 					} else if (slotIndex == 48) {
 						openMyAuctions(sp, auctions, economy, currency);
 					} else if (slotIndex == 49) {
-						open(sp, auctions, economy, currency, curPage);
+						open(sp, auctions, economy, currency, curPage, mode);
+					} else if (slotIndex == 50) {
+						open(sp, auctions, economy, currency, 0, ViewMode.ALL);
 					}
 				},
 				null
@@ -193,7 +237,7 @@ public final class AuctionGui {
 		}
 
 		ItemStack back = new ItemStack(Items.ARROW);
-		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e◀ กลับไปตลาดประมูล"));
+		back.set(DataComponents.CUSTOM_NAME, Component.literal("§e◀ กลับไปตลาดผู้เล่น"));
 		container.setItem(45, back);
 
 		VirtualChestMenu.open(
@@ -204,7 +248,7 @@ public final class AuctionGui {
 				container,
 				(slotIndex, button, input, sp) -> {
 					if (slotIndex == 45) {
-						open(sp, auctions, economy, currency, 0);
+						open(sp, auctions, economy, currency, 0, ViewMode.ALL);
 					} else if (slotIndex >= 0 && slotIndex < Math.min(mine.size(), PAGE_SIZE)) {
 						AuctionManager.Auction a = mine.get(slotIndex);
 						AuctionManager.Result r = auctions.cancel(sp.getUUID(), false, a.id);
