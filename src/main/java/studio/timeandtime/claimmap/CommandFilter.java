@@ -12,9 +12,11 @@ public final class CommandFilter {
 	private CommandFilter() {}
 
 	public static final Set<String> ALLOWED_MOD_COMMANDS = Set.of(
-			"pass", "bal", "pay", "sell", "buy", "mail", "ah",
-			"claim", "claimmap", "timesmp", "main", "world",
-			"tp", "tpa", "tpaccept", "tpdeny", "tpacancel"
+			"bal", "pay", "sell", "buy", "mail", "ah", "price",
+			"claim", "claimmap", "timesmp", "map", "help", "smphelp", "menu",
+			"sethome", "delhome", "home",
+			"tpa", "tpaccept", "tpdeny", "tpacancel",
+			"main"
 	);
 
 	public static final Set<String> ALLOWED_WHISPER_COMMANDS = Set.of(
@@ -28,8 +30,9 @@ public final class CommandFilter {
 			return true;
 		}
 		// Dynamic world commands from WorldManager
-		if (mod != null && mod.worldManager() != null) {
-			for (var info : mod.worldManager().snapshot()) {
+		ClaimMap m = mod != null ? mod : ClaimMap.instance();
+		if (m != null && m.worldManager() != null) {
+			for (var info : m.worldManager().snapshot()) {
 				if (info.name().equalsIgnoreCase(lower)) {
 					return true;
 				}

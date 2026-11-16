@@ -303,6 +303,21 @@ public final class ClaimCommands {
 					.then(Commands.argument("player", StringArgumentType.word())
 							.executes(ctx -> runTpaRequest(ctx.getSource(),
 									StringArgumentType.getString(ctx, "player")))));
+
+			dispatcher.register(Commands.literal("tpaccept").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaAccept(ctx.getSource(), null))
+					.then(Commands.argument("player", StringArgumentType.word())
+							.executes(ctx -> runTpaAccept(ctx.getSource(),
+									StringArgumentType.getString(ctx, "player")))));
+
+			dispatcher.register(Commands.literal("tpdeny").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaDeny(ctx.getSource(), null))
+					.then(Commands.argument("player", StringArgumentType.word())
+							.executes(ctx -> runTpaDeny(ctx.getSource(),
+									StringArgumentType.getString(ctx, "player")))));
+
+			dispatcher.register(Commands.literal("tpacancel").requires(src -> src.getPlayer() != null)
+					.executes(ctx -> runTpaCancel(ctx.getSource())));
 		});
 	}
 

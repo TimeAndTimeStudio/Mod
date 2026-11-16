@@ -772,13 +772,17 @@ public final class WorldManager {
 		CommandDispatcher<CommandSourceStack> dispatcher = s.getCommands().getDispatcher();
 		CommandNode<CommandSourceStack> existing = dispatcher.getRoot().getChild(def.name());
 		if (existing != null) {
-			boolean alreadyReported = def.commandConflict != null;
-			def.commandAvailable = false;
-			def.commandConflict = "ชื่อซ้ำกับคำสั่งที่มีอยู่";
-			if (!alreadyReported) {
-				LOGGER.warn("[worlds] /{} conflicts with an existing command", def.name());
+			if (studio.timeandtime.claimmap.CommandFilter.ALLOWED_MOD_COMMANDS.contains(def.name().toLowerCase(Locale.ROOT))
+					|| "worlds".equalsIgnoreCase(def.name())) {
+				boolean alreadyReported = def.commandConflict != null;
+				def.commandAvailable = false;
+				def.commandConflict = "ชื่อซ้ำกับคำสั่งหลักของเซิร์ฟเวอร์";
+				if (!alreadyReported) {
+					LOGGER.warn("[worlds] /{} conflicts with a core TimeSMP command", def.name());
+				}
+				return;
 			}
-			return;
+			removeCommandNode(dispatcher.getRoot(), def.name());
 		}
 		dispatcher.register(Commands.literal(def.name()).executes(ctx -> {
 			ServerPlayer player = ctx.getSource().getPlayer();
@@ -798,6 +802,24 @@ public final class WorldManager {
 		def.commandAvailable = true;
 		def.commandConflict = null;
 		sendCommands();
+	}
+
+	public static void removeCommandNode(CommandNode<?> node, String name) {
+		try {
+			java.lang.reflect.Field childrenField = CommandNode.class.getDeclaredField("children");
+			childrenField.setAccessible(true);
+			((Map<?, ?>) childrenField.get(node)).remove(name);
+
+			java.lang.reflect.Field literalsField = CommandNode.class.getDeclaredField("literals");
+			literalsField.setAccessible(true);
+			((Map<?, ?>) literalsField.get(node)).remove(name);
+
+			java.lang.reflect.Field argumentsField = CommandNode.class.getDeclaredField("arguments");
+			argumentsField.setAccessible(true);
+			((Map<?, ?>) argumentsField.get(node)).remove(name);
+		} catch (Exception e) {
+			LOGGER.warn("[worlds] Failed to remove command node {}: {}", name, e.getMessage());
+		}
 	}
 
 	private void registerPlayerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -827,8 +849,7 @@ public final class WorldManager {
 		MinecraftServer s = server;
 		if (s == null || !def.commandAvailable) return;
 		CommandDispatcher<CommandSourceStack> dispatcher = s.getCommands().getDispatcher();
-		CommandNode<CommandSourceStack> node = dispatcher.getRoot().getChild(def.name());
-		if (node != null) dispatcher.getRoot().getChildren().remove(node);
+		removeCommandNode(dispatcher.getRoot(), def.name());
 		def.commandAvailable = false;
 		sendCommands();
 	}
