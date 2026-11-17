@@ -13,6 +13,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.NbtUtils;
@@ -25,6 +26,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.util.datafix.DataFixers;
+import net.minecraft.world.clock.ServerClockManager;
+import net.minecraft.world.clock.WorldClock;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.DataPackConfig;
 import net.minecraft.world.level.GameType;
@@ -34,6 +37,7 @@ import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.portal.TeleportTransition;
@@ -52,6 +56,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -84,6 +90,14 @@ import java.util.concurrent.TimeoutException;
 public final class WorldManager {
 	private static final Logger LOGGER = LoggerFactory.getLogger("timesmp-worlds");
 	private static final String DIMENSION_NAMESPACE = "timesmp";
+	/**
+	 * Real-world rate for the lobby clock: one in-game day (24000 ticks) per 24
+	 * real hours. Minecraft runs 20 ticks per real second, so 24h = 1,728,000
+	 * ticks. 24000 / 1728000 = 0.013888... ticks per tick.
+	 */
+	private static final float LOBBY_REAL_TIME_RATE = 24000f / (86400f * 20f);
+	/** Time zone used to map the lobby clock to real-world time (UTC+7). */
+	private static final ZoneId LOBBY_TIME_ZONE = ZoneId.of("UTC+7");
 
 	private final ClaimMapConfig config;
 	private final WorldScanner scanner = new WorldScanner();
@@ -262,6 +276,10 @@ public final class WorldManager {
 		if (tickCounter >= interval) {
 			tickCounter = 0;
 			scanLocked();
+		}
+		// Keep the lobby clock pinned to real-world UTC+7 time (correct drift).
+		if (s.getTickCount() % 20 == 0) {
+			syncLobbyClock();
 		}
 		int now = s.getTickCount();
 		for (WorldDefinition def : new ArrayList<>(worlds.values())) {
@@ -537,6 +555,9 @@ public final class WorldManager {
 			LevelStem stem = loaded.dimensions().dimensions().getValue(LevelStem.OVERWORLD);
 			if (stem == null) stem = stems.getValue(LevelStem.OVERWORLD);
 			if (stem == null) throw new IllegalStateException("ไม่พบ LevelStem ของโลกหลัก");
+			if ("lobby".equalsIgnoreCase(def.name())) {
+				stem = lobbyDimensionStem(s, stem);
+			}
 
 			long seed = BiomeManager.obfuscateSeed(
 					loaded.worldDataAndGenSettings().genSettings().options().seed());
@@ -582,13 +603,13 @@ public final class WorldManager {
 	}
 
 	/**
-	 * Lobby world rules: disable natural mob spawning, keep clear weather and let
-	 * the lobby use the world's real (running) clock instead of a frozen morning.
-	 * The overworld clock is shared by dimensions that use the overworld
-	 * dimension type, so resuming it keeps the main world's day/night cycle too.
+	 * Lobby world rules: disable natural mob spawning, keep clear weather, and
+	 * drive the lobby's dedicated clock (timeandtime:lobby) at real-world speed
+	 * so its day/night matches the real UTC+7 clock. The lobby uses its own
+	 * world clock (isolated from the main overworld clock), so this does not
+	 * affect the main world's day/night cycle.
 	 * Minecraft 26.3 renamed the old doDaylightCycle/doMobSpawning rules to
-	 * advance_time/advance_weather/spawn_mobs, so we drive them through commands
-	 * against the lobby level itself.
+	 * advance_time/advance_weather/spawn_mobs.
 	 */
 	private void applyLobbyEnvironment(ServerLevel level) {
 		MinecraftServer s = server;
@@ -599,13 +620,76 @@ public final class WorldManager {
 					.withSuppressedOutput();
 			s.getCommands().performPrefixedCommand(source, "gamerule spawn_mobs false");
 			s.getCommands().performPrefixedCommand(source, "gamerule advance_weather false");
-			s.getCommands().performPrefixedCommand(source, "gamerule advance_time true");
-			s.getCommands().performPrefixedCommand(source, "time resume");
 			s.getCommands().performPrefixedCommand(source, "weather clear");
-			LOGGER.info("[worlds] Lobby environment applied: mob spawning off, weather clear, world clock running");
 		} catch (Throwable e) {
-			LOGGER.warn("[worlds] Could not apply lobby environment: {}", e.getMessage());
+			LOGGER.warn("[worlds] Could not apply lobby gamerules: {}", e.getMessage());
 		}
+		setupLobbyClock(s);
+	}
+
+	/**
+	 * Returns a LevelStem whose dimension type is the dedicated lobby clock
+	 * (timeandtime:lobby), so the lobby's day/night is isolated from the main
+	 * overworld clock. Falls back to the original stem when the custom
+	 * dimension type is unavailable.
+	 */
+	private LevelStem lobbyDimensionStem(MinecraftServer s, LevelStem stem) {
+		try {
+			ResourceKey<DimensionType> key = ResourceKey.create(Registries.DIMENSION_TYPE,
+					Identifier.fromNamespaceAndPath("timeandtime", "lobby"));
+			Holder<DimensionType> holder = s.registryAccess().lookupOrThrow(Registries.DIMENSION_TYPE).getOrThrow(key);
+			LOGGER.info("[worlds] Lobby uses isolated dimension type timeandtime:lobby (own world clock)");
+			return new LevelStem(holder, stem.generator());
+		} catch (Throwable e) {
+			LOGGER.warn("[worlds] Could not apply isolated lobby dimension type: {}", e.getMessage());
+			return stem;
+		}
+	}
+
+	/**
+	 * Configures the lobby's dedicated clock to advance at real-world speed and
+	 * starts it at the current real UTC+7 time of day.
+	 */
+	private void setupLobbyClock(MinecraftServer s) {
+		if (s == null) return;
+		try {
+			ServerClockManager clockManager = s.clockManager();
+			Holder<WorldClock> clock = lobbyClockHolder(s);
+			clockManager.setPaused(clock, false);
+			clockManager.setRate(clock, LOBBY_REAL_TIME_RATE);
+			clockManager.setTotalTicks(clock, realWorldLobbyTicks());
+			LOGGER.info("[worlds] Lobby clock set to real-world UTC+7 time");
+		} catch (Throwable e) {
+			LOGGER.warn("[worlds] Could not set lobby real-world clock: {}", e.getMessage());
+		}
+	}
+
+	/** Corrects the lobby clock's drift so it stays pinned to real UTC+7 time. */
+	private void syncLobbyClock() {
+		MinecraftServer s = server;
+		if (s == null || stopping || !hasLobbyWorld()) return;
+		try {
+			ServerClockManager clockManager = s.clockManager();
+			Holder<WorldClock> clock = lobbyClockHolder(s);
+			clockManager.setTotalTicks(clock, realWorldLobbyTicks());
+		} catch (Throwable ignored) {
+			// best effort; the clock keeps its last known real time
+		}
+	}
+
+	private Holder<WorldClock> lobbyClockHolder(MinecraftServer s) {
+		ResourceKey<WorldClock> key = ResourceKey.create(Registries.WORLD_CLOCK,
+				Identifier.fromNamespaceAndPath("timeandtime", "lobby"));
+		return s.registryAccess().lookupOrThrow(Registries.WORLD_CLOCK).getOrThrow(key);
+	}
+
+	/**
+	 * Maps the current real-world UTC+7 time of day to in-game ticks (0-23999),
+	 * where 0 = midnight, 6000 = 06:00, 12000 = noon, 18000 = 18:00.
+	 */
+	private long realWorldLobbyTicks() {
+		long nanoOfDay = ZonedDateTime.now(LOBBY_TIME_ZONE).toLocalTime().toNanoOfDay();
+		return Math.round(nanoOfDay / 86_400_000_000_000.0 * 24000.0);
 	}
 
 	private void unloadLocked(WorldDefinition def) {
