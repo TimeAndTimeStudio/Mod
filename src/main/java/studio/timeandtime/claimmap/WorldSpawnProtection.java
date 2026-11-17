@@ -208,21 +208,21 @@ public final class WorldSpawnProtection {
 	}
 
 	public static void teleportToLobbySpawn(ServerPlayer player, ServerLevel lobby, boolean firstTime) {
-		BlockPos sp = lobby.getRespawnData().pos();
-		if (sp == null) sp = new BlockPos(0, 64, 0);
-		int cx = sp.getX() >> 4;
-		int cz = sp.getZ() >> 4;
+		int spawnX = 0;
+		int spawnZ = 0;
+		int cx = spawnX >> 4;
+		int cz = spawnZ >> 4;
 		lobby.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(cx, cz), 2);
 		ChunkAccess chunk = lobby.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, true);
-		int targetY = sp.getY();
+		int targetY = 64;
 		if (chunk != null) {
-			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, sp.getX() & 15, sp.getZ() & 15);
+			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, spawnX & 15, spawnZ & 15);
 			if (surfaceY > lobby.getMinY() + 5) {
-				targetY = Math.max(sp.getY(), surfaceY + 1);
+				targetY = surfaceY + 1;
 			}
 			while (targetY < lobby.getMaxY() - 2) {
-				BlockState feet = chunk.getBlockState(new BlockPos(sp.getX(), targetY, sp.getZ()));
-				BlockState head = chunk.getBlockState(new BlockPos(sp.getX(), targetY + 1, sp.getZ()));
+				BlockState feet = chunk.getBlockState(new BlockPos(spawnX, targetY, spawnZ));
+				BlockState head = chunk.getBlockState(new BlockPos(spawnX, targetY + 1, spawnZ));
 				if ((feet.isAir() || !feet.isSolid()) && (head.isAir() || !head.isSolid())) {
 					break;
 				}
@@ -231,7 +231,7 @@ public final class WorldSpawnProtection {
 		}
 		if (targetY <= lobby.getMinY() + 5) targetY = 64;
 
-		Vec3 target = new Vec3(sp.getX() + 0.5, targetY, sp.getZ() + 0.5);
+		Vec3 target = new Vec3(0.5, targetY, 0.5);
 		ServerPlayer moved = player;
 		if (player.level() != lobby) {
 			TeleportTransition transition = new TeleportTransition(lobby, target, Vec3.ZERO,

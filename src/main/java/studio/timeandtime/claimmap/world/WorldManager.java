@@ -781,17 +781,18 @@ public final class WorldManager {
 	}
 
 	private BlockPos spawnPos(ServerLevel level) {
-		BlockPos pos = level.getRespawnData().pos();
+		boolean lobby = isLobby(level);
+		BlockPos pos = lobby ? new BlockPos(0, 64, 0) : level.getRespawnData().pos();
 		if (pos == null) pos = new BlockPos(0, 64, 0);
 		int cx = pos.getX() >> 4;
 		int cz = pos.getZ() >> 4;
 		level.getChunkSource().addTicketWithRadius(TicketType.PLAYER_SPAWN, new ChunkPos(cx, cz), 2);
 		ChunkAccess chunk = level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, true);
-		int targetY = pos.getY();
+		int targetY = lobby ? 64 : pos.getY();
 		if (chunk != null) {
 			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX() & 15, pos.getZ() & 15);
 			if (surfaceY > level.getMinY() + 5) {
-				targetY = Math.max(pos.getY(), surfaceY + 1);
+				targetY = lobby ? (surfaceY + 1) : Math.max(pos.getY(), surfaceY + 1);
 			}
 			while (targetY < level.getMaxY() - 2) {
 				BlockState feet = chunk.getBlockState(new BlockPos(pos.getX(), targetY, pos.getZ()));
