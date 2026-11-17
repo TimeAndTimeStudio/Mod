@@ -619,6 +619,17 @@ public final class WorldManager {
 		}
 	}
 
+	public void clearMainWorldPosition(UUID uuid) {
+		if (uuid != null) {
+			mainWorldPositions.remove(uuid);
+			saveMainWorldPositions();
+		}
+	}
+
+	public boolean hasMainWorldPosition(UUID uuid) {
+		return uuid != null && mainWorldPositions.containsKey(uuid);
+	}
+
 	private void executeTeleportLocked(ServerPlayer player, WorldDefinition def) {
 		if (def.level == null) {
 			try {
@@ -728,7 +739,7 @@ public final class WorldManager {
 		}
 		moved.sendSystemMessage(Component.literal(firstTime
 				? "ยินดีต้อนรับสู่โลกหลัก (พิกัดสุ่ม " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ")"
-				: "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว"));
+				: "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว (พิกัด " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ")"));
 	}
 
 	public WorldInfo createWorld(String name) throws Exception {
@@ -745,6 +756,12 @@ public final class WorldManager {
 			Path mainLevelDat = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("level.dat");
 			if (Files.exists(mainLevelDat)) {
 				Files.copy(mainLevelDat, worldFolder.resolve("level.dat"));
+			}
+			Path mainSettings = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("data/minecraft/world_gen_settings.dat");
+			if (Files.exists(mainSettings)) {
+				Path destSettingsDir = worldFolder.resolve("data/minecraft");
+				Files.createDirectories(destSettingsDir);
+				Files.copy(mainSettings, destSettingsDir.resolve("world_gen_settings.dat"));
 			}
 			scanLocked();
 			WorldDefinition def = require(cleanName);

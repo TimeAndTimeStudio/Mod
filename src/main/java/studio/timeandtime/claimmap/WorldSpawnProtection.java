@@ -70,7 +70,7 @@ public final class WorldSpawnProtection {
 				if (hasLobby) {
 					ServerLevel lobby = wm.getLobbyLevel();
 					if (lobby != null) {
-						if (wm != null && player.level() == server.overworld()) {
+						if (wm != null && wm.hasMainWorldPosition(player.getUUID()) && player.level() == server.overworld()) {
 							wm.recordMainWorldPosition(player);
 						}
 						teleportToLobbySpawn(player, lobby, firstTime);
@@ -86,27 +86,54 @@ public final class WorldSpawnProtection {
 			});
 		});
 
-		// 2. On Player Respawn:
-		ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
-			if (newPlayer.getRespawnConfig() == null) {
+		// On Player Disconnect:
+		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+			ServerPlayer player = handler.getPlayer();
+			if (player != null && player.level() == server.overworld()) {
 				var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
-				boolean hasLobby = wm != null && wm.hasLobbyWorld();
-				if (hasLobby) {
-					ServerLevel lobby = wm.getLobbyLevel();
-					if (lobby != null) {
-						newPlayer.level().getServer().execute(() -> {
-							teleportToLobbySpawn(newPlayer, lobby, false);
-						});
-						return;
-					}
+				if (wm != null && wm.hasMainWorldPosition(player.getUUID())) {
+					wm.recordMainWorldPosition(player);
 				}
-				// No bed or anchor: random spawn in Overworld
+			}
+		});
+
+		// 2. On Player Death: Show coordinates in chat & clear saved main world position
+		ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
+			if (entity instanceof ServerPlayer player) {
+				int dx = (int) player.getX();
+				int dy = (int) player.getY();
+				int dz = (int) player.getZ();
+				String worldName = player.level().dimension().identifier().getPath();
+				player.sendSystemMessage(Component.literal(
+						"§c[Time SMP] ตำแหน่งที่คุณเสียชีวิต: §eX: " + dx + ", Y: " + dy + ", Z: " + dz
+								+ " §7(โลก: §f" + worldName + "§7)"));
+
+				var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
+				if (wm != null) {
+					wm.clearMainWorldPosition(player.getUUID());
+				}
+			}
+		});
+
+		// 3. On Player Respawn: Always respawn in lobby if lobby exists!
+		ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
+			var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
+			boolean hasLobby = wm != null && wm.hasLobbyWorld();
+			if (hasLobby) {
+				ServerLevel lobby = wm.getLobbyLevel();
+				if (lobby != null) {
+					newPlayer.level().getServer().execute(() -> {
+						teleportToLobbySpawn(newPlayer, lobby, false);
+					});
+					return;
+				}
+			}
+			if (newPlayer.getRespawnConfig() == null) {
 				ServerLevel overworld = newPlayer.level().getServer().overworld();
 				newPlayer.level().getServer().execute(() -> {
 					randomSpawnPlayer(newPlayer, overworld, false);
 				});
 			} else {
-				// Has bed: respawn at bed, grant protection
 				grantProtection(newPlayer);
 			}
 		});
