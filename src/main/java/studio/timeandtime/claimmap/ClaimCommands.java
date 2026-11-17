@@ -37,8 +37,8 @@ import java.util.UUID;
  *   <li>{@code /ah cancel <id>}       - cancel a listing without bids</li>
  *   <li>{@code /eco give|take|set <player> <amount> [reason]} - admin money (OP only)</li>
  *   <li>{@code /claim}                - claim the cell the player is standing in</li>
- *   <li>{@code /claimmap here}        - show info about the current cell</li>
- *   <li>{@code /claimmap reload}      - reload config + regions (operator)</li>
+ *   <li>{@code /timesmp here}         - show info about the current cell</li>
+ *   <li>{@code /timesmp reload}       - reload config + regions (operator)</li>
  * </ul>
  */
 public final class ClaimCommands {
@@ -267,7 +267,6 @@ public final class ClaimCommands {
 															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cz"),
 															StringArgumentType.getString(ctx, "player"))))))));
 
-			dispatcher.register(Commands.literal("claimmap").redirect(timesmpNode));
 			dispatcher.register(Commands.literal("map").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaimMapGui(ctx.getSource())));
 
