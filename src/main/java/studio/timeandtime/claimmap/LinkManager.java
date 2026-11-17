@@ -20,8 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Two ways to obtain a session token:
  * <ol>
- *   <li>{@link #createSession} - password based: {@code /pass} in game sets a
- *       password, then {@code POST /api/login} on the web page exchanges
+ *   <li>{@link #createSession} - password based: the in-game auth dialog sets
+ *       a password, then {@code POST /api/login} on the web page exchanges
  *       name+password for a session token.</li>
  *   <li>{@link #issueCode}/{@link #exchange} - legacy 6 digit in-game code.</li>
  * </ol>

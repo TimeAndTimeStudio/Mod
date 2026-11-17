@@ -24,7 +24,7 @@ import java.util.UUID;
 
 /**
  * Player accounts for the web UI login. A player sets their own password
- * in game with {@code /pass <password>}; they then log in on the web page
+ * through the in-game auth dialog; they then log in on the web page
  * with their Minecraft name + that password.
  *
  * <p>Only JSON persistence: {@code config/timesmp/accounts.json}

@@ -26,7 +26,7 @@ import java.util.UUID;
 /**
  * In-game commands:
  * <ul>
- *   <li>{@code /pass <password>}      - set the password used to log in on the web page</li>
+ *   <li>{@code /auth reset <player>}  - admin password reset (kicks the player)</li>
  *   <li>{@code /bal}                  - show the player's money</li>
  *   <li>{@code /pay <player> <amount>} - transfer money to another player</li>
  *   <li>{@code /sell hand|all}        - sell to the shop</li>
@@ -108,13 +108,6 @@ public final class ClaimCommands {
 
 	public void register() {			CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
 			dispatcher.register(Commands.literal("auth")
-					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
-					.then(Commands.literal("reset")
-							.then(Commands.argument("player", StringArgumentType.word())
-									.executes(ctx -> runAdminResetPass(ctx.getSource(),
-											StringArgumentType.getString(ctx, "player"))))));
-
-			dispatcher.register(Commands.literal("pass")
 					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
 					.then(Commands.literal("reset")
 							.then(Commands.argument("player", StringArgumentType.word())
@@ -797,7 +790,7 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (authGate != null && !authGate.isAuthed(player.getUUID())) {
-			src.sendFailure(Component.literal("§cกรุณาเข้าสู่ระบบก่อน: /pass login <รหัสผ่าน>"));
+			src.sendFailure(Component.literal("§cกรุณายืนยันตัวตนก่อน (ใส่รหัสผ่านในหน้าต่างที่ขึ้นมาเมื่อเข้าเกม)"));
 			return 0;
 		}
 		HelpGui.open(player, regions, config, economy, prices, shop, auctions, mailbox);

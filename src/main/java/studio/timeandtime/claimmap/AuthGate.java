@@ -522,50 +522,6 @@ public final class AuthGate {
 		return InteractionResult.PASS;
 	}
 
-	// ---- /pass (only for an already authenticated player) -------------------
-
-	public void handleChangePassword(ServerPlayer player, String oldPassword, String newPassword) {
-		UUID uuid = player.getUUID();
-		if (!isAuthed(uuid)) {
-			player.sendSystemMessage(Component.literal("ต้องเข้าสู่ระบบก่อน"));
-			return;
-		}
-		String name = player.getGameProfile().name();
-		String problem = passwordProblem(newPassword, newPassword, name);
-		if (problem != null) {
-			player.sendSystemMessage(Component.literal(problem));
-			return;
-		}
-		worker.submit(() -> {
-			boolean ok;
-			try {
-				ok = accounts.verify(name, oldPassword) != null;
-			} catch (RuntimeException e) {
-				ok = false;
-			}
-			if (!ok) {
-				MinecraftServer server = ClaimMap.getServer();
-				if (server != null) server.execute(() -> {
-					MinecraftServer srv = ClaimMap.getServer();
-					ServerPlayer online = srv == null ? null : srv.getPlayerList().getPlayer(uuid);
-					if (online != null) online.sendSystemMessage(Component.literal("รหัสเดิมไม่ถูกต้อง"));
-				});
-				return;
-			}
-			String hash = PasswordHasher.hash(newPassword, config.pbkdf2Iterations);
-			MinecraftServer server = ClaimMap.getServer();
-			if (server != null) server.execute(() -> {
-				accounts.setPasswordHash(uuid.toString(), name, hash);
-				links.revokeAllForUuid(uuid.toString());
-				MinecraftServer srv = ClaimMap.getServer();
-				ServerPlayer online = srv == null ? null : srv.getPlayerList().getPlayer(uuid);
-				if (online != null) {
-					online.sendSystemMessage(Component.literal("เปลี่ยนรหัสผ่านแล้ว — เซสชันเว็บเดิมถูกยกเลิกทั้งหมด"));
-				}
-			});
-		});
-	}
-
 	/** Returns a Thai problem description, or null when the password is fine. */
 	static String passwordProblem(String password, String confirm, String name) {
 		if (password == null || password.length() < 6 || password.length() > 64) {
