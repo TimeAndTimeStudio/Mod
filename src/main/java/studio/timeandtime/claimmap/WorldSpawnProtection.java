@@ -14,9 +14,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -198,19 +201,30 @@ public final class WorldSpawnProtection {
 	public static void teleportToLobbySpawn(ServerPlayer player, ServerLevel lobby, boolean firstTime) {
 		BlockPos sp = lobby.getRespawnData().pos();
 		if (sp == null) sp = BlockPos.ZERO;
+		lobby.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(sp), 2);
 		int x = sp.getX();
 		int z = sp.getZ();
 		int y = lobby.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) + 1;
 		if (y < lobby.getMinY() + 1) y = 64;
 
-		player.teleportTo(lobby, x + 0.5, y, z + 0.5, Set.of(), player.getYRot(), player.getXRot(), true);
-		if (!player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN)) {
-			player.setGameMode(net.minecraft.world.level.GameType.ADVENTURE);
+		Vec3 target = new Vec3(x + 0.5, y, z + 0.5);
+		ServerPlayer moved = player;
+		if (player.level() != lobby) {
+			TeleportTransition transition = new TeleportTransition(lobby, target, Vec3.ZERO,
+					player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
+			ServerPlayer tp = player.teleport(transition);
+			if (tp != null) moved = tp;
+		} else {
+			player.teleportTo(lobby, target.x, target.y, target.z, Set.of(), player.getYRot(), player.getXRot(), true);
+		}
+
+		if (!moved.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN)) {
+			moved.setGameMode(net.minecraft.world.level.GameType.ADVENTURE);
 		}
 		if (firstTime) {
-			player.sendSystemMessage(Component.literal("§a[Lobby] ยินดีต้อนรับสู่เซิร์ฟเวอร์! พิมพ์ §f/main §aเพื่อเดินทางเข้าสู่โลกหลัก"));
+			moved.sendSystemMessage(Component.literal("§a[Lobby] ยินดีต้อนรับสู่เซิร์ฟเวอร์! พิมพ์ §f/main §aเพื่อเดินทางเข้าสู่โลกหลัก"));
 		} else {
-			player.sendSystemMessage(Component.literal("§a[Lobby] คุณกลับมาที่ Lobby (พิมพ์ §f/main §aเพื่อไปโลกหลัก)"));
+			moved.sendSystemMessage(Component.literal("§a[Lobby] คุณกลับมาที่ Lobby (พิมพ์ §f/main §aเพื่อไปโลกหลัก)"));
 		}
 	}
 
@@ -229,16 +243,24 @@ public final class WorldSpawnProtection {
 
 	public void randomSpawnPlayer(ServerPlayer player, ServerLevel level, boolean firstJoin) {
 		BlockPos safePos = findSafeSpawnLocation(level, -RANGE, RANGE, -RANGE, RANGE);
-		player.teleportTo(level, safePos.getX() + 0.5, safePos.getY(), safePos.getZ() + 0.5,
-				Set.of(), player.getYRot(), player.getXRot(), true);
-
-		if (firstJoin) {
-			player.sendSystemMessage(Component.literal("§6[จุดเกิดสุ่ม] ยินดีต้อนรับ! คุณเกิดที่พิกัด X: " + safePos.getX() + ", Z: " + safePos.getZ()));
+		Vec3 target = new Vec3(safePos.getX() + 0.5, safePos.getY(), safePos.getZ() + 0.5);
+		ServerPlayer moved = player;
+		if (player.level() != level) {
+			TeleportTransition transition = new TeleportTransition(level, target, Vec3.ZERO,
+					player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
+			ServerPlayer tp = player.teleport(transition);
+			if (tp != null) moved = tp;
 		} else {
-			player.sendSystemMessage(Component.literal("§6[จุดเกิดสุ่ม] ไม่มีจุดเกิดเตียง คุณได้เกิดใหม่ที่พิกัด X: " + safePos.getX() + ", Z: " + safePos.getZ()));
+			player.teleportTo(level, target.x, target.y, target.z, Set.of(), player.getYRot(), player.getXRot(), true);
 		}
 
-		grantProtection(player);
+		if (firstJoin) {
+			moved.sendSystemMessage(Component.literal("§6[จุดเกิดสุ่ม] ยินดีต้อนรับ! คุณเกิดที่พิกัด X: " + safePos.getX() + ", Z: " + safePos.getZ()));
+		} else {
+			moved.sendSystemMessage(Component.literal("§6[จุดเกิดสุ่ม] ไม่มีจุดเกิดเตียง คุณได้เกิดใหม่ที่พิกัด X: " + safePos.getX() + ", Z: " + safePos.getZ()));
+		}
+
+		grantProtection(moved);
 	}
 
 	public static BlockPos findSafeSpawnLocation(ServerLevel level, int minX, int maxX, int minZ, int maxZ) {

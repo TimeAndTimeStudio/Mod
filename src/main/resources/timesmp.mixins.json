@@ -12,7 +12,8 @@
 		"LevelStoragePathMixin",
 		"ServerLevelsAccessor",
 		"ServerWorldSaveMixin",
-		"ServerExplosionMixin"
+		"ServerExplosionMixin",
+		"DistanceManagerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
