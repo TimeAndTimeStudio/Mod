@@ -29,8 +29,8 @@ else
 fi
 MOD_URL="${MOD_URL:-https://github.com/${REPO}/releases/latest/download/${MOD_ASSET}}"
 SERVER_DIR="${1:-$HOME/mcserver}"
-ADMIN_NAME="TAT1654"
-ADMIN_UUID="9db07e0d-2e66-3307-8695-509d6af83247"
+PLAYER_NAME="TAT1654"
+PLAYER_UUID="9db07e0d-2e66-3307-8695-509d6af83247"
 
 die() { echo "[setup] ERROR: $*" >&2; exit 1; }
 log() { echo "[setup] $*"; }
@@ -113,25 +113,14 @@ max-tick-time=180000
 EOF
 
 # ---------------------------------------------------------------------------
-# 6) Admin: whitelist + op
+# 6) Whitelist (no automatic admin/op)
 # ---------------------------------------------------------------------------
-log "whitelisting and opping $ADMIN_NAME"
+log "whitelisting $PLAYER_NAME"
 cat > whitelist.json <<EOF
 [
   {
-    "uuid": "$ADMIN_UUID",
-    "name": "$ADMIN_NAME"
-  }
-]
-EOF
-
-cat > ops.json <<EOF
-[
-  {
-    "uuid": "$ADMIN_UUID",
-    "name": "$ADMIN_NAME",
-    "level": 4,
-    "bypassesPlayerLimit": true
+    "uuid": "$PLAYER_UUID",
+    "name": "$PLAYER_NAME"
   }
 ]
 EOF
@@ -151,3 +140,6 @@ echo "  cd \"$SERVER_DIR\" && java -Xmx2G -jar server.jar nogui"
 echo
 echo "Whitelist is ON. Add players in-game with:"
 echo "  /whitelist add <player>"
+echo
+echo "No admins are added automatically. Grant one in-game with:"
+echo "  /op <player>"
