@@ -738,8 +738,8 @@ public final class WorldManager {
 			ClaimMap.instance().spawnProtection().grantProtection(moved);
 		}
 		moved.sendSystemMessage(Component.literal(firstTime
-				? "ยินดีต้อนรับสู่โลกหลัก (พิกัดสุ่ม " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ")"
-				: "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว (พิกัด " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ")"));
+				? "ยินดีต้อนรับสู่โลกหลัก (พิกัดสุ่ม " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ") พร้อมรับการคุ้มครอง 30 วินาที"
+				: "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว (พิกัด " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ") พร้อมรับการคุ้มครอง 30 วินาที"));
 	}
 
 	public WorldInfo createWorld(String name) throws Exception {
