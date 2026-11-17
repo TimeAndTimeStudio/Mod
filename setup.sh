@@ -14,11 +14,20 @@
 # Usage:
 #   ./setup.sh [server-dir]        # default: $HOME/mcserver
 #   FORCE=1 ./setup.sh [dir]       # overwrite an existing install
+#   MOD_URL=... ./setup.sh [dir]   # use a specific mod jar instead of the latest release
 #
 set -euo pipefail
 
 MC_VERSION="${MC_VERSION:-26.3}"
-MOD_URL="${MOD_URL:-https://github.com/TimeAndTimeStudio/Mod/releases/download/Test/timesmp.jar}"
+REPO="${REPO:-TimeAndTimeStudio/Mod}"
+# The CI publishes to the release marked "latest": 26.3 is the historical
+# timesmp.jar, other Minecraft versions use timesmp-mc<version>.jar.
+if [ "$MC_VERSION" = "26.3" ]; then
+  MOD_ASSET="timesmp.jar"
+else
+  MOD_ASSET="timesmp-mc${MC_VERSION}.jar"
+fi
+MOD_URL="${MOD_URL:-https://github.com/${REPO}/releases/latest/download/${MOD_ASSET}}"
 SERVER_DIR="${1:-$HOME/mcserver}"
 ADMIN_NAME="TAT1654"
 ADMIN_UUID="9db07e0d-2e66-3307-8695-509d6af83247"
@@ -68,7 +77,7 @@ curl -fL -o mods/fabric-api.jar "$FABRIC_API_URL"
 # ---------------------------------------------------------------------------
 # 3) Time SMP mod
 # ---------------------------------------------------------------------------
-log "downloading Time SMP mod"
+log "downloading Time SMP mod ($MOD_ASSET from latest release)"
 curl -fL -o mods/timesmp.jar "$MOD_URL"
 
 # ---------------------------------------------------------------------------

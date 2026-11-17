@@ -1,6 +1,7 @@
 name: Build
 
-# Builds the mod for Minecraft 26.2 and 26.3 and uploads the jars as artifacts.
+# Builds the mod for Minecraft 26.2 and 26.3, uploads the jars as artifacts,
+# and (on pushes / manual runs) publishes them to the "latest" GitHub Release.
 on:
   push:
     branches: [ main, master ]
@@ -40,3 +41,40 @@ jobs:
         with:
           name: timesmp-mc${{ matrix.mc }}
           path: build/libs/*.jar
+
+  release:
+    # Publish only for pushes and manual runs, never for pull requests.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-latest
+      cancel-in-progress: false
+    steps:
+      - name: Download built jars
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p dist
+          # 26.3 keeps the historical "timesmp.jar" name used by setup.sh.
+          cp artifacts/timesmp-mc26.3/timesmp.jar dist/timesmp.jar
+          cp artifacts/timesmp-mc26.2/timesmp.jar dist/timesmp-mc26.2.jar
+          ls -lh dist
+
+      - name: Publish to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Automated build of ${GITHUB_SHA::7} from ${GITHUB_REF_NAME} on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest --title "Latest build" --notes "$NOTES" --latest
+          else
+            gh release create latest --title "Latest build" --notes "$NOTES" --latest
+          fi
+          gh release upload latest dist/timesmp.jar dist/timesmp-mc26.2.jar --clobber
+          echo "Published: $(gh release view latest --json url --jq .url)"
