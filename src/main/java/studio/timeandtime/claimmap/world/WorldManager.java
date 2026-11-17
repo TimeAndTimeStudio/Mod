@@ -582,8 +582,10 @@ public final class WorldManager {
 	}
 
 	/**
-	 * Lobby world rules: disable natural mob spawning and lock the clock to a
-	 * permanent morning (1000 ticks) with clear weather.
+	 * Lobby world rules: disable natural mob spawning, keep clear weather and let
+	 * the lobby use the world's real (running) clock instead of a frozen morning.
+	 * The overworld clock is shared by dimensions that use the overworld
+	 * dimension type, so resuming it keeps the main world's day/night cycle too.
 	 * Minecraft 26.3 renamed the old doDaylightCycle/doMobSpawning rules to
 	 * advance_time/advance_weather/spawn_mobs, so we drive them through commands
 	 * against the lobby level itself.
@@ -597,10 +599,10 @@ public final class WorldManager {
 					.withSuppressedOutput();
 			s.getCommands().performPrefixedCommand(source, "gamerule spawn_mobs false");
 			s.getCommands().performPrefixedCommand(source, "gamerule advance_weather false");
-			s.getCommands().performPrefixedCommand(source, "time set 1000");
-			s.getCommands().performPrefixedCommand(source, "time pause");
+			s.getCommands().performPrefixedCommand(source, "gamerule advance_time true");
+			s.getCommands().performPrefixedCommand(source, "time resume");
 			s.getCommands().performPrefixedCommand(source, "weather clear");
-			LOGGER.info("[worlds] Lobby environment applied: mob spawning off, time locked to morning");
+			LOGGER.info("[worlds] Lobby environment applied: mob spawning off, weather clear, world clock running");
 		} catch (Throwable e) {
 			LOGGER.warn("[worlds] Could not apply lobby environment: {}", e.getMessage());
 		}
