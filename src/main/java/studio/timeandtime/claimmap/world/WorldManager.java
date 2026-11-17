@@ -662,6 +662,9 @@ public final class WorldManager {
 			if (!moved.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
 				moved.setGameMode(GameType.ADVENTURE);
 			}
+			if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
+				ClaimMap.instance().spawnProtection().clearProtection(moved);
+			}
 			moved.sendSystemMessage(Component.literal("ย้ายไปโลก Lobby (พิมพ์ /main เพื่อไปโลกหลัก) แล้ว"));
 			return;
 		}
@@ -691,10 +694,13 @@ public final class WorldManager {
 		if (moved.gameMode.getGameModeForPlayer() == GameType.ADVENTURE) {
 			moved.setGameMode(GameType.SURVIVAL);
 		}
+		if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
+			ClaimMap.instance().spawnProtection().grantProtection(moved);
+		}
 		if (isRandom) {
-			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") แล้ว"));
+			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") พร้อมรับการคุ้มครอง 30 วินาที"));
 		} else {
-			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " แล้ว"));
+			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " พร้อมรับการคุ้มครอง 30 วินาที"));
 		}
 	}
 

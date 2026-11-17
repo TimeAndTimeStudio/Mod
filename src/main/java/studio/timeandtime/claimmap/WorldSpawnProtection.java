@@ -86,7 +86,9 @@ public final class WorldSpawnProtection {
 					ServerLevel overworld = server.overworld();
 					randomSpawnPlayer(player, overworld, true);
 				} else {
-					grantProtection(player);
+					if (!studio.timeandtime.claimmap.world.WorldManager.isLobby(player.level())) {
+						grantProtection(player);
+					}
 				}
 			});
 		});
@@ -139,7 +141,9 @@ public final class WorldSpawnProtection {
 					randomSpawnPlayer(newPlayer, overworld, false);
 				});
 			} else {
-				grantProtection(newPlayer);
+				if (!studio.timeandtime.claimmap.world.WorldManager.isLobby(newPlayer.level())) {
+					grantProtection(newPlayer);
+				}
 			}
 		});
 
@@ -151,12 +155,15 @@ public final class WorldSpawnProtection {
 				if (!player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN)) {
 					player.setGameMode(net.minecraft.world.level.GameType.ADVENTURE);
 				}
-			} else if (leavingLobby) {
-				if (player.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.ADVENTURE) {
-					player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+				clearProtection(player);
+			} else {
+				if (leavingLobby) {
+					if (player.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.ADVENTURE) {
+						player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+					}
 				}
+				grantProtection(player);
 			}
-			grantProtection(player);
 		});
 
 		// 4. Damage Cancellation while protected or in lobby:
@@ -183,7 +190,7 @@ public final class WorldSpawnProtection {
 				protectedUntil.remove(entry.getKey());
 				if (ClaimMap.getServer() != null) {
 					ServerPlayer sp = ClaimMap.getServer().getPlayerList().getPlayer(entry.getKey());
-					if (sp != null) {
+					if (sp != null && !studio.timeandtime.claimmap.world.WorldManager.isLobby(sp.level())) {
 						sp.sendSystemMessage(Component.literal("§e[ระบบคุ้มครอง] หมดเวลาคุ้มครองความปลอดภัย 30 วินาทีแล้ว"));
 					}
 				}
@@ -238,6 +245,9 @@ public final class WorldSpawnProtection {
 		if (!moved.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_ADMIN)) {
 			moved.setGameMode(net.minecraft.world.level.GameType.ADVENTURE);
 		}
+		if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
+			ClaimMap.instance().spawnProtection().clearProtection(moved);
+		}
 		if (firstTime) {
 			moved.sendSystemMessage(Component.literal("§a[Lobby] ยินดีต้อนรับสู่เซิร์ฟเวอร์! พิมพ์ §f/main §aเพื่อเดินทางเข้าสู่โลกหลัก"));
 		} else {
@@ -250,7 +260,22 @@ public final class WorldSpawnProtection {
 		return until != null && System.currentTimeMillis() < until;
 	}
 
+	public void clearProtection(ServerPlayer player) {
+		if (player == null) return;
+		protectedUntil.remove(player.getUUID());
+		player.removeEffect(MobEffects.RESISTANCE);
+		player.removeEffect(MobEffects.FIRE_RESISTANCE);
+		player.removeEffect(MobEffects.WATER_BREATHING);
+	}
+
 	public void grantProtection(ServerPlayer player) {
+		if (player == null) return;
+		if (studio.timeandtime.claimmap.world.WorldManager.isLobby(player.level())) {
+			return;
+		}
+		if (isProtected(player.getUUID())) {
+			return;
+		}
 		protectedUntil.put(player.getUUID(), System.currentTimeMillis() + (PROTECTION_SECONDS * 1000L));
 		player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, PROTECTION_SECONDS * 20, 4, false, false, true));
 		player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, PROTECTION_SECONDS * 20, 0, false, false, true));
