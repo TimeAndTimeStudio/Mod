@@ -39,6 +39,7 @@ import java.util.UUID;
  *   <li>{@code /claim}                - claim the cell the player is standing in</li>
  *   <li>{@code /timesmp here}         - show info about the current cell</li>
  *   <li>{@code /timesmp reload}       - reload config + regions (operator)</li>
+ *   <li>{@code /map}                  - open the land map GUI</li>
  * </ul>
  */
 public final class ClaimCommands {
@@ -250,10 +251,12 @@ public final class ClaimCommands {
 							.executes(ctx -> runHomeTeleport(ctx.getSource(),
 									StringArgumentType.getString(ctx, "name")))));
 
-			var timesmpNode = dispatcher.register(Commands.literal("timesmp")
-					.executes(ctx -> runClaimMapGui(ctx.getSource()))
-					.then(Commands.literal("gui").requires(src -> src.getPlayer() != null)
-							.executes(ctx -> runClaimMapGui(ctx.getSource())))
+			dispatcher.register(Commands.literal("timesmp")
+					.executes(ctx -> {
+						ctx.getSource().sendSuccess(() -> Component.literal(
+								"§eใช้ /map เปิดแผนที่ • /timesmp here • /timesmp reload|transfer (แอดมิน)"), false);
+						return 1;
+					})
 					.then(Commands.literal("here").requires(src -> src.getPlayer() != null)
 							.executes(ctx -> runHere(ctx.getSource())))
 					.then(Commands.literal("reload").requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
