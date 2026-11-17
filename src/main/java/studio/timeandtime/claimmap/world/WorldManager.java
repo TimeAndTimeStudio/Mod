@@ -551,6 +551,11 @@ public final class WorldManager {
 			def.state = WorldState.LOADED;
 			def.lastEmptyTick = s.getTickCount();
 
+			// Lobby world: no natural mob spawning and permanently morning.
+			if ("lobby".equalsIgnoreCase(def.name())) {
+				s.execute(() -> applyLobbyEnvironment(level));
+			}
+
 			// Prepare the spawn chunk before the first teleport request.
 			BlockPos spawn = spawnPos(level);
 			level.getChunkSource().addTicketWithRadius(
@@ -573,6 +578,31 @@ public final class WorldManager {
 			}
 			LOGGER.error("[worlds] Failed to load {}: {}", def.name(), def.error, e);
 			throw new IllegalStateException("โหลดโลก " + def.name() + " ไม่สำเร็จ: " + def.error, e);
+		}
+	}
+
+	/**
+	 * Lobby world rules: disable natural mob spawning and lock the clock to a
+	 * permanent morning (1000 ticks) with clear weather.
+	 * Minecraft 26.3 renamed the old doDaylightCycle/doMobSpawning rules to
+	 * advance_time/advance_weather/spawn_mobs, so we drive them through commands
+	 * against the lobby level itself.
+	 */
+	private void applyLobbyEnvironment(ServerLevel level) {
+		MinecraftServer s = server;
+		if (s == null || level == null) return;
+		try {
+			CommandSourceStack source = s.createCommandSourceStack()
+					.withLevel(level)
+					.withSuppressedOutput();
+			s.getCommands().performPrefixedCommand(source, "gamerule spawn_mobs false");
+			s.getCommands().performPrefixedCommand(source, "gamerule advance_weather false");
+			s.getCommands().performPrefixedCommand(source, "time set 1000");
+			s.getCommands().performPrefixedCommand(source, "time pause");
+			s.getCommands().performPrefixedCommand(source, "weather clear");
+			LOGGER.info("[worlds] Lobby environment applied: mob spawning off, time locked to morning");
+		} catch (Throwable e) {
+			LOGGER.warn("[worlds] Could not apply lobby environment: {}", e.getMessage());
 		}
 	}
 
