@@ -127,7 +127,6 @@ public final class ClaimCommands {
 
 			dispatcher.register(Commands.literal("sell").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runSellGui(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runSellGui(ctx.getSource())))
 					.then(Commands.literal("hand")
 							.executes(ctx -> runSellHand(ctx.getSource()))
 							.then(Commands.argument("price", StringArgumentType.word())
@@ -143,7 +142,6 @@ public final class ClaimCommands {
 
 			dispatcher.register(Commands.literal("buy").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runBuyGui(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runBuyGui(ctx.getSource())))
 					.then(Commands.literal("sell")
 							.then(Commands.argument("price", StringArgumentType.word())
 									.executes(ctx -> runBuySell(ctx.getSource(),
@@ -159,12 +157,10 @@ public final class ClaimCommands {
 											StringArgumentType.getString(ctx, "qty"))))));
 
 			dispatcher.register(Commands.literal("mail").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runMailGui(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runMailGui(ctx.getSource()))));
+					.executes(ctx -> runMailGui(ctx.getSource())));
 
 			dispatcher.register(Commands.literal("ah").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runAhGui(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runAhGui(ctx.getSource())))
 					.then(Commands.literal("list").executes(ctx -> runAhList(ctx.getSource())))
 					.then(Commands.literal("sell")
 							.then(Commands.argument("startPrice", StringArgumentType.word())
@@ -198,7 +194,6 @@ public final class ClaimCommands {
 
 			dispatcher.register(Commands.literal("price").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runPriceDefault(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runPriceGui(ctx.getSource())))
 					.then(Commands.literal("hand").executes(ctx -> runPriceHand(ctx.getSource()))));
 
 			dispatcher.register(Commands.literal("eco")
@@ -275,14 +270,9 @@ public final class ClaimCommands {
 
 			dispatcher.register(Commands.literal("help").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runHelpGui(ctx.getSource())));
-			dispatcher.register(Commands.literal("smphelp").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runHelpGui(ctx.getSource())));
-			dispatcher.register(Commands.literal("menu").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runHelpGui(ctx.getSource())));
 
 			dispatcher.register(Commands.literal("tpa").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runTpaGui(ctx.getSource()))
-					.then(Commands.literal("gui").executes(ctx -> runTpaGui(ctx.getSource())))
 					.then(Commands.literal("accept")
 							.executes(ctx -> runTpaAccept(ctx.getSource(), null))
 							.then(Commands.argument("player", StringArgumentType.word())
@@ -733,13 +723,6 @@ public final class ClaimCommands {
 		} else {
 			PriceGui.open(player, prices, shop, config.currencyName, 0, 0);
 		}
-		return 1;
-	}
-
-	private int runPriceGui(CommandSourceStack src) {
-		ServerPlayer player = src.getPlayer();
-		if (player == null) return 0;
-		PriceGui.open(player, prices, shop, config.currencyName, 0, 0);
 		return 1;
 	}
 

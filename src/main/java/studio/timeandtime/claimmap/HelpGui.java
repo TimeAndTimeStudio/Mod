@@ -208,7 +208,7 @@ public final class HelpGui {
 				Component.literal("§fคำแนะนำ: ปิดเมนูด้วย §eEsc"),
 				List.of(
 						Component.literal("§7ทุกเมนู GUI ในเซิร์ฟเวอร์สามารถกดปุ่ม §eEsc §7บนคีย์บอร์ดเพื่อปิดได้ทันที"),
-						Component.literal("§7พิมพ์ §b/help §7หรือ §b/smphelp §7เพื่อเปิดหน้านี้ได้ตลอดเวลา")
+						Component.literal("§7พิมพ์ §b/help §7เพื่อเปิดหน้านี้ได้ตลอดเวลา")
 				)
 		);
 		container.setItem(49, tipItem);

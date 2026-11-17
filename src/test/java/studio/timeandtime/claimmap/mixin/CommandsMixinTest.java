@@ -29,8 +29,6 @@ class CommandsMixinTest {
 		assertTrue(CommandFilter.isAllowedCommand("timesmp", null));
 		assertTrue(CommandFilter.isAllowedCommand("map", null));
 		assertTrue(CommandFilter.isAllowedCommand("help", null));
-		assertTrue(CommandFilter.isAllowedCommand("smphelp", null));
-		assertTrue(CommandFilter.isAllowedCommand("menu", null));
 		assertTrue(CommandFilter.isAllowedCommand("sethome", null));
 		assertTrue(CommandFilter.isAllowedCommand("delhome", null));
 		assertTrue(CommandFilter.isAllowedCommand("home", null));
@@ -55,6 +53,8 @@ class CommandsMixinTest {
 		assertFalse(CommandFilter.isAllowedCommand("tp", null)); // vanilla tp is disallowed for regular players
 		assertFalse(CommandFilter.isAllowedCommand("pass", null)); // pass is admin only
 		assertFalse(CommandFilter.isAllowedCommand("claimmap", null)); // alias removed, use /timesmp
+		assertFalse(CommandFilter.isAllowedCommand("smphelp", null)); // only /help remains
+		assertFalse(CommandFilter.isAllowedCommand("menu", null)); // only /help remains
 		assertFalse(CommandFilter.isAllowedCommand("auth", null)); // auth is admin only
 		assertFalse(CommandFilter.isAllowedCommand("world", null)); // replaced by direct world commands
 		assertFalse(CommandFilter.isAllowedCommand("eco", null)); // eco is admin only
