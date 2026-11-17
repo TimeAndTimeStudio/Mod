@@ -201,7 +201,7 @@ public final class WorldSpawnProtection {
 	public static void teleportToLobbySpawn(ServerPlayer player, ServerLevel lobby, boolean firstTime) {
 		BlockPos sp = lobby.getRespawnData().pos();
 		if (sp == null) sp = BlockPos.ZERO;
-		lobby.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(sp), 2);
+		lobby.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(sp.getX() >> 4, sp.getZ() >> 4), 2);
 		int x = sp.getX();
 		int z = sp.getZ();
 		int y = lobby.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) + 1;
