@@ -22,13 +22,18 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.util.datafix.DataFixers;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.DataPackConfig;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.portal.TeleportTransition;
@@ -771,11 +776,28 @@ public final class WorldManager {
 
 	private BlockPos spawnPos(ServerLevel level) {
 		BlockPos pos = level.getRespawnData().pos();
-		if (pos == null) pos = BlockPos.ZERO;
-		int x = pos.getX();
-		int z = pos.getZ();
-		int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) + 1;
-		return new BlockPos(x, Math.max(y, level.getMinY() + 1), z);
+		if (pos == null) pos = new BlockPos(0, 64, 0);
+		int cx = pos.getX() >> 4;
+		int cz = pos.getZ() >> 4;
+		level.getChunkSource().addTicketWithRadius(TicketType.PLAYER_SPAWN, new ChunkPos(cx, cz), 2);
+		ChunkAccess chunk = level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, true);
+		int targetY = pos.getY();
+		if (chunk != null) {
+			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX() & 15, pos.getZ() & 15);
+			if (surfaceY > level.getMinY() + 5) {
+				targetY = Math.max(pos.getY(), surfaceY + 1);
+			}
+			while (targetY < level.getMaxY() - 2) {
+				BlockState feet = chunk.getBlockState(new BlockPos(pos.getX(), targetY, pos.getZ()));
+				BlockState head = chunk.getBlockState(new BlockPos(pos.getX(), targetY + 1, pos.getZ()));
+				if ((feet.isAir() || !feet.isSolid()) && (head.isAir() || !head.isSolid())) {
+					break;
+				}
+				targetY++;
+			}
+		}
+		if (targetY <= level.getMinY() + 5) targetY = 64;
+		return new BlockPos(pos.getX(), targetY, pos.getZ());
 	}
 
 	// ---- commands ----------------------------------------------------------

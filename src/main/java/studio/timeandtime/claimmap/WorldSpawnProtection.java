@@ -17,6 +17,8 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
@@ -200,14 +202,29 @@ public final class WorldSpawnProtection {
 
 	public static void teleportToLobbySpawn(ServerPlayer player, ServerLevel lobby, boolean firstTime) {
 		BlockPos sp = lobby.getRespawnData().pos();
-		if (sp == null) sp = BlockPos.ZERO;
-		lobby.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(sp.getX() >> 4, sp.getZ() >> 4), 2);
-		int x = sp.getX();
-		int z = sp.getZ();
-		int y = lobby.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) + 1;
-		if (y < lobby.getMinY() + 1) y = 64;
+		if (sp == null) sp = new BlockPos(0, 64, 0);
+		int cx = sp.getX() >> 4;
+		int cz = sp.getZ() >> 4;
+		lobby.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(cx, cz), 2);
+		ChunkAccess chunk = lobby.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, true);
+		int targetY = sp.getY();
+		if (chunk != null) {
+			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, sp.getX() & 15, sp.getZ() & 15);
+			if (surfaceY > lobby.getMinY() + 5) {
+				targetY = Math.max(sp.getY(), surfaceY + 1);
+			}
+			while (targetY < lobby.getMaxY() - 2) {
+				BlockState feet = chunk.getBlockState(new BlockPos(sp.getX(), targetY, sp.getZ()));
+				BlockState head = chunk.getBlockState(new BlockPos(sp.getX(), targetY + 1, sp.getZ()));
+				if ((feet.isAir() || !feet.isSolid()) && (head.isAir() || !head.isSolid())) {
+					break;
+				}
+				targetY++;
+			}
+		}
+		if (targetY <= lobby.getMinY() + 5) targetY = 64;
 
-		Vec3 target = new Vec3(x + 0.5, y, z + 0.5);
+		Vec3 target = new Vec3(sp.getX() + 0.5, targetY, sp.getZ() + 0.5);
 		ServerPlayer moved = player;
 		if (player.level() != lobby) {
 			TeleportTransition transition = new TeleportTransition(lobby, target, Vec3.ZERO,
@@ -269,46 +286,66 @@ public final class WorldSpawnProtection {
 			int rx = minX + rnd.nextInt(maxX - minX + 1);
 			int rz = minZ + rnd.nextInt(maxZ - minZ + 1);
 
-			int targetY = -1;
-			int topY = Math.min(level.getMaxY() - 2, 260);
-			int minY = Math.max(level.getMinY() + 1, 60);
+			int cx = rx >> 4;
+			int cz = rz >> 4;
+			level.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(cx, cz), 1);
+			ChunkAccess chunk = level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, true);
+			if (chunk == null) continue;
 
-			for (int y = topY; y >= minY; y--) {
-				BlockPos pBelow = new BlockPos(rx, y - 1, rz);
-				BlockPos pFeet = new BlockPos(rx, y, rz);
-				BlockPos pHead = new BlockPos(rx, y + 1, rz);
-
-				BlockState stateBelow = level.getBlockState(pBelow);
-				BlockState stateFeet = level.getBlockState(pFeet);
-				BlockState stateHead = level.getBlockState(pHead);
-
-				if (stateBelow.isSolid()
-						&& !stateBelow.is(Blocks.LAVA)
-						&& !stateBelow.is(Blocks.WATER)
-						&& !stateBelow.is(Blocks.FIRE)
-						&& !stateBelow.is(Blocks.MAGMA_BLOCK)
-						&& !stateBelow.is(Blocks.CACTUS)) {
-					if ((stateFeet.isAir() || !stateFeet.isSolid())
-							&& (stateHead.isAir() || !stateHead.isSolid())
-							&& !stateFeet.is(Blocks.LAVA)
-							&& !stateFeet.is(Blocks.WATER)
-							&& !stateHead.is(Blocks.LAVA)) {
-						targetY = y;
-						break;
-					}
-				}
+			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, rx & 15, rz & 15);
+			if (surfaceY <= level.getMinY() + 5 || surfaceY >= level.getMaxY() - 2) {
+				continue;
 			}
 
-			if (targetY != -1) {
-				return new BlockPos(rx, targetY, rz);
+			BlockPos pGround = new BlockPos(rx, surfaceY, rz);
+			BlockState groundState = chunk.getBlockState(pGround);
+
+			if (groundState.is(Blocks.WATER) || groundState.is(Blocks.LAVA)
+					|| groundState.is(Blocks.FIRE) || groundState.is(Blocks.MAGMA_BLOCK)
+					|| groundState.is(Blocks.CACTUS) || groundState.is(Blocks.SEAGRASS)
+					|| groundState.is(Blocks.KELP) || groundState.is(Blocks.TALL_SEAGRASS)) {
+				continue;
+			}
+
+			if (!groundState.isSolid()) {
+				continue;
+			}
+
+			int targetY = surfaceY + 1;
+			while (targetY < level.getMaxY() - 2) {
+				BlockState feet = chunk.getBlockState(new BlockPos(rx, targetY, rz));
+				BlockState head = chunk.getBlockState(new BlockPos(rx, targetY + 1, rz));
+				if ((feet.isAir() || !feet.isSolid()) && (head.isAir() || !head.isSolid())
+						&& !feet.is(Blocks.LAVA) && !feet.is(Blocks.WATER)) {
+					return new BlockPos(rx, targetY, rz);
+				}
+				targetY++;
 			}
 		}
 
-		// Fallback
-		int fbX = minX + rnd.nextInt(maxX - minX + 1);
-		int fbZ = minZ + rnd.nextInt(maxZ - minZ + 1);
-		int fallbackY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, fbX, fbZ) + 1;
-		return new BlockPos(fbX, Math.max(64, fallbackY), fbZ);
+		// Fallback to world respawn point with loaded chunk check
+		BlockPos sp = level.getRespawnData().pos();
+		if (sp == null) sp = new BlockPos(0, 64, 0);
+		int cx = sp.getX() >> 4;
+		int cz = sp.getZ() >> 4;
+		level.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(cx, cz), 1);
+		ChunkAccess chunk = level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, true);
+		int fbY = sp.getY();
+		if (chunk != null) {
+			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, sp.getX() & 15, sp.getZ() & 15);
+			if (surfaceY > level.getMinY() + 5) {
+				fbY = Math.max(sp.getY(), surfaceY + 1);
+			}
+			while (fbY < level.getMaxY() - 2) {
+				BlockState feet = chunk.getBlockState(new BlockPos(sp.getX(), fbY, sp.getZ()));
+				BlockState head = chunk.getBlockState(new BlockPos(sp.getX(), fbY + 1, sp.getZ()));
+				if ((feet.isAir() || !feet.isSolid()) && (head.isAir() || !head.isSolid())) {
+					break;
+				}
+				fbY++;
+			}
+		}
+		return new BlockPos(sp.getX(), fbY, sp.getZ());
 	}
 
 	private void load() {
