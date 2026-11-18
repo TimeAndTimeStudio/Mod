@@ -214,11 +214,14 @@ public final class WorldSpawnProtection {
 		int cz = spawnZ >> 4;
 		lobby.getChunkSource().addTicketWithRadius(net.minecraft.server.level.TicketType.PLAYER_SPAWN, new ChunkPos(cx, cz), 2);
 		ChunkAccess chunk = lobby.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, true);
-		int targetY = 64;
+		// Stand on the first free spot above the terrain/build at the origin.
+		// Do NOT force y=64: lobby maps may be built at the bottom of the
+		// world (e.g. a platform on top of the y=-64 floor).
+		int targetY = lobby.getMinY() + 1;
 		if (chunk != null) {
 			int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, spawnX & 15, spawnZ & 15);
-			if (surfaceY > lobby.getMinY() + 5) {
-				targetY = surfaceY + 1;
+			if (surfaceY > lobby.getMinY()) {
+				targetY = surfaceY;
 			}
 			while (targetY < lobby.getMaxY() - 2) {
 				BlockState feet = chunk.getBlockState(new BlockPos(spawnX, targetY, spawnZ));
@@ -229,7 +232,7 @@ public final class WorldSpawnProtection {
 				targetY++;
 			}
 		}
-		if (targetY <= lobby.getMinY() + 5) targetY = 64;
+		if (targetY < lobby.getMinY() + 1) targetY = lobby.getMinY() + 1;
 
 		Vec3 target = new Vec3(0.5, targetY, 0.5);
 		ServerPlayer moved = player;
