@@ -628,9 +628,6 @@ public final class WorldManager {
 					.withSuppressedOutput();
 			s.getCommands().performPrefixedCommand(source, "gamerule spawn_mobs false");
 			s.getCommands().performPrefixedCommand(source, "gamerule advance_weather false");
-			// Clamp lobby border to avoid loading chunks or generating terrain outside the lobby structure
-			s.getCommands().performPrefixedCommand(source, "worldborder center 0 0");
-			s.getCommands().performPrefixedCommand(source, "worldborder set 160");
 			// Neutral starting state; the real weather is applied as soon as the
 			// first external reading is available.
 			s.getCommands().performPrefixedCommand(source, "weather clear");
@@ -643,17 +640,28 @@ public final class WorldManager {
 
 	/**
 	 * Returns a LevelStem whose dimension type is the dedicated lobby clock
-	 * (timeandtime:lobby), so the lobby's day/night is isolated from the main
-	 * overworld clock. Falls back to the original stem when the custom
-	 * dimension type is unavailable.
+	 * (timeandtime:lobby) and whose generator is THE_VOID flat generator,
+	 * so the lobby's day/night is isolated from the main overworld clock,
+	 * any newly explored chunks generate as pure void air (no mountains/trees),
+	 * and no visible blue worldborder barrier is needed.
 	 */
 	private LevelStem lobbyDimensionStem(MinecraftServer s, LevelStem stem) {
 		try {
 			ResourceKey<DimensionType> key = ResourceKey.create(Registries.DIMENSION_TYPE,
 					Identifier.fromNamespaceAndPath("timeandtime", "lobby"));
 			Holder<DimensionType> holder = s.registryAccess().lookupOrThrow(Registries.DIMENSION_TYPE).getOrThrow(key);
+			net.minecraft.world.level.chunk.ChunkGenerator generator = stem.generator();
+			try {
+				var voidPreset = s.registryAccess().lookupOrThrow(Registries.FLAT_LEVEL_GENERATOR_PRESET)
+						.getOrThrow(net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorPresets.THE_VOID)
+						.value();
+				generator = new net.minecraft.world.level.levelgen.FlatLevelSource(voidPreset.settings());
+				LOGGER.info("[worlds] Lobby uses THE_VOID chunk generator (endless void outside structure, no trees)");
+			} catch (Throwable e) {
+				LOGGER.warn("[worlds] Could not attach THE_VOID generator to lobby: {}", e.getMessage());
+			}
 			LOGGER.info("[worlds] Lobby uses isolated dimension type timeandtime:lobby (own world clock)");
-			return new LevelStem(holder, stem.generator());
+			return new LevelStem(holder, generator);
 		} catch (Throwable e) {
 			LOGGER.warn("[worlds] Could not apply isolated lobby dimension type: {}", e.getMessage());
 			return stem;
