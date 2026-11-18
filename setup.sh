@@ -242,6 +242,23 @@ rm -rf /tmp/timesmp-lobby.zip /tmp/timesmp-lobby-extract
 log "lobby world installed at worlds/lobby (player data wiped)"
 
 # ---------------------------------------------------------------------------
+# 3g) Find world (published on the findmap release)
+# ---------------------------------------------------------------------------
+FIND_URL="${FIND_URL:-https://github.com/${REPO}/releases/download/findmap/find.zip}"
+log "downloading find world"
+curl -fL -o /tmp/timesmp-find.zip "$FIND_URL"
+rm -rf worlds/find
+mkdir -p worlds
+rm -rf /tmp/timesmp-find-extract
+unzip -q /tmp/timesmp-find.zip -d /tmp/timesmp-find-extract
+mv /tmp/timesmp-find-extract/find worlds/find
+# Wipe player data so the find world starts clean
+rm -rf worlds/find/players worlds/find/playerdata worlds/find/advancements worlds/find/stats
+rm -f worlds/find/session.lock
+rm -rf /tmp/timesmp-find.zip /tmp/timesmp-find-extract
+log "find world installed at worlds/find (player data wiped)"
+
+# ---------------------------------------------------------------------------
 # 4) EULA
 # ---------------------------------------------------------------------------
 printf 'eula=true\n' > eula.txt
