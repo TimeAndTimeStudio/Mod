@@ -367,6 +367,12 @@ public final class AuctionGui {
 						} else {
 							sp.sendSystemMessage(Component.literal("§cไม่สามารถยกเลิกการประมูลได้: " + res));
 						}
+					} else if (!isOwner && slotIndex == 22) {
+						sp.closeContainer();
+						String cmd = "/ah bid " + a.id + " ";
+						Component prompt = Component.literal("§e[ระบบประมูล] §fคลิกข้อความนี้เพื่อพิมพ์ราคาเสนอซื้อ: §a" + cmd + "<ราคา>")
+								.withStyle(style -> style.withClickEvent(new net.minecraft.network.chat.ClickEvent.SuggestCommand(cmd)));
+						sp.sendSystemMessage(prompt);
 					} else if (!isOwner && (slotIndex == 10 || slotIndex == 12 || slotIndex == 14 || slotIndex == 16)) {
 						long targetBid = minNextBid;
 						if (slotIndex == 12) targetBid += 500L;
