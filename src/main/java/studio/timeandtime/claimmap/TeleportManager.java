@@ -15,10 +15,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Manages player-to-player teleport requests (/tpa), teleport warmups (5 seconds),
  * and direct admin teleports (/tp).
- * Requests expire after 60 seconds.
+ * Requests expire after 10 minutes (600 seconds).
  */
 public class TeleportManager {
-	public static final long TIMEOUT_MS = 60_000L;
+	public static final long TIMEOUT_MS = 600_000L;
 	public static final int WARMUP_SECONDS = 5;
 	public static final int WARMUP_TICKS = WARMUP_SECONDS * 20;
 
@@ -130,7 +130,7 @@ public class TeleportManager {
 		Request req = new Request(sender.getUUID(), sender.getScoreboardName(), target.getUUID(), target.getScoreboardName(), now);
 		incoming.computeIfAbsent(target.getUUID(), k -> new ConcurrentHashMap<>()).put(sender.getUUID(), req);
 
-		sender.sendSystemMessage(Component.literal("§6[Teleport] §eส่งคำขอวาร์ปไปยัง §f" + target.getScoreboardName() + " §eแล้ว (มีอายุ 60 วินาที)"));
+		sender.sendSystemMessage(Component.literal("§6[Teleport] §eส่งคำขอวาร์ปไปยัง §f" + target.getScoreboardName() + " §eแล้ว (มีอายุ 10 นาที)"));
 		target.sendSystemMessage(Component.literal("§6[Teleport] §f" + sender.getScoreboardName() + " §eต้องการวาร์ปมาหาคุณ\n§7พิมพ์ §a/tpa §7เพื่อเปิดเมนูตอบรับ (คลิกซ้ายยอมรับ / คลิกขวาปฏิเสธ)"));
 	}
 

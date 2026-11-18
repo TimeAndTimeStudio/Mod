@@ -7,6 +7,7 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemLore;
+import net.minecraft.world.item.component.ResolvableProfile;
 
 import java.util.*;
 
@@ -15,6 +16,7 @@ public final class TpaGui {
 
 	public static void open(ServerPlayer player, TeleportManager teleports) {
 		SimpleContainer container = new SimpleContainer(54);
+		var srv = ClaimMap.getServer();
 		List<TeleportManager.Request> incomingReqs = teleports != null ? teleports.getIncomingRequests(player.getUUID()) : Collections.emptyList();
 		TeleportManager.Request outgoingReq = teleports != null ? teleports.getOutgoingRequest(player.getUUID()) : null;
 
@@ -55,12 +57,19 @@ public final class TpaGui {
 				int slot = reqSlots[i];
 				TeleportManager.Request req = incomingReqs.get(i);
 				long remainingSec = Math.max(0, (TeleportManager.TIMEOUT_MS - (System.currentTimeMillis() - req.createdAt())) / 1000L);
+				String timeStr = remainingSec >= 60 ? (remainingSec / 60) + " นาที " + (remainingSec % 60) + " วินาที" : remainingSec + " วินาที";
 
 				ItemStack reqStack = new ItemStack(Items.PLAYER_HEAD);
+				var srvSender = srv != null ? srv.getPlayerList().getPlayer(req.senderUuid()) : null;
+				if (srvSender != null) {
+					reqStack.set(DataComponents.PROFILE, ResolvableProfile.createResolved(srvSender.getGameProfile()));
+				} else {
+					reqStack.set(DataComponents.PROFILE, ResolvableProfile.createUnresolved(req.senderName()));
+				}
 				reqStack.set(DataComponents.CUSTOM_NAME, Component.literal("§e§lคำขอจาก: §6" + req.senderName()));
 				reqStack.set(DataComponents.LORE, new ItemLore(List.of(
 						Component.literal("§7ผู้เล่นต้องการวาร์ปมายังตำแหน่งของคุณ"),
-						Component.literal("§7เวลาคงเหลือ: §e" + remainingSec + " วินาที"),
+						Component.literal("§7เวลาคงเหลือ: §e" + timeStr),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§a[คลิกซ้าย] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
 						Component.literal("§c[คลิกขวา] §7ยกเลิก / ปฏิเสธคำขอนี้")
@@ -85,7 +94,6 @@ public final class TpaGui {
 				37, 38, 39, 40, 41, 42, 43
 		};
 
-		var srv = ClaimMap.getServer();
 		List<ServerPlayer> otherPlayers = new ArrayList<>();
 		if (srv != null) {
 			for (ServerPlayer sp : srv.getPlayerList().getPlayers()) {
@@ -111,6 +119,7 @@ public final class TpaGui {
 				String worldName = target.level().dimension().identifier().toString().replace("minecraft:", "");
 
 				ItemStack targetStack = new ItemStack(Items.PLAYER_HEAD);
+				targetStack.set(DataComponents.PROFILE, ResolvableProfile.createResolved(target.getGameProfile()));
 				targetStack.set(DataComponents.CUSTOM_NAME, Component.literal("§a§lผู้เล่น: §f" + target.getScoreboardName()));
 				targetStack.set(DataComponents.LORE, new ItemLore(List.of(
 						Component.literal("§7โลกปัจจุบัน: §e" + worldName),
