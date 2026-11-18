@@ -64,14 +64,14 @@ class ClaimMapConfigTest {
 	@Test
 	void loadCreatesTheNewKeysForExistingConfigs(@TempDir Path tmp) throws Exception {
 		Path file = tmp.resolve("claimmap.properties");
-		Files.writeString(file, "maxCellsPerPlayer=9\ncurrencyName=บาท\n", StandardCharsets.UTF_8);
+		Files.writeString(file, "maxCellsPerPlayer=9\ncurrencyName=baht\n", StandardCharsets.UTF_8);
 
 		ClaimMapConfig c = new ClaimMapConfig(file);
 		c.load();
 
 		// Values already in the owner's file are never overwritten.
 		assertEquals(9, c.maxCellsPerPlayer);
-		assertEquals("บาท", c.currencyName);
+		assertEquals("baht", c.currencyName);
 		String saved = Files.readString(file, StandardCharsets.UTF_8);
 		assertTrue(saved.contains("players="), saved);
 		assertTrue(saved.contains("admins="), saved);

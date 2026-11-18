@@ -52,18 +52,18 @@ class DataMigrationTest {
 	@Test
 	void oldPropertiesAreFilledWithoutOverwritingOwnerValues() throws Exception {
 		Path file = tmp.resolve("claimmap.properties");
-		Files.writeString(file, "maxCellsPerPlayer=9\ncurrencyName=บาท\n", StandardCharsets.UTF_8);
+		Files.writeString(file, "maxCellsPerPlayer=9\ncurrencyName=baht\n", StandardCharsets.UTF_8);
 
 		ClaimMapConfig config = new ClaimMapConfig(file);
 		config.load();
 
 		assertEquals(9, config.maxCellsPerPlayer);
-		assertEquals("บาท", config.currencyName, "owner value must win");
+		assertEquals("baht", config.currencyName, "owner value must win");
 		assertEquals("", config.players, "missing keys get their default");
 		assertTrue(config.sessionHours > 0);
 		String saved = Files.readString(file, StandardCharsets.UTF_8);
 		assertTrue(saved.contains("players="));
-		assertTrue(saved.contains("currencyName=บาท"));
+		assertTrue(saved.contains("currencyName=baht"));
 		assertTrue(saved.contains("maxCellsPerPlayer=9"));
 		// Web server settings are gone from the project.
 		assertFalse(saved.contains("bindAddress="));
@@ -74,7 +74,7 @@ class DataMigrationTest {
 		try (var stream = Files.list(tmp.resolve("backups"))) {
 			Path backup = stream.filter(Files::isDirectory).findFirst().orElseThrow();
 			String original = Files.readString(backup.resolve("claimmap.properties"), StandardCharsets.UTF_8);
-			assertEquals("maxCellsPerPlayer=9\ncurrencyName=บาท\n", original);
+			assertEquals("maxCellsPerPlayer=9\ncurrencyName=baht\n", original);
 		}
 	}
 }
