@@ -76,7 +76,7 @@ public final class ClaimMapGui {
 						lore.add(Component.literal("§7------------------------"));
 						lore.add(Component.literal("§b[คลิก] จัดการเขตนี้"));
 					}
-				} else if (!isCommon) {
+				} else {
 					boolean isFree = myClaimCount < config.freeCellsPerPlayer;
 					lore.add(Component.literal("§eสถานะ: §a" + (isFree ? "รับฟรี (" + (myClaimCount + 1) + "/" + config.freeCellsPerPlayer + " ช่อง)"
 							: "ราคาซื้อ: " + landPrice + " " + config.currencyName)));
