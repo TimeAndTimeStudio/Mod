@@ -10,11 +10,13 @@ import java.util.Set;
  * Marks the {@link LevelStorageSource.LevelStorageAccess} instances that belong
  * to a managed world folder.
  *
- * <p>A managed save is a complete world at {@code worlds/<name>/} (its region
- * files are in the folder root). Minecraft normally stores a non-overworld
- * dimension under {@code dimensions/<namespace>/<path>}; the small mixin on
- * {@code LevelStorageAccess.getDimensionPath} redirects managed saves to their
- * root so the existing region files are used instead of copied.
+ * <p>A managed save is a complete world at {@code worlds/<name>/}. Modern saves
+ * keep their overworld chunks under {@code dimensions/minecraft/overworld};
+ * older saves keep them in the folder root. Minecraft normally stores a
+ * non-overworld dimension under {@code dimensions/<namespace>/<path>}; the
+ * small mixin on {@code LevelStorageAccess.getDimensionPath} routes managed
+ * saves to their own overworld data so the existing region files are used
+ * instead of copied.
  */
 public final class WorldStoragePaths {
 	private static final Set<LevelStorageSource.LevelStorageAccess> MANAGED =
