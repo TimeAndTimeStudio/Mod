@@ -12,7 +12,8 @@
 #     worlds/lobby with all player data wiped
 #   - server.properties tuned for Time SMP:
 #       motd=Time SMP, max-players=5, survival locked,
-#       online-mode=off, secure profile off, whitelist on,
+#       online-mode=off, secure profile off, whitelist off (open server),
+#       spawn-protection=0 (no common/spawn area - claimable everywhere),
 #       difficulty=hard, view-distance=10, simulation-distance=6
 #   - run.sh launcher where you choose how much RAM the server uses
 #
@@ -35,8 +36,6 @@ else
 fi
 MOD_URL="${MOD_URL:-https://github.com/${REPO}/releases/latest/download/${MOD_ASSET}}"
 SERVER_DIR="${1:-$HOME/mcserver}"
-PLAYER_NAME="TAT1654"
-PLAYER_UUID="9db07e0d-2e66-3307-8695-509d6af83247"
 
 die() { echo "[setup] ERROR: $*" >&2; exit 1; }
 log() { echo "[setup] $*"; }
@@ -177,8 +176,8 @@ motd=Time SMP
 max-players=5
 online-mode=false
 enforce-secure-profile=false
-white-list=true
-enforce-whitelist=true
+white-list=false
+enforce-whitelist=false
 gamemode=survival
 force-gamemode=true
 hardcore=false
@@ -188,7 +187,7 @@ level-name=world
 view-distance=10
 simulation-distance=6
 enable-status=true
-spawn-protection=16
+spawn-protection=0
 max-tick-time=180000
 resource-pack=${RESOURCE_PACK_URL}
 resource-pack-id=6d7ddf93-6004-4224-9d7a-2cbc7efd86a1
@@ -215,19 +214,6 @@ sed -i "s/__DEFAULT_RAM__/$RAM/" run.sh
 chmod +x run.sh
 
 # ---------------------------------------------------------------------------
-# 7) Whitelist (no automatic admin/op)
-# ---------------------------------------------------------------------------
-log "whitelisting $PLAYER_NAME"
-cat > whitelist.json <<EOF
-[
-  {
-    "uuid": "$PLAYER_UUID",
-    "name": "$PLAYER_NAME"
-  }
-]
-EOF
-
-# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 log "done"
@@ -243,8 +229,8 @@ echo
 echo "RAM is set in run.sh (currently $RAM). Edit it there or run:"
 echo "  RAM=4G ./run.sh"
 echo
-echo "Whitelist is ON. Add players in-game with:"
-echo "  /whitelist add <player>"
+echo "The server is OPEN (no whitelist) with no common/spawn area:"
+echo "  players can claim land at every point (spawn-protection=0, spawnProtectedCells=0)."
 echo
 echo "No admins are added automatically. Grant one in-game with:"
 echo "  /op <player>"
