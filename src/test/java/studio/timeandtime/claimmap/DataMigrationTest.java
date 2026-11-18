@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,26 +52,29 @@ class DataMigrationTest {
 	@Test
 	void oldPropertiesAreFilledWithoutOverwritingOwnerValues() throws Exception {
 		Path file = tmp.resolve("claimmap.properties");
-		Files.writeString(file, "port=9090\nbindAddress=127.0.0.1\nmaxCellsPerPlayer=9\n", StandardCharsets.UTF_8);
+		Files.writeString(file, "maxCellsPerPlayer=9\ncurrencyName=บาท\n", StandardCharsets.UTF_8);
 
 		ClaimMapConfig config = new ClaimMapConfig(file);
 		config.load();
 
-		assertEquals(9090, config.port);
-		assertEquals("127.0.0.1", config.bindAddress, "owner value must win");
 		assertEquals(9, config.maxCellsPerPlayer);
+		assertEquals("บาท", config.currencyName, "owner value must win");
 		assertEquals("", config.players, "missing keys get their default");
-		assertTrue(config.token.length() > 20);
+		assertTrue(config.sessionHours > 0);
 		String saved = Files.readString(file, StandardCharsets.UTF_8);
 		assertTrue(saved.contains("players="));
-		assertTrue(saved.contains("bindAddress=127.0.0.1"));
+		assertTrue(saved.contains("currencyName=บาท"));
 		assertTrue(saved.contains("maxCellsPerPlayer=9"));
+		// Web server settings are gone from the project.
+		assertFalse(saved.contains("bindAddress="));
+		assertFalse(saved.contains("token="));
+		assertFalse(saved.contains("port="));
 
 		// The pre-upgrade copy was made before the first write.
 		try (var stream = Files.list(tmp.resolve("backups"))) {
 			Path backup = stream.filter(Files::isDirectory).findFirst().orElseThrow();
 			String original = Files.readString(backup.resolve("claimmap.properties"), StandardCharsets.UTF_8);
-			assertEquals("port=9090\nbindAddress=127.0.0.1\nmaxCellsPerPlayer=9\n", original);
+			assertEquals("maxCellsPerPlayer=9\ncurrencyName=บาท\n", original);
 		}
 	}
 }

@@ -36,7 +36,7 @@
 
 1. นำไฟล์ `timesmp.jar` ไปวางในโฟลเดอร์ `mods/` ของเซิร์ฟเวอร์ Fabric
 2. เริ่มต้นรันเซิร์ฟเวอร์เพื่อสร้างการตั้งค่าเริ่มต้นที่ `config/timesmp/timesmp.properties`
-3. พอร์ต 8085 ทำหน้าที่ส่งมอบ Resource Pack อัตโนมัติให้ผู้เล่น (`/resourcepack.zip`) เพื่อแสดงผลฟอนต์ภาษาไทยและปุ่มไอคอน
+3. Resource Pack (ฟอนต์ภาษาไทย/ไอคอนปุ่ม) ส่งผ่าน HTTPS จาก GitHub Release `latest` — ตั้งค่าใน `server.properties` ด้วย `resource-pack=` (หรือใช้ `setup.sh` ซึ่งจัดการให้อัตโนมัติ) ม็อดไม่เปิดพอร์ตเว็บใด ๆ
 
 ---
 

@@ -66,6 +66,8 @@ jobs:
           # 26.3 keeps the historical "timesmp.jar" name used by setup.sh.
           cp artifacts/timesmp-mc26.3/timesmp.jar dist/timesmp.jar
           cp artifacts/timesmp-mc26.2/timesmp.jar dist/timesmp-mc26.2.jar
+          # Served to clients through server.properties (resource-pack=...).
+          cp src/main/resources/resourcepack.zip dist/resourcepack.zip
           ls -lh dist
 
       - name: Publish to GitHub Releases
@@ -78,5 +80,5 @@ jobs:
           else
             gh release create latest --title "Latest build" --notes "$NOTES" --latest
           fi
-          gh release upload latest dist/timesmp.jar dist/timesmp-mc26.2.jar --clobber
+          gh release upload latest dist/timesmp.jar dist/timesmp-mc26.2.jar dist/resourcepack.zip --clobber
           echo "Published: $(gh release view latest --json url --jq .url)"

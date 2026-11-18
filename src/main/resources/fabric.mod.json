@@ -3,7 +3,7 @@
 	"id": "timesmp",
 	"version": "${version}",
 	"name": "Time SMP",
-	"description": "Time SMP - Fabric server-only claim mod + web market (500x500 cells). Supports Minecraft 26.2 and 26.3.",
+	"description": "Time SMP - Fabric server-only claim mod with an in-game market GUI (500x500 cells). Supports Minecraft 26.2 and 26.3.",
 	"authors": [
 		"TimeAndTimeStudio"
 	],

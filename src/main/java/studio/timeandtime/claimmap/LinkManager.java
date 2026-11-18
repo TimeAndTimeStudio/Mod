@@ -16,13 +16,12 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Binds a web session to a Minecraft account.
+ * Binds a session to a Minecraft account.
  *
  * <p>Two ways to obtain a session token:
  * <ol>
  *   <li>{@link #createSession} - password based: the in-game auth dialog sets
- *       a password, then {@code POST /api/login} on the web page exchanges
- *       name+password for a session token.</li>
+ *       a password, then the session is created from name+password.</li>
  *   <li>{@link #issueCode}/{@link #exchange} - legacy 6 digit in-game code.</li>
  * </ol>
  *

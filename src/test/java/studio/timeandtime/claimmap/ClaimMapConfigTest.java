@@ -64,29 +64,34 @@ class ClaimMapConfigTest {
 	@Test
 	void loadCreatesTheNewKeysForExistingConfigs(@TempDir Path tmp) throws Exception {
 		Path file = tmp.resolve("claimmap.properties");
-		Files.writeString(file, "port=8085\nbindAddress=127.0.0.1\ntoken=deadbeef\n", StandardCharsets.UTF_8);
+		Files.writeString(file, "maxCellsPerPlayer=9\ncurrencyName=บาท\n", StandardCharsets.UTF_8);
 
 		ClaimMapConfig c = new ClaimMapConfig(file);
 		c.load();
 
 		// Values already in the owner's file are never overwritten.
-		assertEquals("127.0.0.1", c.bindAddress);
+		assertEquals(9, c.maxCellsPerPlayer);
+		assertEquals("บาท", c.currencyName);
 		String saved = Files.readString(file, StandardCharsets.UTF_8);
 		assertTrue(saved.contains("players="), saved);
 		assertTrue(saved.contains("admins="), saved);
-		assertTrue(saved.contains("bindAddress=127.0.0.1"), saved);
+		assertTrue(saved.contains("maxCellsPerPlayer=9"), saved);
+		// Web server settings are not written any more.
+		assertFalse(saved.contains("bindAddress="), saved);
+		assertFalse(saved.contains("token="), saved);
+		assertFalse(saved.contains("port="), saved);
 	}
 
 	@Test
-	void firstStartDefaultsToAllInterfacesAndWritesFile(@TempDir Path tmp) throws Exception {
+	void firstStartWritesDefaults(@TempDir Path tmp) throws Exception {
 		Path file = tmp.resolve("sub/claimmap.properties");
 		ClaimMapConfig c = new ClaimMapConfig(file);
 		c.load();
 
-		assertEquals("0.0.0.0", c.bindAddress);
+		assertEquals(0, c.maxCellsPerPlayer);
 		assertTrue(Files.exists(file));
 		String saved = Files.readString(file, StandardCharsets.UTF_8);
-		assertTrue(saved.contains("bindAddress=0.0.0.0"), saved);
+		assertTrue(saved.contains("maxCellsPerPlayer=0"), saved);
 		assertTrue(saved.contains("players="), saved);
 		assertTrue(saved.contains("admins="), saved);
 	}

@@ -16,10 +16,6 @@ import java.util.Properties;
 
 /**
  * File based configuration stored in {@code config/timesmp/timesmp.properties}.
- *
- * <p>The HTTP API is self-hosted by the mod. {@code bindAddress} defaults to
- * {@code 0.0.0.0} so other machines on the LAN can reach it; the owner is
- * responsible for network security (plain HTTP by design, see PHASES.md B).
  */
 public final class ClaimMapConfig {
 	public static final String FILE_NAME = "config/timesmp/timesmp.properties";
@@ -27,26 +23,18 @@ public final class ClaimMapConfig {
 	private final Path file;
 	private final Properties props = new Properties();
 
-	public int port = 8085;
-	public String bindAddress = "0.0.0.0";
-	/** Master bearer token, generated once and printed on first start. Script-only. */
-	public String token = "";
-	/** Comma separated whitelist of player names. Empty = no restriction. */
-	public String players = "";
-	/** Comma separated list of admin names. */
-	public String admins = "";
 	public int cellSize = 500;
 	public int freeCellsPerPlayer = 4;
 	public int maxCellsPerPlayer = 0; // 0 = unlimited
 	/** Radius (in cells) around 0,0 treated as a common / spawn area (unclaimable). 0 = disabled. */
 	public int spawnProtectedCells = 0;
-	/** Map sampling step in blocks; one pixel per {@code renderScale} block. */
-	public int renderScale = 4;
-	/** Debounce delay for flushing map tiles to disk. */
-	public long saveDelayMs = 15000;
+	/** Comma separated whitelist of player names. Empty = no restriction. */
+	public String players = "";
+	/** Comma separated list of admin names. */
+	public String admins = "";
 	/** Validity of the 6 digit /link code. */
 	public int linkCodeMinutes = 5;
-	/** Validity of a web session token. */
+	/** Validity of a session token. */
 	public int sessionHours = 24;
 	/** Display name of the currency. */
 	public String currencyName = "เหรียญ";
@@ -154,19 +142,12 @@ public final class ClaimMapConfig {
 				ClaimMap.LOGGER.error("[timesmp] Could not read config", e);
 			}
 		}
-		port = getInt("port", port, 1, 65535);
-		String bind = props.getProperty("bindAddress");
-		bindAddress = bind == null ? bindAddress : bind.trim();
-		if (bindAddress.isEmpty()) bindAddress = "0.0.0.0";
-		token = props.getProperty("token", "").trim();
 		players = props.getProperty("players", players).trim();
 		admins = props.getProperty("admins", admins).trim();
 		cellSize = getInt("cellSize", cellSize, 16, 10000);
 		freeCellsPerPlayer = getInt("freeCellsPerPlayer", freeCellsPerPlayer, 0, 100000);
 		maxCellsPerPlayer = getInt("maxCellsPerPlayer", maxCellsPerPlayer, 0, 100000);
 		spawnProtectedCells = getInt("spawnProtectedCells", spawnProtectedCells, 0, 100000);
-		renderScale = getInt("renderScale", renderScale, 1, 100);
-		saveDelayMs = getLong("saveDelayMs", saveDelayMs, 1000L, 3600000L);
 		linkCodeMinutes = getInt("linkCodeMinutes", linkCodeMinutes, 1, 1440);
 		sessionHours = getInt("sessionHours", sessionHours, 1, 8760);
 		currencyName = props.getProperty("currencyName", currencyName).trim();
@@ -219,14 +200,8 @@ public final class ClaimMapConfig {
 		buyPercent = buy;
 
 		boolean changed = false;
-		if (token.isEmpty()) {
-			token = randomHex(32);
-			props.setProperty("token", token);
-			changed = true;
-			ClaimMap.LOGGER.info("[timesmp] Generated new master token. Keep it secret! (script-only, never embedded in the web page)");
-		}
 		// Surface the new keys in the owner's file so they can edit them.
-		for (String key : new String[]{"players", "admins", "bindAddress", "currencyName", "startingBalance",
+		for (String key : new String[]{"players", "admins", "currencyName", "startingBalance",
 				"pbkdf2Iterations", "pricesUrl", "pricesAccessKey", "priceRefreshSeconds", "sellPercent",
 				"buyPercent", "blockedItems", "shopMaxQtyPerTx", "shopDailyBuyQty", "mailboxMaxEntries",
 				"auctionMaxActivePerPlayer", "auctionDefaultHours", "auctionMaxHours", "auctionFeePercent",
@@ -273,53 +248,31 @@ public final class ClaimMapConfig {
 					case "lobbyWeatherLongitude" -> Double.toString(lobbyWeatherLongitude);
 					case "lobbyWeatherUrl" -> lobbyWeatherUrl;
 					case "lobbyWeatherSyncSeconds" -> Integer.toString(lobbyWeatherSyncSeconds);
-					default -> bindAddress;
+					default -> throw new IllegalStateException("unhandled config key " + key);
 				});
 				changed = true;
 			}
 		}
 		if (changed) save();
-
-		if ("127.0.0.1".equals(bindAddress) || "localhost".equalsIgnoreCase(bindAddress)) {
-			ClaimMap.LOGGER.info("[timesmp] bindAddress={} — other machines will NOT be able to open the web page. "
-					+ "Change bindAddress to 0.0.0.0 in config/timesmp/timesmp.properties to allow LAN access.", bindAddress);
-		}
 	}
 
 	/**
-	 * Reloads the editable values without changing the listening socket
-	 * (PHASES.md 7.3): {@code port}, {@code bindAddress} and the generated
-	 * master token stay as they were until the next real restart.
-	 * Returns false when the fixed keys were edited, so the caller can say so.
+	 * Reloads the editable values from disk. Always returns true: configuration
+	 * no longer contains values that are fixed until a restart.
 	 */
 	public boolean reload() {
-		int oldPort = port;
-		String oldBind = bindAddress;
-		String oldToken = token;
 		load();
-		boolean restartNeeded = port != oldPort || !bindAddress.equals(oldBind);
-		port = oldPort;
-		bindAddress = oldBind;
-		token = oldToken;
-		props.setProperty("port", Integer.toString(port));
-		props.setProperty("bindAddress", bindAddress);
-		props.setProperty("token", token);
 		save();
-		return !restartNeeded;
+		return true;
 	}
 
 	public void save() {
-		props.setProperty("port", Integer.toString(port));
-		props.setProperty("bindAddress", bindAddress);
-		props.setProperty("token", token);
 		props.setProperty("players", players);
 		props.setProperty("admins", admins);
 		props.setProperty("cellSize", Integer.toString(cellSize));
 		props.setProperty("freeCellsPerPlayer", Integer.toString(freeCellsPerPlayer));
 		props.setProperty("maxCellsPerPlayer", Integer.toString(maxCellsPerPlayer));
 		props.setProperty("spawnProtectedCells", Integer.toString(spawnProtectedCells));
-		props.setProperty("renderScale", Integer.toString(renderScale));
-		props.setProperty("saveDelayMs", Long.toString(saveDelayMs));
 		props.setProperty("linkCodeMinutes", Integer.toString(linkCodeMinutes));
 		props.setProperty("sessionHours", Integer.toString(sessionHours));
 		props.setProperty("currencyName", currencyName);
@@ -400,16 +353,6 @@ public final class ClaimMapConfig {
 			if (n.equals(needle)) return true;
 		}
 		return false;
-	}
-
-	public Path tilesDir() {
-		Path dir = dir().resolve("tiles");
-		try {
-			Files.createDirectories(dir);
-		} catch (IOException e) {
-			ClaimMap.LOGGER.error("[timesmp] Could not create tiles dir", e);
-		}
-		return dir;
 	}
 
 	public Path regionsFile() {

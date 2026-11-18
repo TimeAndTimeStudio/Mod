@@ -11,9 +11,9 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 /**
- * Every admin action in one place, shared by {@code /api/admin/*} and the
- * in-game {@code /eco} command (PHASES.md 7). Each call writes one audit line,
- * whether it succeeded or was rejected.
+ * Every admin action in one place, shared by the in-game admin commands
+ * (PHASES.md 7). Each call writes one audit line, whether it succeeded or was
+ * rejected.
  */
 public final class AdminService {
 	public enum Result { OK, BAD_REQUEST, NO_ACCOUNT, INSUFFICIENT, NOT_FOUND, DISABLED, IO_ERROR, ALREADY_LISTED }
@@ -316,7 +316,7 @@ public final class AdminService {
 
 	// ---- config -------------------------------------------------------------
 
-	/** Returns false when port/bindAddress were edited and need a restart. */
+	/** Reloads the config file; the return value is kept for callers that log whether a restart is needed. */
 	public boolean reloadConfig(String actor, String ip) {
 		boolean noRestartNeeded = config.reload();
 		audit.write(actor, "config.reload", Map.of("restartNeeded", !noRestartNeeded), ip, true);
@@ -418,7 +418,7 @@ public final class AdminService {
 		audit.write(actor, "admin.denied", Map.of("path", path), ip, false);
 	}
 
-	/** True when the name is in the admin list (web sessions only). */
+	/** True when the name is in the admin list. */
 	public boolean isAdminName(String name) {
 		return config.isAdmin(name);
 	}

@@ -1,7 +1,6 @@
 package studio.timeandtime.claimmap;
 
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
@@ -12,8 +11,8 @@ import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Time SMP: server-only Fabric mod that divides the world into 500x500 cells
- * which players can claim from a web page, renders an up-to-date map of only
- * the explored chunks and protects claimed cells (see plan.md).
+ * which players claim and manage through the in-game GUI, and protects those
+ * claimed cells (see plan.md).
  */
 public class ClaimMap implements ModInitializer {
 	public static final String MOD_ID = "timesmp";
@@ -79,7 +78,6 @@ public class ClaimMap implements ModInitializer {
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private RegionManager regions;
-	private MapRenderer maps;
 	private Protection protection;
 	private WorldSpawnProtection spawnProtection;
 	private LinkManager links;
@@ -100,7 +98,6 @@ public class ClaimMap implements ModInitializer {
 	private studio.timeandtime.claimmap.world.WorldManager worldManager;
 	private LandPriceService landPrices;
 	private AuthGate authGate;
-	private WebServer web;
 	private ScheduledExecutorService backupExecutor;
 	private ScheduledExecutorService priceExecutor;
 
@@ -115,7 +112,6 @@ public class ClaimMap implements ModInitializer {
 		worldManager = new studio.timeandtime.claimmap.world.WorldManager(config);
 		regions = new RegionManager(config);
 		regions.load();
-		maps = new MapRenderer(config);
 		links = new LinkManager(config);
 		links.load();
 		accounts = new AccountManager(config);
@@ -152,26 +148,14 @@ public class ClaimMap implements ModInitializer {
 				});
 		admin.attachSalesTracker(salesTracker);
 		protection = new Protection(regions);
-		PlayerPositions.init(config.dataDir());
-		web = new WebServer(config, regions, maps, links, accounts, economy, prices, mailbox, shop, auctions,
-				playerMarket, consignments, admin, playerItems, worldManager, salesTracker);
 		landPrices = new LandPriceService(config.dataDir().resolve("land-price.json"), regions.ownerMap().size());
-		web.attachLandPrices(landPrices);
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
 			if (teleports != null) teleports.tick(srv);
 			if (worldManager != null) worldManager.tick();
-			if (srv.getTickCount() % 20 == 0) {
-				for (net.minecraft.server.level.ServerPlayer p : srv.getPlayerList().getPlayers()) {
-					PlayerPositions.update(p);
-					if (p.level() instanceof net.minecraft.server.level.ServerLevel sl) {
-						maps.onPlayerPosition(sl, p.getBlockX(), p.getBlockZ());
-					}
-				}
-			}
 			// Keep the per-player item JSON warm when items are used or picked up.
 			// Every 5 seconds, only carried stacks are re-read; container rows stay
-			// until the next full /api/sources scan.
+			// until the next full item scan.
 			if (srv.getTickCount() % 100 == 0) {
 				for (net.minecraft.server.level.ServerPlayer p : srv.getPlayerList().getPlayers()) {
 					try {
@@ -211,28 +195,18 @@ public class ClaimMap implements ModInitializer {
 		spawnProtection.register();
 		authGate.registerHooks();
 
-		// Draw a map of exactly the chunks that are actually loaded / explored.
-		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, generated) -> maps.onChunkLoaded(level, chunk));
-
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			this.server = server;
 			seedDefaultServerIconIfMissing();
 			worldManager.start(server);
 			ItemRegistryAdapter.init(server);
 			auctions.closeExpired(System.currentTimeMillis());
-			maps.start();
-			web.start();
-			LOGGER.info("[timesmp] Started. Resource pack server on {}:{} (web UI/API retired; see config/timesmp/timesmp.properties)",
-					config.bindAddress, config.port);
+			LOGGER.info("[timesmp] Started (in-game GUI only; see config/timesmp/timesmp.properties)");
 		});
 
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			if (homeManager != null) homeManager.save();
 			if (worldManager != null) worldManager.shutdown();
-			web.stop();
-			PlayerPositions.save();
-			maps.flush();
-			maps.stop();
 			regions.save();
 			economy.backupNow();
 			prices.stop();

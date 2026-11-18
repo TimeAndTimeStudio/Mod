@@ -37,7 +37,7 @@ PLAYER_UUID="9db07e0d-2e66-3307-8695-509d6af83247"
 die() { echo "[setup] ERROR: $*" >&2; exit 1; }
 log() { echo "[setup] $*"; }
 
-for cmd in curl jq java; do
+for cmd in curl jq java sha1sum; do
   command -v "$cmd" >/dev/null 2>&1 || die "missing dependency: $cmd"
 done
 
@@ -106,6 +106,14 @@ log "downloading Time SMP mod ($MOD_ASSET from latest release)"
 curl -fL -o mods/timesmp.jar "$MOD_URL"
 
 # ---------------------------------------------------------------------------
+# 3b) Resource pack (published with every release; served over HTTPS)
+# ---------------------------------------------------------------------------
+RESOURCE_PACK_URL="${RESOURCE_PACK_URL:-https://github.com/${REPO}/releases/latest/download/resourcepack.zip}"
+log "downloading resource pack"
+curl -fL -o resourcepack.zip "$RESOURCE_PACK_URL"
+RESOURCE_PACK_SHA1=$(sha1sum resourcepack.zip | awk '{print $1}')
+
+# ---------------------------------------------------------------------------
 # 4) EULA
 # ---------------------------------------------------------------------------
 printf 'eula=true\n' > eula.txt
@@ -135,6 +143,10 @@ simulation-distance=6
 enable-status=true
 spawn-protection=16
 max-tick-time=180000
+resource-pack=${RESOURCE_PACK_URL}
+resource-pack-id=6d7ddf93-6004-4224-9d7a-2cbc7efd86a1
+resource-pack-prompt={"text":"Time SMP Thai Font Fix & Custom UI"}
+resource-pack-sha1=${RESOURCE_PACK_SHA1}
 EOF
 
 # ---------------------------------------------------------------------------
