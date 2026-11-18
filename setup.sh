@@ -8,6 +8,8 @@
 #   - Time SMP (timesmp) mod (latest build)
 #   - World generation mods for the main world (lithostitched + tectonic)
 #   - Additional mods (sit + otterlib)
+#   - Performance/utility mods bundle (modo.zip: ferritecore, lithium,
+#     krypton, c2me, modernfix, ...)
 #   - The lobby world (world-lobby-2026-11-17.zip), installed into
 #     worlds/lobby with all player data wiped
 #   - server.properties tuned for Time SMP:
@@ -207,6 +209,20 @@ if [ "$MC_VERSION" = "26.3" ]; then
     "https://github.com/${REPO}/releases/download/${WORLDGEN_RELEASE}/otterlib-0.4.0.2+26.3-fabric.jar"
 else
   log "skipping additional mods (only published for 26.3)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3f) Performance/utility mods bundle (modo.zip; published for 26.3)
+# ---------------------------------------------------------------------------
+if [ "$MC_VERSION" = "26.3" ]; then
+  log "downloading performance mods bundle (modo.zip)"
+  curl -fL -o /tmp/timesmp-modo.zip \
+    "https://github.com/${REPO}/releases/download/${WORLDGEN_RELEASE}/modo.zip"
+  unzip -oq /tmp/timesmp-modo.zip -d mods
+  rm -f /tmp/timesmp-modo.zip
+  log "performance mods bundle installed into mods/"
+else
+  log "skipping performance mods bundle (only published for 26.3)"
 fi
 
 # ---------------------------------------------------------------------------
