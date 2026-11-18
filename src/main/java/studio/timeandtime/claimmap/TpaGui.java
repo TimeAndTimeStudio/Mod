@@ -27,9 +27,8 @@ public final class TpaGui {
 				List.of(
 						Component.literal("§7จัดการคำขอวาร์ปและเลือกผู้เล่นที่ต้องการวาร์ปไปหา"),
 						Component.literal("§7--------------------------------"),
-						Component.literal("§a[คลิกซ้ายที่คำขอ] §7ยอมรับคำขอ (รอ 5 วิ)"),
-						Component.literal("§c[คลิกขวาที่คำขอ] §7ปฏิเสธ / ยกเลิกคำขอ"),
-						Component.literal("§b[คลิกที่ผู้เล่น] §7ส่งคำขอวาร์ปไปหาผู้เล่นนั้น")
+						Component.literal("§b[คลิกที่ผู้เล่น] §7ส่งคำขอวาร์ปไปหาผู้เล่นนั้น"),
+						Component.literal("§e[คลิกปุ่มกล่องจดหมาย] §7เปิดหน้ารายการคำขอวาร์ปที่ส่งมาหาคุณ")
 				)
 		);
 		container.setItem(4, header);
@@ -38,57 +37,24 @@ public final class TpaGui {
 		Map<Integer, Runnable> leftClicks = new HashMap<>();
 		Map<Integer, Runnable> rightClicks = new HashMap<>();
 
-		// Row 2 (Slots 10-16): Incoming Requests
-		int[] reqSlots = new int[]{10, 11, 12, 13, 14, 15, 16};
-		if (incomingReqs.isEmpty()) {
-			ItemStack emptyReq = GuiButtons.button(
-					GuiButtons.HELP,
-					Component.literal("§7ไม่มีคำขอวาร์ปที่ค้างอยู่"),
-					List.of(
-							Component.literal("§7เมื่อมีผู้เล่นส่งคำขอวาร์ปมาหาคุณ"),
-							Component.literal("§7รายการคำขอจะแสดงที่นี่แยกตามชื่อผู้เล่น"),
-							Component.literal("§7--------------------------------"),
-							Component.literal("§aคลิกซ้าย = ยอมรับ §7| §cคลิกขวา = ยกเลิก")
-					)
-			);
-			container.setItem(13, emptyReq);
-		} else {
-			for (int i = 0; i < incomingReqs.size() && i < reqSlots.length; i++) {
-				int slot = reqSlots[i];
-				TeleportManager.Request req = incomingReqs.get(i);
-				long remainingSec = Math.max(0, (TeleportManager.TIMEOUT_MS - (System.currentTimeMillis() - req.createdAt())) / 1000L);
-				String timeStr = remainingSec >= 60 ? (remainingSec / 60) + " นาที " + (remainingSec % 60) + " วินาที" : remainingSec + " วินาที";
-
-				ItemStack reqStack = new ItemStack(Items.PLAYER_HEAD);
-				var srvSender = srv != null ? srv.getPlayerList().getPlayer(req.senderUuid()) : null;
-				if (srvSender != null) {
-					reqStack.set(DataComponents.PROFILE, ResolvableProfile.createResolved(srvSender.getGameProfile()));
-				} else {
-					reqStack.set(DataComponents.PROFILE, ResolvableProfile.createUnresolved(req.senderName()));
-				}
-				reqStack.set(DataComponents.CUSTOM_NAME, Component.literal("§e§lคำขอจาก: §6" + req.senderName()));
-				reqStack.set(DataComponents.LORE, new ItemLore(List.of(
-						Component.literal("§7ผู้เล่นต้องการวาร์ปมายังตำแหน่งของคุณ"),
-						Component.literal("§7เวลาคงเหลือ: §e" + timeStr),
+		// Slot 0: Button to go to Incoming Requests GUI
+		int reqCount = incomingReqs.size();
+		ItemStack reqsBtn = GuiButtons.button(
+				GuiButtons.PARCEL,
+				Component.literal("§e§lคำขอวาร์ปที่ส่งมาหาคุณ " + (reqCount > 0 ? "§a(" + reqCount + ")" : "§7(0)")),
+				List.of(
+						Component.literal("§7มีผู้เล่นส่งคำขอวาร์ปมา: " + (reqCount > 0 ? "§a" + reqCount + " คน" : "§cไม่มี")),
 						Component.literal("§7--------------------------------"),
-						Component.literal("§a[คลิกซ้าย] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
-						Component.literal("§c[คลิกขวา] §7ยกเลิก / ปฏิเสธคำขอนี้")
-				)));
-				container.setItem(slot, reqStack);
+						Component.literal("§e[คลิก] §fเพื่อเปิดหน้ายอมรับ/ปฏิเสธคำขอวาร์ป")
+				)
+		);
+		container.setItem(0, reqsBtn);
+		leftClicks.put(0, () -> openRequests(player, teleports));
+		rightClicks.put(0, () -> openRequests(player, teleports));
 
-				leftClicks.put(slot, () -> {
-					player.closeContainer();
-					teleports.accept(player, req.senderName());
-				});
-				rightClicks.put(slot, () -> {
-					teleports.deny(player, req.senderName());
-					open(player, teleports);
-				});
-			}
-		}
-
-		// Row 3 to 5 (Slots 19-25, 28-34, 37-43): Online Players List
+		// Row 2 to 5 (Slots 10-16, 19-25, 28-34, 37-43): Online Players List
 		int[] playerSlots = new int[]{
+				10, 11, 12, 13, 14, 15, 16,
 				19, 20, 21, 22, 23, 24, 25,
 				28, 29, 30, 31, 32, 33, 34,
 				37, 38, 39, 40, 41, 42, 43
@@ -111,7 +77,7 @@ public final class TpaGui {
 							Component.literal("§7ขณะนี้ไม่มีผู้เล่นคนอื่นออนไลน์อยู่ในเซิร์ฟเวอร์")
 					)
 			);
-			container.setItem(31, noPlayers);
+			container.setItem(22, noPlayers);
 		} else {
 			for (int i = 0; i < otherPlayers.size() && i < playerSlots.length; i++) {
 				int slot = playerSlots[i];
@@ -174,4 +140,107 @@ public final class TpaGui {
 				null
 		);
 	}
+
+	public static void openRequests(ServerPlayer player, TeleportManager teleports) {
+		SimpleContainer container = new SimpleContainer(54);
+		var srv = ClaimMap.getServer();
+		List<TeleportManager.Request> incomingReqs = teleports != null ? teleports.getIncomingRequests(player.getUUID()) : Collections.emptyList();
+
+		// Slot 4: Header
+		ItemStack header = GuiButtons.button(
+				GuiButtons.BRAND,
+				Component.literal("§6§lรายการคำขอวาร์ปที่ส่งมา §e(TPA Requests)"),
+				List.of(
+						Component.literal("§7แสดงรายชื่อผู้เล่นที่ส่งคำขอวาร์ปมาหาคุณ"),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§a[คลิกซ้าย] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
+						Component.literal("§c[คลิกขวา] §7ปฏิเสธ / ยกเลิกคำขอนี้")
+				)
+		);
+		container.setItem(4, header);
+
+		Map<Integer, Runnable> leftClicks = new HashMap<>();
+		Map<Integer, Runnable> rightClicks = new HashMap<>();
+
+		// Slot 45: Back Button
+		ItemStack backBtn = GuiButtons.button(
+				GuiButtons.BACK,
+				Component.literal("§c§lย้อนกลับ"),
+				List.of(Component.literal("§7กลับไปยังหน้ารายชื่อผู้เล่นออนไลน์ (/tpa)"))
+		);
+		container.setItem(45, backBtn);
+		leftClicks.put(45, () -> open(player, teleports));
+		rightClicks.put(45, () -> open(player, teleports));
+
+		int[] reqSlots = new int[]{
+				10, 11, 12, 13, 14, 15, 16,
+				19, 20, 21, 22, 23, 24, 25,
+				28, 29, 30, 31, 32, 33, 34,
+				37, 38, 39, 40, 41, 42, 43
+		};
+
+		if (incomingReqs.isEmpty()) {
+			ItemStack emptyReq = GuiButtons.button(
+					GuiButtons.HELP,
+					Component.literal("§7ไม่มีคำขอวาร์ปที่ค้างอยู่"),
+					List.of(
+							Component.literal("§7ขณะนี้ไม่มีผู้เล่นใดส่งคำขอวาร์ปมาหาคุณ"),
+							Component.literal("§7เมื่อมีคำขอใหม่ สามารถเข้าหน้านี้เพื่อตอบรับได้")
+					)
+			);
+			container.setItem(22, emptyReq);
+		} else {
+			for (int i = 0; i < incomingReqs.size() && i < reqSlots.length; i++) {
+				int slot = reqSlots[i];
+				TeleportManager.Request req = incomingReqs.get(i);
+				long remainingSec = Math.max(0, (TeleportManager.TIMEOUT_MS - (System.currentTimeMillis() - req.createdAt())) / 1000L);
+				String timeStr = remainingSec >= 60 ? (remainingSec / 60) + " นาที " + (remainingSec % 60) + " วินาที" : remainingSec + " วินาที";
+
+				ItemStack reqStack = new ItemStack(Items.PLAYER_HEAD);
+				var srvSender = srv != null ? srv.getPlayerList().getPlayer(req.senderUuid()) : null;
+				if (srvSender != null) {
+					reqStack.set(DataComponents.PROFILE, ResolvableProfile.createResolved(srvSender.getGameProfile()));
+				} else {
+					reqStack.set(DataComponents.PROFILE, ResolvableProfile.createUnresolved(req.senderName()));
+				}
+				reqStack.set(DataComponents.CUSTOM_NAME, Component.literal("§e§lคำขอจาก: §6" + req.senderName()));
+				reqStack.set(DataComponents.LORE, new ItemLore(List.of(
+						Component.literal("§7ผู้เล่นต้องการวาร์ปมายังตำแหน่งของคุณ"),
+						Component.literal("§7เวลาคงเหลือ: §e" + timeStr),
+						Component.literal("§7--------------------------------"),
+						Component.literal("§a[คลิกซ้าย] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
+						Component.literal("§c[คลิกขวา] §7ยกเลิก / ปฏิเสธคำขอนี้")
+				)));
+				container.setItem(slot, reqStack);
+
+				leftClicks.put(slot, () -> {
+					player.closeContainer();
+					teleports.accept(player, req.senderName());
+				});
+				rightClicks.put(slot, () -> {
+					teleports.deny(player, req.senderName());
+					openRequests(player, teleports);
+				});
+			}
+		}
+
+		VirtualChestMenu.open(
+				player,
+				Component.literal("§0คำขอวาร์ป (TPA Requests)"),
+				6,
+				true,
+				container,
+				(slotIndex, button, input, sp) -> {
+					if (button == 0) { // Left-click
+						Runnable action = leftClicks.get(slotIndex);
+						if (action != null) action.run();
+					} else if (button == 1) { // Right-click
+						Runnable action = rightClicks.get(slotIndex);
+						if (action != null) action.run();
+					}
+				},
+				null
+		);
+	}
 }
+

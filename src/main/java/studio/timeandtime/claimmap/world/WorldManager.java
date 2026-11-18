@@ -626,6 +626,9 @@ public final class WorldManager {
 					.withSuppressedOutput();
 			s.getCommands().performPrefixedCommand(source, "gamerule spawn_mobs false");
 			s.getCommands().performPrefixedCommand(source, "gamerule advance_weather false");
+			// Clamp lobby border to avoid loading chunks or generating terrain outside the lobby structure
+			s.getCommands().performPrefixedCommand(source, "worldborder center 0 0");
+			s.getCommands().performPrefixedCommand(source, "worldborder set 160");
 			// Neutral starting state; the real weather is applied as soon as the
 			// first external reading is available.
 			s.getCommands().performPrefixedCommand(source, "weather clear");

@@ -20,7 +20,7 @@
 #   - run.sh launcher where you choose how much RAM the server uses
 #
 # Missing system tools (curl, jq, unzip, sha1sum, Java 26+) are installed
-# automatically with apt or dnf (sudo is used when not running as root).
+# automatically with dnf (sudo is used when not running as root).
 #
 # Usage:
 #   ./setup.sh [server-dir]        # default: $HOME/mcserver
@@ -47,7 +47,7 @@ log() { echo "[setup] $*"; }
 
 # ---------------------------------------------------------------------------
 # 0) System dependencies: curl, jq, unzip, sha1sum, Java 26+
-#    Missing tools are installed automatically with apt or dnf.
+#    Installed automatically with dnf.
 # ---------------------------------------------------------------------------
 java_major() {
   # Print the major version of the java on PATH (empty when java is missing).
@@ -75,7 +75,8 @@ fi
 if [ ${#need_pkgs[@]} -eq 0 ]; then
   log "system dependencies: OK (Java $JAVA_MAJOR)"
 else
-  log "installing missing system dependencies: ${need_pkgs[*]}"
+  log "installing missing system dependencies with dnf: ${need_pkgs[*]}"
+  command -v dnf >/dev/null 2>&1 || die "dnf is required to install system dependencies (dnf-only system)"
   SUDO=""
   if [ "$(id -u)" -ne 0 ]; then
     command -v sudo >/dev/null 2>&1 || die "need root (or sudo) to install: ${need_pkgs[*]}"
@@ -84,23 +85,11 @@ else
   PKGS=()
   for p in "${need_pkgs[@]}"; do
     case "$p" in
-      java26)
-        if command -v apt-get >/dev/null 2>&1; then
-          PKGS+=(openjdk-26-jre-headless)
-        else
-          PKGS+=(java-26-openjdk-headless)
-        fi ;;
+      java26) PKGS+=(java-26-openjdk-headless) ;;
       *) PKGS+=("$p") ;;
     esac
   done
-  if command -v apt-get >/dev/null 2>&1; then
-    $SUDO apt-get update -y
-    $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y "${PKGS[@]}"
-  elif command -v dnf >/dev/null 2>&1; then
-    $SUDO dnf install -y "${PKGS[@]}"
-  else
-    die "no supported package manager (apt or dnf) to install: ${need_pkgs[*]}"
-  fi
+  $SUDO dnf install -y "${PKGS[@]}"
 fi
 
 # Final check that everything is available now.
