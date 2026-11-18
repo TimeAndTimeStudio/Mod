@@ -86,8 +86,8 @@ public final class Protection {
 		if (!(source.getEntity() instanceof ServerPlayer attacker)) return true;
 		if (attacker == victim) return true;
 		Level level = victim.level();
-		if (level == null || level.getServer() == null || level != level.getServer().overworld()) return true;
-		RegionManager.CellData cell = regions.get(regions.cellIdAt(victim.getBlockX(), victim.getBlockZ()));
+		if (level == null || level.getServer() == null || !RegionManager.isClaimableWorld(level)) return true;
+		RegionManager.CellData cell = regions.get(regions.cellIdAt(level, victim.getBlockX(), victim.getBlockZ()));
 		if (cell == null || cell.pvp) return true;
 		attacker.sendSystemMessage(Component.literal(
 				"§cเขต " + cell.id + " ปิด PvP อยู่ (เจ้าของเขตสามารถเปิดได้จากเมนูจัดการเขต)"));
@@ -100,10 +100,10 @@ public final class Protection {
 		if (level != null && studio.timeandtime.claimmap.world.WorldManager.isLobby(level)) {
 			return isAdmin(player);
 		}
-		if (level != null && level.getServer() != null && level != level.getServer().overworld()) {
-			return true; // Claim system and protection only exist in the main overworld!
+		if (level != null && level.getServer() != null && !RegionManager.isClaimableWorld(level)) {
+			return true; // Claim system and protection only exist in the overworld and nether!
 		}
-		String id = regions.cellIdAt(pos.getX(), pos.getZ());
+		String id = regions.cellIdAt(level, pos.getX(), pos.getZ());
 		RegionManager.CellData cell = regions.get(id);
 		if (cell == null) return true;                       // unclaimed cell: free
 		if (cell.hasAccess(player.getUUID().toString())) return true;

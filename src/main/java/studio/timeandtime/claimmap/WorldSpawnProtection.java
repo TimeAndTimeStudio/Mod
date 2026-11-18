@@ -110,10 +110,16 @@ public final class WorldSpawnProtection {
 				int dx = (int) player.getX();
 				int dy = (int) player.getY();
 				int dz = (int) player.getZ();
-				String worldName = player.level().dimension().identifier().getPath();
+				String rawDim = player.level().dimension().identifier().getPath();
+				String worldName = switch (rawDim) {
+					case "overworld" -> "โลกหลัก (Overworld)";
+					case "the_nether" -> "แดนเนเธอร์ (The Nether)";
+					case "the_end" -> "แดนเดอะเอนด์ (The End)";
+					default -> rawDim;
+				};
 				player.sendSystemMessage(Component.literal(
 						"§c[Time SMP] ตำแหน่งที่คุณเสียชีวิต: §eX: " + dx + ", Y: " + dy + ", Z: " + dz
-								+ " §7(โลก: §f" + worldName + "§7)"));
+								+ " §7(โลก: §a" + worldName + "§7)"));
 
 				var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
 				if (wm != null) {

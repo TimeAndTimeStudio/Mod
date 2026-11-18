@@ -34,7 +34,7 @@ public abstract class ServerExplosionMixin {
 
 	@ModifyVariable(method = "interactWithBlocks", at = @At("HEAD"), argsOnly = true)
 	private List<BlockPos> filterClaimedBlocks(List<BlockPos> positions) {
-		if (this.level != null && this.level.getServer() != null && this.level != this.level.getServer().overworld()) {
+		if (this.level != null && this.level.getServer() != null && !RegionManager.isClaimableWorld(this.level)) {
 			return positions;
 		}
 		Entity direct = this.getDirectSourceEntity();
@@ -44,7 +44,7 @@ public abstract class ServerExplosionMixin {
 				RegionManager rm = ClaimMap.instance().regions();
 				List<BlockPos> filtered = new ArrayList<>(positions.size());
 				for (BlockPos pos : positions) {
-					String cellId = rm.cellIdAt(pos.getX(), pos.getZ());
+					String cellId = rm.cellIdAt(this.level, pos.getX(), pos.getZ());
 					if (rm.get(cellId) == null) {
 						filtered.add(pos);
 					}

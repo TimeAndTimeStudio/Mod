@@ -8,6 +8,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
@@ -754,8 +755,8 @@ public final class ClaimCommands {
 	private int runClaimMapGui(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (player.level() != src.getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return 0;
 		}
 		int cx = Math.floorDiv(player.getBlockX(), config.cellSize);
@@ -870,15 +871,13 @@ public final class ClaimCommands {
 	private int runClaimAuctionHere(CommandSourceStack src, String startText, String hoursText) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (player.level() != src.getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
-		int cx = Math.floorDiv(bx, config.cellSize);
-		int cz = Math.floorDiv(bz, config.cellSize);
-		String cellId = cx + "," + cz;
+		String cellId = regions.cellIdAt(player.level(), bx, bz);
 		return doCellAuction(player, cellId, startText, hoursText);
 	}
 
@@ -1039,15 +1038,15 @@ public final class ClaimCommands {
 	private int runClaim(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (player.level() != src.getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบจองและซื้อเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบจองและซื้อเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
 		int cx = Math.floorDiv(bx, config.cellSize);
 		int cz = Math.floorDiv(bz, config.cellSize);
-		String id = cx + "," + cz;
+		String id = regions.cellIdAt(player.level(), bx, bz);
 		String uuid = player.getUUID().toString();
 		int ownedCount = regions.countClaimedBy(uuid);
 		boolean isFree = ownedCount < config.freeCellsPerPlayer;
@@ -1061,7 +1060,7 @@ public final class ClaimCommands {
 		}
 		if (isFree) {
 			String name = player.getGameProfile().name();
-			RegionManager.ClaimResult r = regions.claim(cx, cz, uuid, name);
+			RegionManager.ClaimResult r = regions.claim(player.level(), cx, cz, uuid, name);
 			if (r != RegionManager.ClaimResult.OK) {
 				player.sendSystemMessage(Component.literal("§cไม่สามารถจองเขตได้: " + r));
 				return 0;
@@ -1086,7 +1085,7 @@ public final class ClaimCommands {
 			return 0;
 		}
 		String name = player.getGameProfile().name();
-		RegionManager.ClaimResult r = regions.claim(cx, cz, uuid, name);
+		RegionManager.ClaimResult r = regions.claim(player.level(), cx, cz, uuid, name);
 		if (r != RegionManager.ClaimResult.OK) {
 			economy.deposit(player.getUUID(), price, "land.refund:" + id, id);
 			player.sendSystemMessage(Component.literal("§cไม่สามารถจองเขตได้: " + r));
@@ -1104,11 +1103,11 @@ public final class ClaimCommands {
 	private int runHere(CommandSourceStack src) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (player.level() != src.getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return 0;
 		}
-		String id = regions.cellIdAt(player.getBlockX(), player.getBlockZ());
+		String id = regions.cellIdAt(player.level(), player.getBlockX(), player.getBlockZ());
 		RegionManager.CellData c = regions.get(id);
 		String owner = c == null ? "free" : c.ownerName;
 		src.sendSuccess(() -> Component.literal("Cell " + id + " -> " + owner + " (claimed " + regions.countClaimedBy(player.getUUID().toString())
@@ -1126,15 +1125,13 @@ public final class ClaimCommands {
 	private int runClaimTransferHere(CommandSourceStack src, String targetName) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (player.level() != src.getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
-		int cx = Math.floorDiv(bx, config.cellSize);
-		int cz = Math.floorDiv(bz, config.cellSize);
-		String id = cx + "," + cz;
+		String id = regions.cellIdAt(player.level(), bx, bz);
 		UUID targetUuid = accounts.uuidOf(targetName).orElse(null);
 		String resolvedName = targetName;
 		if (targetUuid == null) {
@@ -1169,15 +1166,13 @@ public final class ClaimCommands {
 	private int runClaimAddHere(CommandSourceStack src, String targetName) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (player.level() != src.getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
-		int cx = Math.floorDiv(bx, config.cellSize);
-		int cz = Math.floorDiv(bz, config.cellSize);
-		String id = cx + "," + cz;
+		String id = regions.cellIdAt(player.level(), bx, bz);
 		RegionManager.CellData c = regions.get(id);
 		String uuid = player.getUUID().toString();
 		boolean admin = src.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
@@ -1214,15 +1209,13 @@ public final class ClaimCommands {
 	private int runClaimRemoveHere(CommandSourceStack src, String targetName) {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
-		if (player.level() != src.getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
 		int bz = player.getBlockZ();
-		int cx = Math.floorDiv(bx, config.cellSize);
-		int cz = Math.floorDiv(bz, config.cellSize);
-		String id = cx + "," + cz;
+		String id = regions.cellIdAt(player.level(), bx, bz);
 		RegionManager.CellData c = regions.get(id);
 		String uuid = player.getUUID().toString();
 		boolean admin = src.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
@@ -1267,34 +1260,47 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		int cx, cz;
+		boolean isNether = false;
+		String cleanId = cellId.trim();
+		if (cleanId.startsWith("nether:")) {
+			isNether = true;
+			cleanId = cleanId.substring(7);
+		}
 		try {
-			if (cellId.contains(",")) {
-				String[] parts = cellId.split(",");
+			if (cleanId.contains(",")) {
+				String[] parts = cleanId.split(",");
 				cx = Integer.parseInt(parts[0].trim());
 				cz = Integer.parseInt(parts[1].trim());
 			} else {
-				player.sendSystemMessage(Component.literal("รูปแบบเขตไม่ถูกต้อง (ตัวอย่าง: /claim tp 5,5)"));
+				player.sendSystemMessage(Component.literal("รูปแบบเขตไม่ถูกต้อง (ตัวอย่าง: /claim tp 5,5 หรือ /claim tp nether:5,5)"));
 				return 0;
 			}
 		} catch (Exception e) {
-			player.sendSystemMessage(Component.literal("รูปแบบเขตไม่ถูกต้อง (ตัวอย่าง: /claim tp 5,5)"));
+			player.sendSystemMessage(Component.literal("รูปแบบเขตไม่ถูกต้อง (ตัวอย่าง: /claim tp 5,5 หรือ /claim tp nether:5,5)"));
 			return 0;
 		}
-		teleportToCell(player, cx, cz, config);
+		teleportToCell(player, isNether, cx, cz, config);
 		return 1;
 	}
 
-	public static boolean teleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
+	public static boolean teleportToCell(ServerPlayer player, boolean isNether, int cx, int cz, ClaimMapConfig config) {
 		TeleportManager tp = ClaimMap.instance() != null ? ClaimMap.instance().teleports() : null;
+		String label = (isNether ? "เนเธอร์ " : "") + "(" + cx + "," + cz + ")";
 		if (tp != null) {
-			tp.startWarmup(player, Component.literal("เขต (" + cx + "," + cz + ")"), () -> doTeleportToCell(player, cx, cz, config));
+			tp.startWarmup(player, Component.literal("เขต " + label), () -> doTeleportToCell(player, isNether, cx, cz, config));
 			return true;
 		}
-		return doTeleportToCell(player, cx, cz, config);
+		return doTeleportToCell(player, isNether, cx, cz, config);
 	}
 
-	private static boolean doTeleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
-		ServerLevel level = player.level().getServer() != null ? player.level().getServer().overworld() : (player.level() instanceof ServerLevel sl ? sl : null);
+	public static boolean teleportToCell(ServerPlayer player, int cx, int cz, ClaimMapConfig config) {
+		return teleportToCell(player, false, cx, cz, config);
+	}
+
+	private static boolean doTeleportToCell(ServerPlayer player, boolean isNether, int cx, int cz, ClaimMapConfig config) {
+		MinecraftServer srv = player.level().getServer();
+		if (srv == null) return false;
+		ServerLevel level = isNether ? srv.getLevel(net.minecraft.world.level.Level.NETHER) : srv.overworld();
 		if (level == null) return false;
 		int minX = cx * config.cellSize;
 		int minZ = cz * config.cellSize;

@@ -29,8 +29,8 @@ public final class ZoneAnnouncer {
 		if (srv.getTickCount() % TICK_INTERVAL != 0) return;
 		for (ServerPlayer p : srv.getPlayerList().getPlayers()) {
 			if (!p.isAlive()) continue;
-			if (p.level() != srv.overworld()) continue; // claims only exist in the main overworld
-			String id = regions.cellIdAt(p.getBlockX(), p.getBlockZ());
+			if (!RegionManager.isClaimableWorld(p.level())) continue;
+			String id = regions.cellIdAt(p.level(), p.getBlockX(), p.getBlockZ());
 			RegionManager.CellData cell = regions.get(id);
 			String key = p.getUUID().toString();
 			String now = cell != null ? id : "";

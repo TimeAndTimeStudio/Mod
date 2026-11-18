@@ -102,10 +102,23 @@ public final class RegionManager {
 		return config.cellSize;
 	}
 
-	public String cellIdAt(int blockX, int blockZ) {
+	public static boolean isClaimableWorld(net.minecraft.world.level.Level level) {
+		if (level == null) return false;
+		var dim = level.dimension();
+		return dim == net.minecraft.world.level.Level.OVERWORLD || dim == net.minecraft.world.level.Level.NETHER;
+	}
+
+	public String cellIdAt(net.minecraft.world.level.Level level, int blockX, int blockZ) {
 		int cx = Math.floorDiv(blockX, cellSize());
 		int cz = Math.floorDiv(blockZ, cellSize());
+		if (level != null && level.dimension() == net.minecraft.world.level.Level.NETHER) {
+			return "nether:" + cx + "," + cz;
+		}
 		return cx + "," + cz;
+	}
+
+	public String cellIdAt(int blockX, int blockZ) {
+		return cellIdAt(null, blockX, blockZ);
 	}
 
 	public CellData get(String id) {
@@ -154,8 +167,14 @@ public final class RegionManager {
 
 	/** Double-checks that the cell is actually free server side (plan.md: กันยิง API ตรง ๆ). */
 	public ClaimResult claim(int cellX, int cellZ, String uuid, String name) {
+		return claim(null, cellX, cellZ, uuid, name);
+	}
+
+	public ClaimResult claim(net.minecraft.world.level.Level level, int cellX, int cellZ, String uuid, String name) {
 		synchronized (lock) {
-			String id = cellX + "," + cellZ;
+			String id = (level != null && level.dimension() == net.minecraft.world.level.Level.NETHER)
+					? "nether:" + cellX + "," + cellZ
+					: cellX + "," + cellZ;
 			if (cells.containsKey(id)) return ClaimResult.ALREADY_CLAIMED;
 			if (config.maxCellsPerPlayer > 0 && countClaimedBy(uuid) >= config.maxCellsPerPlayer) return ClaimResult.LIMIT_REACHED;
 			CellData c = new CellData();

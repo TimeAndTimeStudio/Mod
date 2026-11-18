@@ -25,8 +25,8 @@ public final class ClaimMapGui {
 
 	public static void open(ServerPlayer player, RegionManager regions, ClaimMapConfig config,
 							EconomyManager economy, int centerCx, int centerCz) {
-		if (player.level() != player.level().getServer().overworld()) {
-			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักเท่านั้น"));
+		if (!RegionManager.isClaimableWorld(player.level())) {
+			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
 			return;
 		}
 		int playerCx = Math.floorDiv(player.getBlockX(), config.cellSize);
@@ -46,7 +46,7 @@ public final class ClaimMapGui {
 				int slot = r * 9 + c;
 				int cellX = centerCx + (c - 4);
 				int cellZ = centerCz + (r - 2);
-				String cellId = cellX + "," + cellZ;
+				String cellId = (player.level().dimension() == net.minecraft.world.level.Level.NETHER ? "nether:" : "") + cellX + "," + cellZ;
 
 				RegionManager.CellData cellData = regions.get(cellId);
 
@@ -173,7 +173,7 @@ public final class ClaimMapGui {
 								int currentClaims = regions.countClaimedBy(myUuid);
 								boolean isFree = currentClaims < config.freeCellsPerPlayer;
 								if (isFree) {
-									RegionManager.ClaimResult cr = regions.claim(cellX, cellZ, myUuid, sp.getGameProfile().name());
+									RegionManager.ClaimResult cr = regions.claim(sp.level(), cellX, cellZ, myUuid, sp.getGameProfile().name());
 									if (cr == RegionManager.ClaimResult.OK) {
 										sp.sendSystemMessage(Component.literal("§aรับกรรมสิทธิ์เขต " + id + " ฟรีสำเร็จ! (ฟรี "
 												+ (currentClaims + 1) + "/" + config.freeCellsPerPlayer + " ช่อง)"));
@@ -196,7 +196,7 @@ public final class ClaimMapGui {
 										sp.sendSystemMessage(Component.literal("§cการหักเงินไม่สำเร็จ (" + tx + ")"));
 										return;
 									}
-									RegionManager.ClaimResult cr = regions.claim(cellX, cellZ, myUuid, sp.getGameProfile().name());
+									RegionManager.ClaimResult cr = regions.claim(sp.level(), cellX, cellZ, myUuid, sp.getGameProfile().name());
 									if (cr != RegionManager.ClaimResult.OK) {
 										economy.deposit(sp.getUUID(), price, "land.refund:" + id, id);
 										sp.sendSystemMessage(Component.literal("§cจองเขตไม่สำเร็จ: " + cr));
