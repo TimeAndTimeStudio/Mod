@@ -49,13 +49,9 @@ public final class ClaimMapGui {
 				String cellId = cellX + "," + cellZ;
 
 				RegionManager.CellData cellData = regions.get(cellId);
-				boolean isCommon = regions.isCommonArea(cellX, cellZ);
 
 				ItemStack stack;
-				if (isCommon) {
-					stack = itemById("minecraft:gray_stained_glass_pane");
-					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§8[พื้นที่ส่วนกลาง] ช่อง " + cellId));
-				} else if (cellData != null) {
+				if (cellData != null) {
 					if (cellData.isOwner(myUuid)) {
 						stack = itemById("minecraft:lime_stained_glass_pane");
 						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§a[เขตของคุณ] ช่อง " + cellId));
@@ -165,11 +161,6 @@ public final class ClaimMapGui {
 							int cellX = centerCx + (c - 4);
 							int cellZ = centerCz + (r - 2);
 							String id = cellX + "," + cellZ;
-
-							if (regions.isCommonArea(cellX, cellZ)) {
-								sp.sendSystemMessage(Component.literal("§cพื้นที่ส่วนกลาง ไม่สามารถจับจองได้"));
-								return;
-							}
 
 							RegionManager.CellData cd = regions.get(id);
 							if (cd != null) {

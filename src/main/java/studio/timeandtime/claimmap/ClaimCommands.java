@@ -1055,10 +1055,6 @@ public final class ClaimCommands {
 			player.sendSystemMessage(Component.literal("§cคุณครอบครองที่ดินครบโควตา " + config.maxCellsPerPlayer + " ช่องแล้ว"));
 			return 0;
 		}
-		if (regions.isCommonArea(cx, cz)) {
-			player.sendSystemMessage(Component.literal("§cนี่คือพื้นที่เกิดส่วนกลาง ไม่สามารถซื้อได้"));
-			return 0;
-		}
 		if (regions.get(id) != null) {
 			player.sendSystemMessage(Component.literal("§cเขตนี้มีเจ้าของแล้ว (" + regions.ownerName(id) + ")"));
 			return 0;

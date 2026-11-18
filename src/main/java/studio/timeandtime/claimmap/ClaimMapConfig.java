@@ -26,8 +26,6 @@ public final class ClaimMapConfig {
 	public int cellSize = 500;
 	public int freeCellsPerPlayer = 4;
 	public int maxCellsPerPlayer = 0; // 0 = unlimited
-	/** Radius (in cells) around 0,0 treated as a common / spawn area (unclaimable). 0 = disabled. */
-	public int spawnProtectedCells = 0;
 	/** Comma separated whitelist of player names. Empty = no restriction. */
 	public String players = "";
 	/** Comma separated list of admin names. */
@@ -142,12 +140,13 @@ public final class ClaimMapConfig {
 				ClaimMap.LOGGER.error("[timesmp] Could not read config", e);
 			}
 		}
+		// Drop the deprecated common-area key (the feature was removed).
+		props.remove("spawnProtectedCells");
 		players = props.getProperty("players", players).trim();
 		admins = props.getProperty("admins", admins).trim();
 		cellSize = getInt("cellSize", cellSize, 16, 10000);
 		freeCellsPerPlayer = getInt("freeCellsPerPlayer", freeCellsPerPlayer, 0, 100000);
 		maxCellsPerPlayer = getInt("maxCellsPerPlayer", maxCellsPerPlayer, 0, 100000);
-		spawnProtectedCells = getInt("spawnProtectedCells", spawnProtectedCells, 0, 100000);
 		linkCodeMinutes = getInt("linkCodeMinutes", linkCodeMinutes, 1, 1440);
 		sessionHours = getInt("sessionHours", sessionHours, 1, 8760);
 		currencyName = props.getProperty("currencyName", currencyName).trim();
@@ -272,7 +271,6 @@ public final class ClaimMapConfig {
 		props.setProperty("cellSize", Integer.toString(cellSize));
 		props.setProperty("freeCellsPerPlayer", Integer.toString(freeCellsPerPlayer));
 		props.setProperty("maxCellsPerPlayer", Integer.toString(maxCellsPerPlayer));
-		props.setProperty("spawnProtectedCells", Integer.toString(spawnProtectedCells));
 		props.setProperty("linkCodeMinutes", Integer.toString(linkCodeMinutes));
 		props.setProperty("sessionHours", Integer.toString(sessionHours));
 		props.setProperty("currencyName", currencyName);

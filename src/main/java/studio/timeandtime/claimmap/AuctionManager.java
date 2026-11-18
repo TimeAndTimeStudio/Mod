@@ -260,7 +260,7 @@ public final class AuctionManager {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
 		RegionManager rm = regions;
-		if (rm == null || rm.isCommonArea(coords[0], coords[1])) {
+		if (rm == null) {
 			return new CreateOutcome(Result.BAD_REQUEST, null);
 		}
 		String canonical = coords[0] + "," + coords[1];

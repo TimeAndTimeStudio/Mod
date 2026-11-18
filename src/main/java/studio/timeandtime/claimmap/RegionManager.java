@@ -47,7 +47,7 @@ public final class RegionManager {
 	}
 
 	public enum ClaimResult {
-		OK, ALREADY_CLAIMED, COMMON_AREA, LIMIT_REACHED
+		OK, ALREADY_CLAIMED, LIMIT_REACHED
 	}
 
 	private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -108,13 +108,6 @@ public final class RegionManager {
 		return cx + "," + cz;
 	}
 
-	public boolean isCommonArea(int cx, int cz) {
-		// 0 = ปิดการกันพื้นที่สปอน (จองได้ทุกช่อง), >0 = กันวงรัศมีรอบจุดกำเนิด
-		int r = config.spawnProtectedCells;
-		if (r <= 0) return false;
-		return Math.abs(cx) <= r && Math.abs(cz) <= r;
-	}
-
 	public CellData get(String id) {
 		synchronized (lock) {
 			return cells.get(id);
@@ -163,7 +156,6 @@ public final class RegionManager {
 	public ClaimResult claim(int cellX, int cellZ, String uuid, String name) {
 		synchronized (lock) {
 			String id = cellX + "," + cellZ;
-			if (isCommonArea(cellX, cellZ)) return ClaimResult.COMMON_AREA;
 			if (cells.containsKey(id)) return ClaimResult.ALREADY_CLAIMED;
 			if (config.maxCellsPerPlayer > 0 && countClaimedBy(uuid) >= config.maxCellsPerPlayer) return ClaimResult.LIMIT_REACHED;
 			CellData c = new CellData();
