@@ -5,7 +5,10 @@
 # Creates a ready-to-run Fabric server folder with:
 #   - Official Fabric loader/server jar
 #   - Fabric API
-#   - Time SMP (timesmp) mod
+#   - Time SMP (timesmp) mod (latest build)
+#   - World generation mods for the main world (lithostitched + tectonic)
+#   - The lobby world (world-lobby-2026-11-17.zip), installed into
+#     worlds/lobby with all player data wiped
 #   - server.properties tuned for Time SMP:
 #       motd=Time SMP, max-players=5, survival locked,
 #       online-mode=off, secure profile off, whitelist on,
@@ -37,7 +40,7 @@ PLAYER_UUID="9db07e0d-2e66-3307-8695-509d6af83247"
 die() { echo "[setup] ERROR: $*" >&2; exit 1; }
 log() { echo "[setup] $*"; }
 
-for cmd in curl jq java sha1sum; do
+for cmd in curl jq java sha1sum unzip; do
   command -v "$cmd" >/dev/null 2>&1 || die "missing dependency: $cmd"
 done
 
@@ -112,6 +115,36 @@ RESOURCE_PACK_URL="${RESOURCE_PACK_URL:-https://github.com/${REPO}/releases/late
 log "downloading resource pack"
 curl -fL -o resourcepack.zip "$RESOURCE_PACK_URL"
 RESOURCE_PACK_SHA1=$(sha1sum resourcepack.zip | awk '{print $1}')
+
+# ---------------------------------------------------------------------------
+# 3c) World generation mods (main world only; published for 26.3)
+# ---------------------------------------------------------------------------
+WORLDGEN_RELEASE="${WORLDGEN_RELEASE:-mod_26.3}"
+if [ "$MC_VERSION" = "26.3" ]; then
+  log "downloading world generation mods (lithostitched + tectonic)"
+  curl -fL -o mods/lithostitched-2.0.6-fabric-26.3.jar \
+    "https://github.com/${REPO}/releases/download/${WORLDGEN_RELEASE}/lithostitched-2.0.6-fabric-26.3.jar"
+  curl -fL -o mods/tectonic-3.0.32-fabric-26.3.jar \
+    "https://github.com/${REPO}/releases/download/${WORLDGEN_RELEASE}/tectonic-3.0.32-fabric-26.3.jar"
+else
+  log "skipping world generation mods (only published for 26.3)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3d) Lobby world (published on the maplobby release)
+# ---------------------------------------------------------------------------
+LOBBY_URL="${LOBBY_URL:-https://github.com/${REPO}/releases/download/maplobby/world-lobby-2026-11-17.zip}"
+log "downloading lobby world"
+curl -fL -o /tmp/timesmp-lobby.zip "$LOBBY_URL"
+rm -rf worlds/lobby
+mkdir -p worlds
+unzip -q /tmp/timesmp-lobby.zip -d /tmp/timesmp-lobby-extract
+mv /tmp/timesmp-lobby-extract/world worlds/lobby
+# Wipe player data so the lobby starts clean
+rm -rf worlds/lobby/players worlds/lobby/playerdata worlds/lobby/advancements worlds/lobby/stats
+rm -f worlds/lobby/session.lock
+rm -rf /tmp/timesmp-lobby.zip /tmp/timesmp-lobby-extract
+log "lobby world installed at worlds/lobby (player data wiped)"
 
 # ---------------------------------------------------------------------------
 # 4) EULA

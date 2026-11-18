@@ -75,6 +75,7 @@ public final class ClaimMapGui {
 				if (cellData != null) {
 					lore.add(Component.literal("§eเจ้าของ: §f" + cellData.ownerName));
 					lore.add(Component.literal("§eสมาชิก: §7" + (cellData.members == null || cellData.members.isEmpty() ? "ไม่มี" : cellData.members.size() + " คน")));
+					lore.add(Component.literal("§ePvP: " + (cellData.pvp ? "§aเปิด" : "§cปิด")));
 					if (cellData.isOwner(myUuid) || player.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
 						lore.add(Component.literal("§7------------------------"));
 						lore.add(Component.literal("§b[คลิก] จัดการเขตนี้"));
@@ -238,6 +239,7 @@ public final class ClaimMapGui {
 				List.of(
 						Component.literal("§eเจ้าของ: §f" + cell.ownerName),
 						Component.literal("§eสมาชิก: §7" + (cell.members == null || cell.members.isEmpty() ? "ไม่มี" : cell.members.size() + " คน")),
+						Component.literal("§ePvP: " + (cell.pvp ? "§aเปิด" : "§cปิด")),
 						Component.literal("§7พิกัด: " + (cell.cx * config.cellSize) + ", " + (cell.cz * config.cellSize)),
 						hasAuction ? Component.literal("§a[ประมูล] กำลังเปิดประมูลอยู่") : Component.literal("§7สถานะ: ปกติ")
 				)
@@ -255,6 +257,19 @@ public final class ClaimMapGui {
 				)
 		);
 		container.setItem(11, abandon);
+
+		boolean canTogglePvp = cell.isOwner(player.getUUID().toString())
+				|| player.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
+		ItemStack pvp = new ItemStack(cell.pvp ? Items.IRON_SWORD : Items.SHIELD);
+		pvp.set(DataComponents.CUSTOM_NAME, Component.literal(cell.pvp ? "§a[PvP] กำลังเปิดในเขตนี้" : "§c[PvP] กำลังปิดในเขตนี้"));
+		pvp.set(DataComponents.LORE, new ItemLore(List.of(
+				Component.literal("§7เจ้าของเขตเลือกได้ว่าจะให้ผู้เล่น"),
+				Component.literal("§7ต่อสู้กันในเขตนี้หรือไม่ (ทุกเขตใช้กฎนี้)"),
+				Component.literal("§7สถานะ: " + (cell.pvp ? "§aเปิด (ตีกันได้)" : "§cปิด (ตีกันไม่ได้)")),
+				canTogglePvp ? Component.literal("§eคลิกเพื่อ" + (cell.pvp ? "ปิด" : "เปิด") + " PvP")
+						: Component.literal("§8เฉพาะเจ้าของเขตหรือแอดมินเท่านั้น")
+		)));
+		container.setItem(12, pvp);
 
 		ItemStack warp = GuiButtons.button(
 				GuiButtons.WARP,
@@ -308,6 +323,17 @@ public final class ClaimMapGui {
 							sp.sendSystemMessage(Component.literal("§cไม่สามารถปล่อยเขตนี้ได้"));
 						}
 						open(sp, regions, config, economy, returnCx, returnCz);
+					} else if (slotIndex == 12) { // PvP toggle
+						boolean admin = sp.permissions().hasPermission(Permissions.COMMANDS_ADMIN);
+						boolean enable = !cell.pvp;
+						if (regions.setPvp(cell.id, sp.getUUID().toString(), enable, admin)) {
+							sp.sendSystemMessage(Component.literal(enable
+									? "§aเปิด PvP ในเขต " + cell.id + " แล้ว"
+									: "§cปิด PvP ในเขต " + cell.id + " แล้ว"));
+						} else {
+							sp.sendSystemMessage(Component.literal("§cเฉพาะเจ้าของเขตหรือแอดมินเท่านั้นที่เปลี่ยน PvP ได้"));
+						}
+						openCellDetail(sp, cell, regions, config, economy, returnCx, returnCz);
 					} else if (slotIndex == 13) { // Warp
 						sp.closeContainer();
 						ClaimCommands.teleportToCell(sp, cell.cx, cell.cz, config);

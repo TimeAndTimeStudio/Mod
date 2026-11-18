@@ -27,6 +27,8 @@ public final class RegionManager {
 		public String ownerUuid;
 		public String ownerName;
 		public List<String> members = new ArrayList<>(); // UUIDs
+		/** Whether players may damage each other inside this claim. */
+		public boolean pvp = true;
 
 		public CellData() {
 		}
@@ -135,7 +137,7 @@ public final class RegionManager {
 		return out;
 	}
 
-	/** Cells the player owns or is a member of (used by web item sources). */
+	/** Cells the player owns or is a member of. */
 	public List<CellData> cellsAccessibleBy(String uuid) {
 		List<CellData> out = new ArrayList<>();
 		if (uuid == null) return out;
@@ -250,6 +252,21 @@ public final class RegionManager {
 			CellData c = cells.get(id);
 			if (c == null || !c.isOwner(uuid)) return false;
 			c.members.remove(memberUuid);
+			save();
+			return true;
+		}
+	}
+
+	/**
+	 * Lets the claim owner (or an admin) turn PvP on or off for this claim.
+	 * The rule is enforced by {@link Protection} in every claimed cell.
+	 */
+	public boolean setPvp(String id, String uuid, boolean enabled, boolean admin) {
+		synchronized (lock) {
+			CellData c = cells.get(id);
+			if (c == null) return false;
+			if (!admin && !c.isOwner(uuid)) return false;
+			c.pvp = enabled;
 			save();
 			return true;
 		}

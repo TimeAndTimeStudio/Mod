@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -11,6 +12,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BucketItem;
 import net.minecraft.world.item.Item;
@@ -43,6 +46,7 @@ public final class Protection {
 		AttackBlockCallback.EVENT.register(this::onAttack);
 		UseBlockCallback.EVENT.register(this::onUseBlock);
 		UseItemCallback.EVENT.register(this::onUseItem);
+		ServerLivingEntityEvents.ALLOW_DAMAGE.register(this::allowPvpDamage);
 	}
 
 	// ---- break --------------------------------------------------------------
@@ -70,6 +74,24 @@ public final class Protection {
 		if (!isFluidFireItem(player.getItemInHand(hand))) return InteractionResult.PASS;
 		if (!allowed(level, player, player.blockPosition())) return InteractionResult.FAIL; // silently, spraying messages
 		return InteractionResult.PASS;
+	}
+
+	/**
+	 * Player-vs-player damage inside a claim follows that claim's own PvP flag.
+	 * Wilderness keeps the server-wide {@code pvp} setting. The owner toggles
+	 * the flag from the claim GUI; it applies to every claimed cell.
+	 */
+	private boolean allowPvpDamage(LivingEntity entity, DamageSource source, float amount) {
+		if (!(entity instanceof ServerPlayer victim)) return true;
+		if (!(source.getEntity() instanceof ServerPlayer attacker)) return true;
+		if (attacker == victim) return true;
+		Level level = victim.level();
+		if (level == null || level.getServer() == null || level != level.getServer().overworld()) return true;
+		RegionManager.CellData cell = regions.get(regions.cellIdAt(victim.getBlockX(), victim.getBlockZ()));
+		if (cell == null || cell.pvp) return true;
+		attacker.sendSystemMessage(Component.literal(
+				"§cเขต " + cell.id + " ปิด PvP อยู่ (เจ้าของเขตสามารถเปิดได้จากเมนูจัดการเขต)"));
+		return false;
 	}
 
 	// ---- helpers ------------------------------------------------------------
