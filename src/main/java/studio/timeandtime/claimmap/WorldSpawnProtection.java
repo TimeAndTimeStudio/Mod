@@ -96,15 +96,15 @@ public final class WorldSpawnProtection {
 		// On Player Disconnect:
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
 			ServerPlayer player = handler.getPlayer();
-			if (player != null && player.level() == server.overworld()) {
+			if (player != null) {
 				var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
-				if (wm != null && wm.hasMainWorldPosition(player.getUUID())) {
-					wm.recordMainWorldPosition(player);
+				if (wm != null) {
+					wm.recordPlayerCurrentWorldPosition(player);
 				}
 			}
 		});
 
-		// 2. On Player Death: Show coordinates in chat & clear saved main world position
+		// 2. On Player Death: Show coordinates in chat & clear saved world position
 		ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
 			if (entity instanceof ServerPlayer player) {
 				int dx = (int) player.getX();
@@ -117,7 +117,7 @@ public final class WorldSpawnProtection {
 
 				var wm = ClaimMap.instance() != null ? ClaimMap.instance().worldManager() : null;
 				if (wm != null) {
-					wm.clearMainWorldPosition(player.getUUID());
+					wm.clearPlayerWorldPositionOnDeath(player);
 				}
 			}
 		});

@@ -812,6 +812,38 @@ public final class WorldManager {
 		}
 	}
 
+	public void recordPlayerCurrentWorldPosition(ServerPlayer player) {
+		if (server == null || player == null) return;
+		ServerLevel currentLevel = player.level();
+		if (currentLevel == server.overworld()) {
+			recordMainWorldPosition(player);
+			return;
+		}
+		if (isLobby(currentLevel)) return;
+		for (WorldDefinition def : worlds.values()) {
+			if (def.level == currentLevel) {
+				def.recordPosition(player.getUUID(), player.getX(), player.getY(), player.getZ(),
+						player.getYRot(), player.getXRot());
+				break;
+			}
+		}
+	}
+
+	public void clearPlayerWorldPositionOnDeath(ServerPlayer player) {
+		if (server == null || player == null) return;
+		ServerLevel deathLevel = player.level();
+		if (deathLevel == server.overworld()) {
+			clearMainWorldPosition(player.getUUID());
+			return;
+		}
+		for (WorldDefinition def : worlds.values()) {
+			if (def.level == deathLevel) {
+				def.clearSavedPosition(player.getUUID());
+				break;
+			}
+		}
+	}
+
 	public void recordMainWorldPosition(ServerPlayer player) {
 		if (server != null && player != null && player.level() == server.overworld()) {
 			mainWorldPositions.put(player.getUUID(), new MainWorldPos(
@@ -842,8 +874,8 @@ public final class WorldManager {
 		ServerLevel destination = def.level;
 		if (destination == null) throw new IllegalStateException("โลกยังโหลดไม่เสร็จ");
 
-		// If player is leaving the main overworld, remember where they were so they return here
-		recordMainWorldPosition(player);
+		// Remember where player was before teleporting
+		recordPlayerCurrentWorldPosition(player);
 
 		WorldConfig worldCfg = def.config();
 		if (worldCfg == null) {
@@ -871,27 +903,42 @@ public final class WorldManager {
 			return;
 		}
 
-		BlockPos sp = spawnPos(destination);
-		int rx = sp.getX();
-		int rz = sp.getZ();
-		int ry = sp.getY();
-		boolean isRandom = worldCfg.randomSpawn();
-		if (isRandom) {
-			int rad = worldCfg.randomSpawnRadius();
-			BlockPos safePos = WorldSpawnProtection.findSafeSpawnLocation(destination, -rad, rad, -rad, rad);
-			if (safePos != null) {
-				rx = safePos.getX();
-				ry = safePos.getY();
-				rz = safePos.getZ();
+		SavedPos saved = def.getSavedPosition(player.getUUID());
+		Vec3 target;
+		float targetYaw = player.getYRot();
+		float targetPitch = player.getXRot();
+		boolean isFirstTimeRandom = false;
+
+		if (saved != null) {
+			target = new Vec3(saved.x(), saved.y(), saved.z());
+			targetYaw = saved.yaw();
+			targetPitch = saved.pitch();
+		} else {
+			BlockPos sp = spawnPos(destination);
+			int rx = sp.getX();
+			int rz = sp.getZ();
+			int ry = sp.getY();
+			boolean isRandom = worldCfg.randomSpawn();
+			if (isRandom) {
+				int rad = worldCfg.randomSpawnRadius();
+				BlockPos safePos = WorldSpawnProtection.findSafeSpawnLocation(destination, -rad, rad, -rad, rad);
+				if (safePos != null) {
+					rx = safePos.getX();
+					ry = safePos.getY();
+					rz = safePos.getZ();
+					isFirstTimeRandom = true;
+				}
 			}
+			target = new Vec3(rx + 0.5, Math.max(ry, destination.getMinY() + 1), rz + 0.5);
+			// Save the initial spawn position so they don't get randomly scattered on simple reconnects
+			def.recordPosition(player.getUUID(), target.x, target.y, target.z, targetYaw, targetPitch);
 		}
 
-		Vec3 target = new Vec3(rx + 0.5, Math.max(ry, destination.getMinY() + 1), rz + 0.5);
 		TeleportTransition transition = new TeleportTransition(destination, target, Vec3.ZERO,
-				player.getYRot(), player.getXRot(), Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
+				targetYaw, targetPitch, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
 		ServerPlayer moved = player.teleport(transition);
 		if (moved == null) {
-			player.teleportTo(destination, target.x, target.y, target.z, Set.of(), player.getYRot(), player.getXRot(), true);
+			player.teleportTo(destination, target.x, target.y, target.z, Set.of(), targetYaw, targetPitch, true);
 			moved = player;
 		}
 		if (!moved.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
@@ -900,8 +947,8 @@ public final class WorldManager {
 		if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
 			ClaimMap.instance().spawnProtection().grantProtection(moved);
 		}
-		if (isRandom) {
-			ActionBar.send(moved, "ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") พร้อมรับการคุ้มครอง 30 วินาที");
+		if (isFirstTimeRandom) {
+			ActionBar.send(moved, "ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + (int) target.x + ", " + (int) target.y + ", " + (int) target.z + ") พร้อมรับการคุ้มครอง 30 วินาที");
 		} else {
 			ActionBar.send(moved, "ย้ายไปโลก " + def.name() + " พร้อมรับการคุ้มครอง 30 วินาที");
 		}
@@ -925,6 +972,8 @@ public final class WorldManager {
 	private void executeTeleportToMainWorld(ServerPlayer player) {
 		MinecraftServer s = server;
 		if (s == null) return;
+		// Remember where player was before teleporting to main world
+		recordPlayerCurrentWorldPosition(player);
 		ServerLevel mainWorld = s.overworld();
 		MainWorldPos saved = mainWorldPositions.get(player.getUUID());
 		Vec3 target;
