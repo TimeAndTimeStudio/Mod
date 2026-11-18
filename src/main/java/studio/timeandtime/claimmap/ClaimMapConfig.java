@@ -87,6 +87,24 @@ public final class ClaimMapConfig {
 	public int worldIdleUnloadSeconds = 0;
 	/** Expose one short command per discovered world, e.g. /adventure. */
 	public boolean worldPlayerCommands = true;
+	/** Drive the lobby clock from an external web time source instead of the host clock. */
+	public boolean lobbyRealTime = true;
+	/** Time zone used to map the lobby clock to real-world time. */
+	public String lobbyTimeZone = "UTC+7";
+	/** Primary JSON time API returning {@code unixtime} (seconds since the epoch). */
+	public String lobbyTimeUrl = "https://timeapi.io/api/Time/current/zone?timeZone=Asia/Bangkok";
+	/** Fallback URL read through its HTTP {@code Date} header when the time API fails. */
+	public String lobbyTimeFallbackUrl = "https://www.google.com";
+	/** How often the external time is re-read (seconds). */
+	public int lobbyTimeSyncSeconds = 60;
+	/** Make the lobby weather follow the real weather at the coordinates below. */
+	public boolean lobbyWeather = true;
+	public double lobbyWeatherLatitude = 15.656812;
+	public double lobbyWeatherLongitude = 103.588737;
+	/** Weather API base URL (Open-Meteo by default; no API key needed). */
+	public String lobbyWeatherUrl = "https://api.open-meteo.com/v1/forecast";
+	/** How often the real weather is polled (seconds). */
+	public int lobbyWeatherSyncSeconds = 600;
 
 	public ClaimMapConfig() {
 		this(resolveConfigPath());
@@ -176,6 +194,18 @@ public final class ClaimMapConfig {
 		worldScanSeconds = getInt("worldScanSeconds", worldScanSeconds, 5, 86_400);
 		worldIdleUnloadSeconds = getInt("worldIdleUnloadSeconds", worldIdleUnloadSeconds, 0, 86_400);
 		worldPlayerCommands = getBool("worldPlayerCommands", worldPlayerCommands);
+		lobbyRealTime = getBool("lobbyRealTime", lobbyRealTime);
+		lobbyTimeZone = props.getProperty("lobbyTimeZone", lobbyTimeZone).trim();
+		if (lobbyTimeZone.isEmpty()) lobbyTimeZone = "UTC+7";
+		lobbyTimeUrl = props.getProperty("lobbyTimeUrl", lobbyTimeUrl).trim();
+		lobbyTimeFallbackUrl = props.getProperty("lobbyTimeFallbackUrl", lobbyTimeFallbackUrl).trim();
+		lobbyTimeSyncSeconds = getInt("lobbyTimeSyncSeconds", lobbyTimeSyncSeconds, 30, 86_400);
+		lobbyWeather = getBool("lobbyWeather", lobbyWeather);
+		lobbyWeatherLatitude = getDouble("lobbyWeatherLatitude", lobbyWeatherLatitude, -90.0, 90.0);
+		lobbyWeatherLongitude = getDouble("lobbyWeatherLongitude", lobbyWeatherLongitude, -180.0, 180.0);
+		lobbyWeatherUrl = props.getProperty("lobbyWeatherUrl", lobbyWeatherUrl).trim();
+		if (lobbyWeatherUrl.isEmpty()) lobbyWeatherUrl = "https://api.open-meteo.com/v1/forecast";
+		lobbyWeatherSyncSeconds = getInt("lobbyWeatherSyncSeconds", lobbyWeatherSyncSeconds, 60, 86_400);
 
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
@@ -202,7 +232,9 @@ public final class ClaimMapConfig {
 				"auctionMaxActivePerPlayer", "auctionDefaultHours", "auctionMaxHours", "auctionFeePercent",
 				"auctionListFeePercent", "auctionMinIncrementPercent", "auctionAntiSnipeSeconds",
 				"marketMaxActivePerPlayer", "worldDirectory", "worldScanSeconds", "worldIdleUnloadSeconds",
-				"worldPlayerCommands"}) {
+				"worldPlayerCommands", "lobbyRealTime", "lobbyTimeZone", "lobbyTimeUrl", "lobbyTimeFallbackUrl",
+				"lobbyTimeSyncSeconds", "lobbyWeather", "lobbyWeatherLatitude", "lobbyWeatherLongitude",
+				"lobbyWeatherUrl", "lobbyWeatherSyncSeconds"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
@@ -231,6 +263,16 @@ public final class ClaimMapConfig {
 					case "worldScanSeconds" -> Integer.toString(worldScanSeconds);
 					case "worldIdleUnloadSeconds" -> Integer.toString(worldIdleUnloadSeconds);
 					case "worldPlayerCommands" -> Boolean.toString(worldPlayerCommands);
+					case "lobbyRealTime" -> Boolean.toString(lobbyRealTime);
+					case "lobbyTimeZone" -> lobbyTimeZone;
+					case "lobbyTimeUrl" -> lobbyTimeUrl;
+					case "lobbyTimeFallbackUrl" -> lobbyTimeFallbackUrl;
+					case "lobbyTimeSyncSeconds" -> Integer.toString(lobbyTimeSyncSeconds);
+					case "lobbyWeather" -> Boolean.toString(lobbyWeather);
+					case "lobbyWeatherLatitude" -> Double.toString(lobbyWeatherLatitude);
+					case "lobbyWeatherLongitude" -> Double.toString(lobbyWeatherLongitude);
+					case "lobbyWeatherUrl" -> lobbyWeatherUrl;
+					case "lobbyWeatherSyncSeconds" -> Integer.toString(lobbyWeatherSyncSeconds);
 					default -> bindAddress;
 				});
 				changed = true;
@@ -304,6 +346,16 @@ public final class ClaimMapConfig {
 		props.setProperty("worldScanSeconds", Integer.toString(worldScanSeconds));
 		props.setProperty("worldIdleUnloadSeconds", Integer.toString(worldIdleUnloadSeconds));
 		props.setProperty("worldPlayerCommands", Boolean.toString(worldPlayerCommands));
+		props.setProperty("lobbyRealTime", Boolean.toString(lobbyRealTime));
+		props.setProperty("lobbyTimeZone", lobbyTimeZone);
+		props.setProperty("lobbyTimeUrl", lobbyTimeUrl);
+		props.setProperty("lobbyTimeFallbackUrl", lobbyTimeFallbackUrl);
+		props.setProperty("lobbyTimeSyncSeconds", Integer.toString(lobbyTimeSyncSeconds));
+		props.setProperty("lobbyWeather", Boolean.toString(lobbyWeather));
+		props.setProperty("lobbyWeatherLatitude", Double.toString(lobbyWeatherLatitude));
+		props.setProperty("lobbyWeatherLongitude", Double.toString(lobbyWeatherLongitude));
+		props.setProperty("lobbyWeatherUrl", lobbyWeatherUrl);
+		props.setProperty("lobbyWeatherSyncSeconds", Integer.toString(lobbyWeatherSyncSeconds));
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);
@@ -420,6 +472,15 @@ public final class ClaimMapConfig {
 		long v = def;
 		try {
 			v = Long.parseLong(props.getProperty(key, Long.toString(def)).trim());
+		} catch (NumberFormatException ignored) {
+		}
+		return Math.max(min, Math.min(max, v));
+	}
+
+	private double getDouble(String key, double def, double min, double max) {
+		double v = def;
+		try {
+			v = Double.parseDouble(props.getProperty(key, Double.toString(def)).trim());
 		} catch (NumberFormatException ignored) {
 		}
 		return Math.max(min, Math.min(max, v));

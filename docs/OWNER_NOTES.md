@@ -11,6 +11,24 @@
 | `auctionMaxHours` | `72` | ระยะเวลาเปิดประมูลสูงสุด (ชั่วโมง) |
 | `startingBalance` | `1000` | เงินเริ่มต้นของผู้เล่นใหม่เมื่อลงทะเบียน |
 
+### เวลาจริงและสภาพอากาศของ Lobby
+
+| ตัวแปร | ค่ามาตรฐาน | คำอธิบาย |
+| :--- | :--- | :--- |
+| `lobbyRealTime` | `true` | ใช้เวลาจริงจากเว็บภายนอกกับนาฬิกา Lobby (ไม่พึ่งนาฬิกาเครื่อง) |
+| `lobbyTimeZone` | `UTC+7` | เขตเวลาที่ใช้แปลงเวลาจริงเป็นเวลาในเกม |
+| `lobbyTimeUrl` | `worldtimeapi.org/api/timezone/Asia/Bangkok` | API เวลาหลัก (คืนค่า `unixtime`) |
+| `lobbyTimeFallbackUrl` | `https://www.google.com` | แหล่งเวลาสำรอง อ่านจาก HTTP `Date` header |
+| `lobbyTimeSyncSeconds` | `60` | ความถี่ในการดึงเวลาจริง (วินาที) |
+| `lobbyWeather` | `true` | ให้สภาพอากาศ Lobby ตามสภาพจริง |
+| `lobbyWeatherLatitude` | `15.656812` | ละติจูดของพื้นที่ที่ใช้ดูอากาศ |
+| `lobbyWeatherLongitude` | `103.588737` | ลองจิจูดของพื้นที่ที่ใช้ดูอากาศ |
+| `lobbyWeatherUrl` | `https://api.open-meteo.com/v1/forecast` | Weather API (Open-Meteo ไม่ต้องใช้ key) |
+| `lobbyWeatherSyncSeconds` | `600` | ความถี่ในการดึงสภาพอากาศ (วินาที) |
+
+- **เวลา:** ม็อดดึง `unixtime` จาก API เวลาหลัก แล้วเดินเวลาต่อด้วย monotonic clock ภายในเครื่อง (ไม่ขึ้นกับเวลานาฬิกาเครื่อง) หาก API หลักล่มจะอ่าน `Date` header จากเว็บสำรอง หากล้มเหลวทั้งหมดจึงใช้เวลาของเครื่องเป็นทางเลือกสุดท้าย
+- **สภาพอากาศ:** แปลงรหัส WMO จาก Open-Meteo เป็น `clear` / `rain` / `thunder` แล้วสั่งกับโลก `lobby` เท่านั้น (ปิด `advance_weather` เพื่อไม่ให้ vanilla สุ่มเปลี่ยนเอง) โลกหลักไม่ได้รับผลกระทบ
+
 ---
 
 ## 2. การจัดการหน้าเว็บและ Resource Pack

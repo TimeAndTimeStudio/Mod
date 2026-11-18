@@ -56,8 +56,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -96,10 +94,9 @@ public final class WorldManager {
 	 * ticks. 24000 / 1728000 = 0.013888... ticks per tick.
 	 */
 	private static final float LOBBY_REAL_TIME_RATE = 24000f / (86400f * 20f);
-	/** Time zone used to map the lobby clock to real-world time (UTC+7). */
-	private static final ZoneId LOBBY_TIME_ZONE = ZoneId.of("UTC+7");
 
 	private final ClaimMapConfig config;
+	private final RealWorldSync realWorld;
 	private final WorldScanner scanner = new WorldScanner();
 	private final Map<String, WorldDefinition> worlds = new LinkedHashMap<>();
 	private volatile MinecraftServer server;
@@ -108,6 +105,7 @@ public final class WorldManager {
 	private volatile boolean stopping;
 	private volatile studio.timeandtime.claimmap.TeleportManager teleports;
 	private int tickCounter;
+	private RealWorldSync.Weather lastAppliedWeather;
 
 	public void attachTeleports(studio.timeandtime.claimmap.TeleportManager teleports) {
 		this.teleports = teleports;
@@ -125,6 +123,7 @@ public final class WorldManager {
 
 	public WorldManager(ClaimMapConfig config) {
 		this.config = config;
+		this.realWorld = new RealWorldSync(config);
 		CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
 			registerAdminCommand(dispatcher);
 			registerPlayerCommands(dispatcher);
@@ -204,6 +203,7 @@ public final class WorldManager {
 		}
 		this.positionsFile = directory.resolve(".main_world_positions.json");
 		loadMainWorldPositions();
+		realWorld.start();
 		scanLocked();
 		if (worlds.isEmpty()) {
 			tryCreateDefaultWorld("resource");
@@ -277,9 +277,11 @@ public final class WorldManager {
 			tickCounter = 0;
 			scanLocked();
 		}
-		// Keep the lobby clock pinned to real-world UTC+7 time (correct drift).
+		// Keep the lobby clock pinned to the external real-world time and drive
+		// lobby weather from the live conditions at the configured coordinates.
 		if (s.getTickCount() % 20 == 0) {
 			syncLobbyClock();
+			applyLobbyWeather();
 		}
 		int now = s.getTickCount();
 		for (WorldDefinition def : new ArrayList<>(worlds.values())) {
@@ -307,6 +309,7 @@ public final class WorldManager {
 
 	public void shutdown() {
 		stopping = true;
+		realWorld.stop();
 		saveWorldData(server);
 	}
 
@@ -603,11 +606,13 @@ public final class WorldManager {
 	}
 
 	/**
-	 * Lobby world rules: disable natural mob spawning, keep clear weather, and
-	 * drive the lobby's dedicated clock (timeandtime:lobby) at real-world speed
-	 * so its day/night matches the real UTC+7 clock. The lobby uses its own
-	 * world clock (isolated from the main overworld clock), so this does not
-	 * affect the main world's day/night cycle.
+	 * Lobby world rules: disable natural mob spawning, stop vanilla from
+	 * advancing the weather on its own, and drive the lobby's dedicated clock
+	 * (timeandtime:lobby) at real-world speed so its day/night matches the
+	 * external real-world clock. The lobby uses its own world clock (isolated
+	 * from the main overworld clock), so this does not affect the main world's
+	 * day/night cycle. Weather is applied from {@link RealWorldSync} on the
+	 * next server tick.
 	 * Minecraft 26.3 renamed the old doDaylightCycle/doMobSpawning rules to
 	 * advance_time/advance_weather/spawn_mobs.
 	 */
@@ -620,7 +625,10 @@ public final class WorldManager {
 					.withSuppressedOutput();
 			s.getCommands().performPrefixedCommand(source, "gamerule spawn_mobs false");
 			s.getCommands().performPrefixedCommand(source, "gamerule advance_weather false");
+			// Neutral starting state; the real weather is applied as soon as the
+			// first external reading is available.
 			s.getCommands().performPrefixedCommand(source, "weather clear");
+			lastAppliedWeather = null;
 		} catch (Throwable e) {
 			LOGGER.warn("[worlds] Could not apply lobby gamerules: {}", e.getMessage());
 		}
@@ -648,7 +656,7 @@ public final class WorldManager {
 
 	/**
 	 * Configures the lobby's dedicated clock to advance at real-world speed and
-	 * starts it at the current real UTC+7 time of day.
+	 * starts it at the current external real-world time of day.
 	 */
 	private void setupLobbyClock(MinecraftServer s) {
 		if (s == null) return;
@@ -658,13 +666,14 @@ public final class WorldManager {
 			clockManager.setPaused(clock, false);
 			clockManager.setRate(clock, LOBBY_REAL_TIME_RATE);
 			clockManager.setTotalTicks(clock, realWorldLobbyTicks());
-			LOGGER.info("[worlds] Lobby clock set to real-world UTC+7 time");
+			LOGGER.info("[worlds] Lobby clock set to real-world time ({} in {}, source: {})",
+					realWorld.now().toLocalTime().withNano(0), realWorld.zone(), realWorld.timeSource());
 		} catch (Throwable e) {
 			LOGGER.warn("[worlds] Could not set lobby real-world clock: {}", e.getMessage());
 		}
 	}
 
-	/** Corrects the lobby clock's drift so it stays pinned to real UTC+7 time. */
+	/** Corrects the lobby clock's drift so it stays pinned to the external real time. */
 	private void syncLobbyClock() {
 		MinecraftServer s = server;
 		if (s == null || stopping || !hasLobbyWorld()) return;
@@ -677,6 +686,41 @@ public final class WorldManager {
 		}
 	}
 
+	/**
+	 * Applies the real-world weather fetched by {@link RealWorldSync} to the
+	 * lobby level only. Weather commands are given a long duration so the
+	 * state persists between polls ({@code advance_weather} is off anyway).
+	 */
+	private void applyLobbyWeather() {
+		if (!config.lobbyWeather) return;
+		MinecraftServer s = server;
+		if (s == null || stopping) return;
+		WorldDefinition def;
+		synchronized (worlds) {
+			def = worlds.get("lobby");
+		}
+		if (def == null || !def.loaded()) return;
+		ServerLevel level = def.level;
+		if (level == null) return;
+		RealWorldSync.Weather next = realWorld.weather();
+		if (!realWorld.weatherKnown() || next == lastAppliedWeather) return;
+		String command = switch (next) {
+			case CLEAR -> "weather clear 1000000";
+			case RAIN -> "weather rain 1000000";
+			case THUNDER -> "weather thunder 1000000";
+		};
+		try {
+			CommandSourceStack source = s.createCommandSourceStack()
+					.withLevel(level)
+					.withSuppressedOutput();
+			s.getCommands().performPrefixedCommand(source, command);
+			lastAppliedWeather = next;
+			LOGGER.info("[worlds] Lobby weather set to {} (real weather code {})", next, realWorld.weatherCode());
+		} catch (Throwable e) {
+			LOGGER.warn("[worlds] Could not apply lobby weather: {}", e.getMessage());
+		}
+	}
+
 	private Holder<WorldClock> lobbyClockHolder(MinecraftServer s) {
 		ResourceKey<WorldClock> key = ResourceKey.create(Registries.WORLD_CLOCK,
 				Identifier.fromNamespaceAndPath("timeandtime", "lobby"));
@@ -684,11 +728,11 @@ public final class WorldManager {
 	}
 
 	/**
-	 * Maps the current real-world UTC+7 time of day to in-game ticks (0-23999),
-	 * where 0 = midnight, 6000 = 06:00, 12000 = noon, 18000 = 18:00.
+	 * Maps the current external real-world time of day to in-game ticks
+	 * (0-23999), where 0 = midnight, 6000 = 06:00, 12000 = noon, 18000 = 18:00.
 	 */
 	private long realWorldLobbyTicks() {
-		long nanoOfDay = ZonedDateTime.now(LOBBY_TIME_ZONE).toLocalTime().toNanoOfDay();
+		long nanoOfDay = realWorld.now().toLocalTime().toNanoOfDay();
 		return Math.round(nanoOfDay / 86_400_000_000_000.0 * 24000.0);
 	}
 
