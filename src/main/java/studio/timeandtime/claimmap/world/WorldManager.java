@@ -561,6 +561,8 @@ public final class WorldManager {
 			if (stem == null) throw new IllegalStateException("ไม่พบ LevelStem ของโลกหลัก");
 			if ("lobby".equalsIgnoreCase(def.name())) {
 				stem = lobbyDimensionStem(s, stem);
+			} else if ("find".equalsIgnoreCase(def.name())) {
+				stem = findDimensionStem(s, stem);
 			}
 
 			long seed = BiomeManager.obfuscateSeed(
@@ -654,6 +656,24 @@ public final class WorldManager {
 			return new LevelStem(holder, stem.generator());
 		} catch (Throwable e) {
 			LOGGER.warn("[worlds] Could not apply isolated lobby dimension type: {}", e.getMessage());
+			return stem;
+		}
+	}
+
+	/**
+	 * Returns a LevelStem whose dimension type is the dedicated find clock
+	 * (timeandtime:find), so the find world's day/night is isolated from the main
+	 * overworld clock and runs independently.
+	 */
+	private LevelStem findDimensionStem(MinecraftServer s, LevelStem stem) {
+		try {
+			ResourceKey<DimensionType> key = ResourceKey.create(Registries.DIMENSION_TYPE,
+					Identifier.fromNamespaceAndPath("timeandtime", "find"));
+			Holder<DimensionType> holder = s.registryAccess().lookupOrThrow(Registries.DIMENSION_TYPE).getOrThrow(key);
+			LOGGER.info("[worlds] Find world uses isolated dimension type timeandtime:find (own world clock)");
+			return new LevelStem(holder, stem.generator());
+		} catch (Throwable e) {
+			LOGGER.warn("[worlds] Could not apply isolated find dimension type: {}", e.getMessage());
 			return stem;
 		}
 	}
