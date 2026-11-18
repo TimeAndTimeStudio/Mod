@@ -222,7 +222,7 @@ public class ClaimMap implements ModInitializer {
 			auctions.closeExpired(System.currentTimeMillis());
 			maps.start();
 			web.start();
-			LOGGER.info("[timesmp] Started. Web map/API on {}:{} (see config/timesmp/timesmp.properties)",
+			LOGGER.info("[timesmp] Started. Resource pack server on {}:{} (web UI/API retired; see config/timesmp/timesmp.properties)",
 					config.bindAddress, config.port);
 		});
 

@@ -29,12 +29,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Embedded HTTP server (default {@code 0.0.0.0:8085}). Serves the single page
- * web UI at {@code /} plus the JSON API under {@code /api} (PHASES.md E).
- *
- * <p>The master token from the config is a script-only credential: it is never
- * embedded in the served page and only {@code POST /api/command} accepts it.
- * Everything else uses a web session issued by {@code POST /api/login}.
+ * Embedded HTTP server (default {@code 0.0.0.0:8085}). The old web UI and JSON
+ * API have been retired in favour of the in-game GUI: this listener now only
+ * serves the resource pack at {@code /resourcepack.zip} (used by
+ * {@code server.properties} for automatic delivery) plus a small "disabled"
+ * notice at {@code /}. Every {@code /api} route returns 404.
  */
 public final class WebServer {
 	private final ClaimMapConfig config;
@@ -108,7 +107,8 @@ public final class WebServer {
 			httpExecutor = Executors.newFixedThreadPool(8);
 			server.setExecutor(httpExecutor);
 			server.start();
-			ClaimMap.LOGGER.info("[timesmp] HTTP API listening on {}:{}", config.bindAddress, config.port);
+			ClaimMap.LOGGER.info("[timesmp] Resource pack server listening on {}:{} (web UI/API retired)",
+					config.bindAddress, config.port);
 		} catch (IOException e) {
 			ClaimMap.LOGGER.error("[timesmp] Could not start HTTP API", e);
 		}
@@ -148,6 +148,13 @@ public final class WebServer {
 	}
 
 	private void route(HttpExchange ex, String method, String path) throws IOException {
+		// The web UI/API is retired; everything lives in the in-game GUI. The
+		// listener stays up only for resource-pack auto-delivery, so all API
+		// routes are refused here before reaching any handler.
+		if (path.startsWith("/api/")) {
+			throw new Json.ApiError(404, "web_disabled",
+					"Web API ถูกปิดใช้งานแล้ว กรุณาใช้คำสั่งในเกม");
+		}
 		switch (path) {
 			case "/", "/index.html", "/claim-map.html" -> {
 				requireMethod(ex, method, "GET");
