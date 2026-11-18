@@ -191,7 +191,7 @@ public final class WorldSpawnProtection {
 				if (ClaimMap.getServer() != null) {
 					ServerPlayer sp = ClaimMap.getServer().getPlayerList().getPlayer(entry.getKey());
 					if (sp != null && !studio.timeandtime.claimmap.world.WorldManager.isLobby(sp.level())) {
-						sp.sendSystemMessage(Component.literal("§e[ระบบคุ้มครอง] หมดเวลาคุ้มครองความปลอดภัย 30 วินาทีแล้ว"));
+						ActionBar.send(sp, "§e[ระบบคุ้มครอง] หมดเวลาคุ้มครองความปลอดภัย 30 วินาทีแล้ว");
 					}
 				}
 			}
@@ -283,7 +283,7 @@ public final class WorldSpawnProtection {
 		player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, PROTECTION_SECONDS * 20, 4, false, false, true));
 		player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, PROTECTION_SECONDS * 20, 0, false, false, true));
 		player.addEffect(new MobEffectInstance(MobEffects.WATER_BREATHING, PROTECTION_SECONDS * 20, 0, false, false, true));
-		player.sendSystemMessage(Component.literal("§a[ระบบคุ้มครอง] คุณได้รับการคุ้มครองความปลอดภัย 30 วินาที"));
+		ActionBar.send(player, "§a[ระบบคุ้มครอง] คุณได้รับการคุ้มครองความปลอดภัย 30 วินาที");
 	}
 
 	public void randomSpawnPlayer(ServerPlayer player, ServerLevel level, boolean firstJoin) {

@@ -91,6 +91,8 @@ public final class ClaimMapConfig {
 	public String lobbyWeatherUrl = "https://api.open-meteo.com/v1/forecast";
 	/** How often the real weather is polled (seconds). */
 	public int lobbyWeatherSyncSeconds = 600;
+	/** Announce zone (claim cell) enter/exit on the player's action bar. */
+	public boolean zoneAnnouncements = true;
 
 	public ClaimMapConfig() {
 		this(resolveConfigPath());
@@ -186,6 +188,7 @@ public final class ClaimMapConfig {
 		lobbyWeatherUrl = props.getProperty("lobbyWeatherUrl", lobbyWeatherUrl).trim();
 		if (lobbyWeatherUrl.isEmpty()) lobbyWeatherUrl = "https://api.open-meteo.com/v1/forecast";
 		lobbyWeatherSyncSeconds = getInt("lobbyWeatherSyncSeconds", lobbyWeatherSyncSeconds, 60, 86_400);
+		zoneAnnouncements = getBool("zoneAnnouncements", zoneAnnouncements);
 
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
@@ -208,7 +211,7 @@ public final class ClaimMapConfig {
 				"marketMaxActivePerPlayer", "worldDirectory", "worldScanSeconds", "worldIdleUnloadSeconds",
 				"worldPlayerCommands", "lobbyRealTime", "lobbyTimeZone", "lobbyTimeUrl", "lobbyTimeFallbackUrl",
 				"lobbyTimeSyncSeconds", "lobbyWeather", "lobbyWeatherLatitude", "lobbyWeatherLongitude",
-				"lobbyWeatherUrl", "lobbyWeatherSyncSeconds"}) {
+				"lobbyWeatherUrl", "lobbyWeatherSyncSeconds", "zoneAnnouncements"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
@@ -247,6 +250,7 @@ public final class ClaimMapConfig {
 					case "lobbyWeatherLongitude" -> Double.toString(lobbyWeatherLongitude);
 					case "lobbyWeatherUrl" -> lobbyWeatherUrl;
 					case "lobbyWeatherSyncSeconds" -> Integer.toString(lobbyWeatherSyncSeconds);
+					case "zoneAnnouncements" -> Boolean.toString(zoneAnnouncements);
 					default -> throw new IllegalStateException("unhandled config key " + key);
 				});
 				changed = true;
@@ -307,6 +311,7 @@ public final class ClaimMapConfig {
 		props.setProperty("lobbyWeatherLongitude", Double.toString(lobbyWeatherLongitude));
 		props.setProperty("lobbyWeatherUrl", lobbyWeatherUrl);
 		props.setProperty("lobbyWeatherSyncSeconds", Integer.toString(lobbyWeatherSyncSeconds));
+		props.setProperty("zoneAnnouncements", Boolean.toString(zoneAnnouncements));
 		try {
 			Path parent = file.getParent();
 			if (parent != null) Files.createDirectories(parent);

@@ -8,6 +8,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.serialization.Dynamic;
+import studio.timeandtime.claimmap.ActionBar;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -828,7 +829,7 @@ public final class WorldManager {
 			if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
 				ClaimMap.instance().spawnProtection().clearProtection(moved);
 			}
-			moved.sendSystemMessage(Component.literal("ย้ายไปโลก Lobby (พิมพ์ /main เพื่อไปโลกหลัก) แล้ว"));
+			ActionBar.send(moved, "ย้ายไปโลก Lobby (พิมพ์ /main เพื่อไปโลกหลัก) แล้ว");
 			return;
 		}
 
@@ -861,9 +862,9 @@ public final class WorldManager {
 			ClaimMap.instance().spawnProtection().grantProtection(moved);
 		}
 		if (isRandom) {
-			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") พร้อมรับการคุ้มครอง 30 วินาที"));
+			ActionBar.send(moved, "ย้ายไปโลก " + def.name() + " (พิกัดสุ่ม " + rx + ", " + ry + ", " + rz + ") พร้อมรับการคุ้มครอง 30 วินาที");
 		} else {
-			moved.sendSystemMessage(Component.literal("ย้ายไปโลก " + def.name() + " พร้อมรับการคุ้มครอง 30 วินาที"));
+			ActionBar.send(moved, "ย้ายไปโลก " + def.name() + " พร้อมรับการคุ้มครอง 30 วินาที");
 		}
 	}
 
@@ -911,9 +912,9 @@ public final class WorldManager {
 		if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
 			ClaimMap.instance().spawnProtection().grantProtection(moved);
 		}
-		moved.sendSystemMessage(Component.literal(firstTime
+		ActionBar.send(moved, firstTime
 				? "ยินดีต้อนรับสู่โลกหลัก (พิกัดสุ่ม " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ") พร้อมรับการคุ้มครอง 30 วินาที"
-				: "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว (พิกัด " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ") พร้อมรับการคุ้มครอง 30 วินาที"));
+				: "กลับสู่โลกหลักที่ตำแหน่งเดิมแล้ว (พิกัด " + (int)target.x + ", " + (int)target.y + ", " + (int)target.z + ") พร้อมรับการคุ้มครอง 30 วินาที");
 	}
 
 	public WorldInfo createWorld(String name) throws Exception {

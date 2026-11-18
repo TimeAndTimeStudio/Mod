@@ -100,14 +100,14 @@ public class TeleportManager {
 			if (!player.level().dimension().equals(task.startDimension)
 					|| player.position().distanceToSqr(task.startPos) > 0.5) {
 				activeWarmups.remove(uuid);
-				player.sendSystemMessage(Component.literal("§c[Teleport] การวาร์ปถูกยกเลิกเนื่องจากคุณขยับตัว!"));
+				ActionBar.send(player, "§c[Teleport] การวาร์ปถูกยกเลิกเนื่องจากคุณขยับตัว!");
 				if (task.onCancel != null) task.onCancel.run();
 				continue;
 			}
 			task.remainingTicks--;
 			if (task.remainingTicks <= 0) {
 				activeWarmups.remove(uuid);
-				player.sendSystemMessage(Component.literal("§6[Teleport] §aวาร์ปสำเร็จ!"));
+				ActionBar.send(player, "§a[Teleport] วาร์ปสำเร็จ!");
 				try {
 					task.teleportAction.run();
 				} catch (Exception e) {
@@ -115,7 +115,7 @@ public class TeleportManager {
 				}
 			} else if (task.remainingTicks % 20 == 0) {
 				int sec = task.remainingTicks / 20;
-				player.sendSystemMessage(Component.literal("§6[Teleport] §eกำลังวาร์ปในอีก §c" + sec + " §eวินาที... §7(ห้ามขยับตัว)"));
+				ActionBar.send(player, "§e[Teleport] กำลังวาร์ปในอีก §c" + sec + " §eวินาที... §7(ห้ามขยับตัว)");
 			}
 		}
 	}

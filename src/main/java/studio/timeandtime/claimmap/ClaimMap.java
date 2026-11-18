@@ -80,6 +80,7 @@ public class ClaimMap implements ModInitializer {
 	private RegionManager regions;
 	private Protection protection;
 	private WorldSpawnProtection spawnProtection;
+	private ZoneAnnouncer zoneAnnouncer;
 	private LinkManager links;
 	private AccountManager accounts;
 	private EconomyManager economy;
@@ -148,10 +149,12 @@ public class ClaimMap implements ModInitializer {
 				});
 		admin.attachSalesTracker(salesTracker);
 		protection = new Protection(regions);
+		zoneAnnouncer = new ZoneAnnouncer(config, regions);
 		landPrices = new LandPriceService(config.dataDir().resolve("land-price.json"), regions.ownerMap().size());
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
 			if (teleports != null) teleports.tick(srv);
+			if (zoneAnnouncer != null) zoneAnnouncer.tick(srv);
 			if (worldManager != null) worldManager.tick();
 			// Keep the per-player item JSON warm when items are used or picked up.
 			// Every 5 seconds, only carried stacks are re-read; container rows stay

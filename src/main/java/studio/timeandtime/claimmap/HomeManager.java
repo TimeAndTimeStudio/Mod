@@ -169,7 +169,7 @@ public class HomeManager {
 				Vec3.ZERO, home.yaw, home.pitch, Set.of(), TeleportTransition.PLACE_PORTAL_TICKET);
 		ServerPlayer moved = player.teleport(transition);
 		if (moved != null) {
-			moved.sendSystemMessage(Component.literal("§6[Home] §aวาร์ปมายังบ้าน §f" + home.name + " §aแล้ว"));
+			ActionBar.send(moved, "§a[Home] วาร์ปมายังบ้าน §f" + home.name + "§a แล้ว");
 		}
 	}
 }
