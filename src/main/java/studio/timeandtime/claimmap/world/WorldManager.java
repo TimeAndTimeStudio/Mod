@@ -435,6 +435,7 @@ public final class WorldManager {
 				}
 			}
 			def.present = true;
+			def.reloadConfig();
 			if (!def.loaded() && def.state != WorldState.LOADING) {
 				def.error = null;
 				if (def.state == WorldState.ERROR) def.state = WorldState.DISCOVERED;
@@ -844,6 +845,12 @@ public final class WorldManager {
 		// If player is leaving the main overworld, remember where they were so they return here
 		recordMainWorldPosition(player);
 
+		WorldConfig worldCfg = def.config();
+		if (worldCfg == null) {
+			def.reloadConfig();
+			worldCfg = def.config();
+		}
+
 		if ("lobby".equalsIgnoreCase(def.name())) {
 			BlockPos sp = spawnPos(destination);
 			Vec3 target = new Vec3(sp.getX() + 0.5, sp.getY(), sp.getZ() + 0.5);
@@ -855,7 +862,7 @@ public final class WorldManager {
 				moved = player;
 			}
 			if (!moved.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
-				moved.setGameMode(GameType.ADVENTURE);
+				moved.setGameMode(worldCfg.gameMode());
 			}
 			if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
 				ClaimMap.instance().spawnProtection().clearProtection(moved);
@@ -868,9 +875,10 @@ public final class WorldManager {
 		int rx = sp.getX();
 		int rz = sp.getZ();
 		int ry = sp.getY();
-		boolean isRandom = "resource".equalsIgnoreCase(def.name());
+		boolean isRandom = worldCfg.randomSpawn();
 		if (isRandom) {
-			BlockPos safePos = WorldSpawnProtection.findSafeSpawnLocation(destination, -2500, 2500, -2500, 2500);
+			int rad = worldCfg.randomSpawnRadius();
+			BlockPos safePos = WorldSpawnProtection.findSafeSpawnLocation(destination, -rad, rad, -rad, rad);
 			if (safePos != null) {
 				rx = safePos.getX();
 				ry = safePos.getY();
@@ -886,8 +894,8 @@ public final class WorldManager {
 			player.teleportTo(destination, target.x, target.y, target.z, Set.of(), player.getYRot(), player.getXRot(), true);
 			moved = player;
 		}
-		if (moved.gameMode.getGameModeForPlayer() == GameType.ADVENTURE) {
-			moved.setGameMode(GameType.SURVIVAL);
+		if (!moved.permissions().hasPermission(Permissions.COMMANDS_ADMIN)) {
+			moved.setGameMode(worldCfg.gameMode());
 		}
 		if (ClaimMap.instance() != null && ClaimMap.instance().spawnProtection() != null) {
 			ClaimMap.instance().spawnProtection().grantProtection(moved);

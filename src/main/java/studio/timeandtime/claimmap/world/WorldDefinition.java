@@ -30,6 +30,7 @@ public final class WorldDefinition {
 	volatile ServerLevel level;
 	volatile LevelStorageSource.LevelStorageAccess storageAccess;
 	volatile WorldData worldData;
+	volatile WorldConfig config;
 
 	WorldDefinition(String name, String folderName, Path folder, ResourceKey<Level> dimensionKey) {
 		this.name = name;
@@ -76,6 +77,14 @@ public final class WorldDefinition {
 
 	public ServerLevel level() {
 		return level;
+	}
+
+	public WorldConfig config() {
+		return config;
+	}
+
+	public void reloadConfig() {
+		this.config = WorldConfig.load(folder, name);
 	}
 
 	public boolean loaded() {
