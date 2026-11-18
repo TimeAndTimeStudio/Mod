@@ -728,12 +728,15 @@ public final class WorldManager {
 	}
 
 	/**
-	 * Maps the current external real-world time of day to in-game ticks
-	 * (0-23999), where 0 = midnight, 6000 = 06:00, 12000 = noon, 18000 = 18:00.
+	 * Maps the current external real-world time of day to in-game ticks.
+	 * Minecraft day time is 0-23999 where 0 = 06:00 (sunrise), 6000 = noon,
+	 * 12000 = 18:00 and 18000 = midnight. Convert the real local time of day
+	 * accordingly (real 00:00 -> 18000, real 06:00 -> 0, real 14:26 -> ~8433).
 	 */
 	private long realWorldLobbyTicks() {
 		long nanoOfDay = realWorld.now().toLocalTime().toNanoOfDay();
-		return Math.round(nanoOfDay / 86_400_000_000_000.0 * 24000.0);
+		double mcHours = (nanoOfDay / 3_600_000_000_000.0 - 6.0 + 24.0) % 24.0;
+		return Math.round(mcHours / 24.0 * 24000.0);
 	}
 
 	private void unloadLocked(WorldDefinition def) {
