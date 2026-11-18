@@ -204,7 +204,7 @@ public final class ClaimCommands {
 					.then(Commands.literal("set").then(ecoArgs("set"))));
 
 			dispatcher.register(Commands.literal("claim").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runClaimMapGui(ctx.getSource()))
+					.executes(ctx -> runClaimHelp(ctx.getSource()))
 					.then(Commands.literal("add")
 							.then(Commands.argument("player", StringArgumentType.word())
 									.executes(ctx -> runClaimAddHere(ctx.getSource(),
@@ -1032,6 +1032,20 @@ public final class ClaimCommands {
 			case BAD_REQUEST -> src.sendFailure(Component.literal("ข้อมูลไม่ถูกต้อง (เหตุผล 3-200 ตัวอักษร)"));
 			default -> src.sendFailure(Component.literal("ทำรายการไม่สำเร็จ"));
 		}
+		return 1;
+	}
+
+	private int runClaimHelp(CommandSourceStack src) {
+		ServerPlayer player = src.getPlayer();
+		if (player == null) return 0;
+		player.sendSystemMessage(Component.literal("§6============== [ ระบบจัดการเขตที่ดิน ] =============="));
+		player.sendSystemMessage(Component.literal("§e• §a/map §7- เปิดดูแผนที่เรดาร์และกดจอง/ซื้อ/จัดการที่ดิน"));
+		player.sendSystemMessage(Component.literal("§e• §a/claim add <ชื่อ> §7- เพิ่มเพื่อนเป็นสมาชิกในแปลงที่ดิน"));
+		player.sendSystemMessage(Component.literal("§e• §a/claim remove <ชื่อ> §7- ลบสิทธิ์เพื่อนออกจากแปลงที่ดิน"));
+		player.sendSystemMessage(Component.literal("§e• §a/claim tf <ชื่อ> §7- โอนกรรมสิทธิ์ที่ดินแปลงปัจจุบัน"));
+		player.sendSystemMessage(Component.literal("§e• §a/claim at <ราคา> [ชม.] §7- นำโฉนดที่ดินขึ้นตลาดประมูล /ah"));
+		player.sendSystemMessage(Component.literal("§e• §a/claim tp <พิกัดเขต> §7- วาร์ปไปยังเขต (เช่น /claim tp 5,5 หรือ nether:5,5)"));
+		player.sendSystemMessage(Component.literal("§6=================================================="));
 		return 1;
 	}
 
