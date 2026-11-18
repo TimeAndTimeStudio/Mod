@@ -7,6 +7,7 @@
 #   - Fabric API
 #   - Time SMP (timesmp) mod (latest build)
 #   - World generation mods for the main world (lithostitched + tectonic)
+#   - Additional mods (sit + otterlib)
 #   - The lobby world (world-lobby-2026-11-17.zip), installed into
 #     worlds/lobby with all player data wiped
 #   - server.properties tuned for Time SMP:
@@ -131,7 +132,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3d) Lobby world (published on the maplobby release)
+# 3d) Additional mods (sit + otterlib; published for 26.3)
+# ---------------------------------------------------------------------------
+if [ "$MC_VERSION" = "26.3" ]; then
+  log "downloading additional mods (sit + otterlib)"
+  curl -fL -o mods/sit.-1.2.6.4+26.3.jar \
+    "https://github.com/${REPO}/releases/download/${WORLDGEN_RELEASE}/sit.-1.2.6.4+26.3.jar"
+  curl -fL -o mods/otterlib-0.4.0.2+26.3-fabric.jar \
+    "https://github.com/${REPO}/releases/download/${WORLDGEN_RELEASE}/otterlib-0.4.0.2+26.3-fabric.jar"
+else
+  log "skipping additional mods (only published for 26.3)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3e) Lobby world (published on the maplobby release)
 # ---------------------------------------------------------------------------
 LOBBY_URL="${LOBBY_URL:-https://github.com/${REPO}/releases/download/maplobby/world-lobby-2026-11-17.zip}"
 log "downloading lobby world"

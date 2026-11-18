@@ -42,6 +42,7 @@
 
 - โหลด Fabric server, Fabric API และ Time SMP (build ล่าสุด)
 - โหลดม็อดสร้างโลกสำหรับโลกหลัก (lithostitched + tectonic) สำหรับ 26.3
+- โหลดม็อดเสริม (sit + otterlib) สำหรับ 26.3
 - โหลดโลก `lobby` จาก `world-lobby-2026-11-17.zip` ไปวางที่ `worlds/lobby` และล้างข้อมูลผู้เล่นทั้งหมด (player data / advancements / stats)
 - สร้าง `run.sh` ให้เลือกแรมได้
 
