@@ -17,6 +17,9 @@
 #       difficulty=hard, view-distance=10, simulation-distance=6
 #   - run.sh launcher where you choose how much RAM the server uses
 #
+# Missing system tools (curl, jq, unzip, sha1sum, Java 26+) are installed
+# automatically with apt or dnf (sudo is used when not running as root).
+#
 # Usage:
 #   ./setup.sh [server-dir]        # default: $HOME/mcserver
 #   RAM=4G ./setup.sh [dir]        # skip the RAM prompt
@@ -40,9 +43,72 @@ SERVER_DIR="${1:-$HOME/mcserver}"
 die() { echo "[setup] ERROR: $*" >&2; exit 1; }
 log() { echo "[setup] $*"; }
 
+# ---------------------------------------------------------------------------
+# 0) System dependencies: curl, jq, unzip, sha1sum, Java 26+
+#    Missing tools are installed automatically with apt or dnf.
+# ---------------------------------------------------------------------------
+java_major() {
+  # Print the major version of the java on PATH (empty when java is missing).
+  local line num
+  line=$(java -version 2>&1 | head -1) || return 0
+  num=$(printf '%s\n' "$line" | sed -E 's/.*"([^"]+)".*/\1/')
+  case "$num" in
+    1.*) printf '%s' "$num" | cut -d. -f2 ;;  # legacy 1.8 style
+    *)   printf '%s' "$num" | grep -oE '^[0-9]+' || true ;;  # leading digits (e.g. 27-ea -> 27)
+  esac
+}
+
+need_pkgs=()
+command -v curl >/dev/null 2>&1 || need_pkgs+=(curl)
+command -v jq >/dev/null 2>&1 || need_pkgs+=(jq)
+command -v unzip >/dev/null 2>&1 || need_pkgs+=(unzip)
+command -v sha1sum >/dev/null 2>&1 || need_pkgs+=(coreutils)
+
+# Minecraft 26.3 needs Java 26 or newer.
+JAVA_MAJOR=$(java_major)
+if [ "${JAVA_MAJOR:-0}" -lt 26 ]; then
+  need_pkgs+=(java26)
+fi
+
+if [ ${#need_pkgs[@]} -eq 0 ]; then
+  log "system dependencies: OK (Java $JAVA_MAJOR)"
+else
+  log "installing missing system dependencies: ${need_pkgs[*]}"
+  SUDO=""
+  if [ "$(id -u)" -ne 0 ]; then
+    command -v sudo >/dev/null 2>&1 || die "need root (or sudo) to install: ${need_pkgs[*]}"
+    SUDO="sudo"
+  fi
+  PKGS=()
+  for p in "${need_pkgs[@]}"; do
+    case "$p" in
+      java26)
+        if command -v apt-get >/dev/null 2>&1; then
+          PKGS+=(openjdk-26-jre-headless)
+        else
+          PKGS+=(java-26-openjdk-headless)
+        fi ;;
+      *) PKGS+=("$p") ;;
+    esac
+  done
+  if command -v apt-get >/dev/null 2>&1; then
+    $SUDO apt-get update -y
+    $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y "${PKGS[@]}"
+  elif command -v dnf >/dev/null 2>&1; then
+    $SUDO dnf install -y "${PKGS[@]}"
+  else
+    die "no supported package manager (apt or dnf) to install: ${need_pkgs[*]}"
+  fi
+fi
+
+# Final check that everything is available now.
 for cmd in curl jq java sha1sum unzip; do
-  command -v "$cmd" >/dev/null 2>&1 || die "missing dependency: $cmd"
+  command -v "$cmd" >/dev/null 2>&1 || die "missing dependency: $cmd (install it and re-run)"
 done
+JAVA_MAJOR=$(java_major)
+if [ "${JAVA_MAJOR:-0}" -lt 26 ]; then
+  die "java ${JAVA_MAJOR:-?} found but Java 26+ is required (point PATH/JAVA_HOME at a Java 26 install and re-run)"
+fi
 
 # ---------------------------------------------------------------------------
 # 0) RAM for run.sh (asked once, can be preset with RAM=4G ./setup.sh)
