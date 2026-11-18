@@ -75,8 +75,13 @@ public class ClaimMap implements ModInitializer {
 		return spawnProtection;
 	}
 
+	public ServerSettings serverSettings() {
+		return serverSettings;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
+	private ServerSettings serverSettings;
 	private RegionManager regions;
 	private Protection protection;
 	private WorldSpawnProtection spawnProtection;
@@ -110,6 +115,7 @@ public class ClaimMap implements ModInitializer {
 
 		config = new ClaimMapConfig();
 		config.load();
+		serverSettings = new ServerSettings();
 		worldManager = new studio.timeandtime.claimmap.world.WorldManager(config);
 		regions = new RegionManager(config);
 		regions.load();
@@ -194,6 +200,7 @@ public class ClaimMap implements ModInitializer {
 				admin, teleports, homeManager, worldManager, playerMarket).register();
 		new AuctionTicker(auctions, playerMarket).register();
 		protection.register();
+		new PortalGate(serverSettings).register();
 		spawnProtection = new WorldSpawnProtection(config.dataDir());
 		spawnProtection.register();
 		authGate.registerHooks();

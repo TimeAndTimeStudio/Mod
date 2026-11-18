@@ -35,7 +35,7 @@ public final class HelpGui {
 						Component.literal("§7ปกป้องพื้นที่สิ่งก่อสร้างและกล่องของคุณ (64x64 บล็อก)"),
 						Component.literal("§7--------------------------------"),
 						Component.literal("§eคำสั่งที่ใช้งานได้:"),
-						Component.literal("§a/claim §7- ยืนยันจับจองแปลงที่ดิน ณ จุดที่คุณยืน"),
+						Component.literal("§a/map §7(หรือ §a/claim§7) - เปิดแผนที่เรดาร์เพื่อดูและกดซื้อ/จัดการที่ดิน"),
 						Component.literal("§a/claim add <ชื่อ> §7- ให้สิทธิ์เพื่อนสร้าง/เปิดกล่องในแปลง"),
 						Component.literal("§a/claim remove <ชื่อ> §7- ยกเลิกสิทธิ์เพื่อนในแปลง"),
 						Component.literal("§a/claim tf <ชื่อ> §7- โอนกรรมสิทธิ์แปลงนี้ให้เพื่อน"),

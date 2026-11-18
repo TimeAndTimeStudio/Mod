@@ -204,7 +204,7 @@ public final class ClaimCommands {
 					.then(Commands.literal("set").then(ecoArgs("set"))));
 
 			dispatcher.register(Commands.literal("claim").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runClaim(ctx.getSource()))
+					.executes(ctx -> runClaimMapGui(ctx.getSource()))
 					.then(Commands.literal("add")
 							.then(Commands.argument("player", StringArgumentType.word())
 									.executes(ctx -> runClaimAddHere(ctx.getSource(),
