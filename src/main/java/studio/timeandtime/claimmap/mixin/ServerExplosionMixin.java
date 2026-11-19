@@ -34,7 +34,28 @@ public abstract class ServerExplosionMixin {
 
 	@ModifyVariable(method = "interactWithBlocks", at = @At("HEAD"), argsOnly = true)
 	private List<BlockPos> filterClaimedBlocks(List<BlockPos> positions) {
-		if (this.level != null && this.level.getServer() != null && !RegionManager.isClaimableWorld(this.level)) {
+		if (this.level == null || this.level.getServer() == null) {
+			return positions;
+		}
+
+		// Protect End dragon arena natural blocks from ANY explosion (crystals, beds, anchors, dragons)
+		if (this.level.dimension() == net.minecraft.world.level.Level.END) {
+			studio.timeandtime.claimmap.world.EndArenaManager arena = ClaimMap.instance() != null ? ClaimMap.instance().endArena() : null;
+			List<BlockPos> filtered = new ArrayList<>(positions.size());
+			for (BlockPos pos : positions) {
+				if (studio.timeandtime.claimmap.world.EndArenaManager.isMainIsland(this.level, pos)) {
+					// Only allow destroying blocks if placed by player
+					if (arena != null && arena.isPlayerPlaced(pos)) {
+						filtered.add(pos);
+					}
+				} else {
+					filtered.add(pos);
+				}
+			}
+			return filtered;
+		}
+
+		if (!RegionManager.isClaimableWorld(this.level)) {
 			return positions;
 		}
 		Entity direct = this.getDirectSourceEntity();

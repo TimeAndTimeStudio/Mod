@@ -75,6 +75,10 @@ public class ClaimMap implements ModInitializer {
 		return spawnProtection;
 	}
 
+	public studio.timeandtime.claimmap.world.EndArenaManager endArena() {
+		return endArena;
+	}
+
 	public ServerSettings serverSettings() {
 		return serverSettings;
 	}
@@ -85,6 +89,7 @@ public class ClaimMap implements ModInitializer {
 	private RegionManager regions;
 	private Protection protection;
 	private WorldSpawnProtection spawnProtection;
+	private studio.timeandtime.claimmap.world.EndArenaManager endArena;
 	private ZoneAnnouncer zoneAnnouncer;
 	private LinkManager links;
 	private AccountManager accounts;
@@ -154,7 +159,9 @@ public class ClaimMap implements ModInitializer {
 					return s != null && s.getPlayerList().getPlayer(uuid) != null;
 				});
 		admin.attachSalesTracker(salesTracker);
-		protection = new Protection(regions);
+		endArena = new studio.timeandtime.claimmap.world.EndArenaManager(config.dataDir());
+		endArena.load();
+		protection = new Protection(regions, endArena);
 		zoneAnnouncer = new ZoneAnnouncer(config, regions);
 		landPrices = new LandPriceService(config.dataDir().resolve("land-price.json"), regions.ownerMap().size());
 
@@ -215,6 +222,10 @@ public class ClaimMap implements ModInitializer {
 		});
 
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+			if (endArena != null) {
+				net.minecraft.server.level.ServerLevel endLevel = server.getLevel(net.minecraft.world.level.Level.END);
+				endArena.cleanupPlacedBlocks(endLevel);
+			}
 			if (homeManager != null) homeManager.save();
 			if (worldManager != null) worldManager.shutdown();
 			regions.save();

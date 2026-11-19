@@ -105,14 +105,21 @@ public final class RegionManager {
 	public static boolean isClaimableWorld(net.minecraft.world.level.Level level) {
 		if (level == null) return false;
 		var dim = level.dimension();
-		return dim == net.minecraft.world.level.Level.OVERWORLD || dim == net.minecraft.world.level.Level.NETHER;
+		return dim == net.minecraft.world.level.Level.OVERWORLD
+				|| dim == net.minecraft.world.level.Level.NETHER
+				|| dim == net.minecraft.world.level.Level.END;
 	}
 
 	public String cellIdAt(net.minecraft.world.level.Level level, int blockX, int blockZ) {
 		int cx = Math.floorDiv(blockX, cellSize());
 		int cz = Math.floorDiv(blockZ, cellSize());
-		if (level != null && level.dimension() == net.minecraft.world.level.Level.NETHER) {
-			return "nether:" + cx + "," + cz;
+		if (level != null) {
+			if (level.dimension() == net.minecraft.world.level.Level.NETHER) {
+				return "nether:" + cx + "," + cz;
+			}
+			if (level.dimension() == net.minecraft.world.level.Level.END) {
+				return "end:" + cx + "," + cz;
+			}
 		}
 		return cx + "," + cz;
 	}
@@ -172,9 +179,20 @@ public final class RegionManager {
 
 	public ClaimResult claim(net.minecraft.world.level.Level level, int cellX, int cellZ, String uuid, String name) {
 		synchronized (lock) {
-			String id = (level != null && level.dimension() == net.minecraft.world.level.Level.NETHER)
-					? "nether:" + cellX + "," + cellZ
-					: cellX + "," + cellZ;
+			if (level != null && level.dimension() == net.minecraft.world.level.Level.END) {
+				// Block claiming within the 500x500 dragon arena
+				if (studio.timeandtime.claimmap.world.EndArenaManager.isArenaChunk(cellX, cellZ)) {
+					return ClaimResult.ALREADY_CLAIMED;
+				}
+			}
+			String id;
+			if (level != null && level.dimension() == net.minecraft.world.level.Level.NETHER) {
+				id = "nether:" + cellX + "," + cellZ;
+			} else if (level != null && level.dimension() == net.minecraft.world.level.Level.END) {
+				id = "end:" + cellX + "," + cellZ;
+			} else {
+				id = cellX + "," + cellZ;
+			}
 			if (cells.containsKey(id)) return ClaimResult.ALREADY_CLAIMED;
 			if (config.maxCellsPerPlayer > 0 && countClaimedBy(uuid) >= config.maxCellsPerPlayer) return ClaimResult.LIMIT_REACHED;
 			CellData c = new CellData();

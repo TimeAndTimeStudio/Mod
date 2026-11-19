@@ -26,7 +26,7 @@ public final class ClaimMapGui {
 	public static void open(ServerPlayer player, RegionManager regions, ClaimMapConfig config,
 							EconomyManager economy, int centerCx, int centerCz) {
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
 			return;
 		}
 		int playerCx = Math.floorDiv(player.getBlockX(), config.cellSize);
@@ -40,18 +40,26 @@ public final class ClaimMapGui {
 
 		SimpleContainer container = new SimpleContainer(54);
 
+		boolean isEnd = player.level().dimension() == net.minecraft.world.level.Level.END;
+		boolean isNether = player.level().dimension() == net.minecraft.world.level.Level.NETHER;
+
 		// Grid: 5 rows (0..4), 7 columns (1..7) -> 35 cells
 		for (int r = 0; r < 5; r++) {
 			for (int c = 1; c <= 7; c++) {
 				int slot = r * 9 + c;
 				int cellX = centerCx + (c - 4);
 				int cellZ = centerCz + (r - 2);
-				String cellId = (player.level().dimension() == net.minecraft.world.level.Level.NETHER ? "nether:" : "") + cellX + "," + cellZ;
+				String cellId = (isNether ? "nether:" : (isEnd ? "end:" : "")) + cellX + "," + cellZ;
+
+				boolean isArenaCell = isEnd && studio.timeandtime.claimmap.world.EndArenaManager.isArenaChunk(cellX, cellZ);
 
 				RegionManager.CellData cellData = regions.get(cellId);
 
 				ItemStack stack;
-				if (cellData != null) {
+				if (isArenaCell) {
+					stack = itemById("minecraft:purple_stained_glass_pane");
+					stack.set(DataComponents.CUSTOM_NAME, Component.literal("§d[พื้นที่ส่วนกลาง The End] เกาะมังกร"));
+				} else if (cellData != null) {
 					if (cellData.isOwner(myUuid)) {
 						stack = itemById("minecraft:lime_stained_glass_pane");
 						stack.set(DataComponents.CUSTOM_NAME, Component.literal("§a[เขตของคุณ] ช่อง " + cellId));
@@ -68,7 +76,12 @@ public final class ClaimMapGui {
 				lore.add(Component.literal("§7พิกัด X: " + (cellX * config.cellSize) + ".." + (cellX * config.cellSize + config.cellSize - 1)));
 				lore.add(Component.literal("§7พิกัด Z: " + (cellZ * config.cellSize) + ".." + (cellZ * config.cellSize + config.cellSize - 1)));
 
-				if (cellData != null) {
+				if (isArenaCell) {
+					lore.add(Component.literal("§6พื้นที่ส่วนกลางเกาะมังกร"));
+					lore.add(Component.literal("§7- ห้ามเคลมที่ดิน"));
+					lore.add(Component.literal("§7- บล็อกธรรมชาติทนต่อแรงระเบิดและขุดไม่ได้"));
+					lore.add(Component.literal("§7- บล็อกที่ผู้เล่นวางจะถูกล้างเมื่อเซิร์ฟเวอร์ปิด"));
+				} else if (cellData != null) {
 					lore.add(Component.literal("§eเจ้าของ: §f" + cellData.ownerName));
 					lore.add(Component.literal("§eสมาชิก: §7" + (cellData.members == null || cellData.members.isEmpty() ? "ไม่มี" : cellData.members.size() + " คน")));
 					lore.add(Component.literal("§ePvP: " + (cellData.pvp ? "§aเปิด" : "§cปิด")));
@@ -160,7 +173,14 @@ public final class ClaimMapGui {
 						if (r < 5 && c >= 1 && c <= 7) {
 							int cellX = centerCx + (c - 4);
 							int cellZ = centerCz + (r - 2);
-							String id = cellX + "," + cellZ;
+							String id = (sp.level().dimension() == net.minecraft.world.level.Level.NETHER ? "nether:"
+									: (sp.level().dimension() == net.minecraft.world.level.Level.END ? "end:" : "")) + cellX + "," + cellZ;
+
+							if (sp.level().dimension() == net.minecraft.world.level.Level.END
+									&& studio.timeandtime.claimmap.world.EndArenaManager.isArenaChunk(cellX, cellZ)) {
+								sp.sendSystemMessage(Component.literal("§cพื้นที่นี้เป็นพื้นที่ส่วนกลางเกาะมังกร (The End) ไม่สามารถเคลมได้"));
+								return;
+							}
 
 							RegionManager.CellData cd = regions.get(id);
 							if (cd != null) {

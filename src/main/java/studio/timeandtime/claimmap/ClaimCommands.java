@@ -756,7 +756,7 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบแผนที่เรดาร์และเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
 			return 0;
 		}
 		int cx = Math.floorDiv(player.getBlockX(), config.cellSize);
@@ -872,7 +872,7 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
@@ -1053,7 +1053,12 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบจองและซื้อเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบจองและซื้อเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
+			return 0;
+		}
+		if (player.level().dimension() == net.minecraft.world.level.Level.END
+				&& studio.timeandtime.claimmap.world.EndArenaManager.isInsideArena(player.getBlockX(), player.getBlockZ())) {
+			player.sendSystemMessage(Component.literal("§cพื้นที่นี้เป็นพื้นที่ส่วนกลางเกาะมังกร (The End) ไม่สามารถเคลมได้"));
 			return 0;
 		}
 		int bx = player.getBlockX();
@@ -1118,7 +1123,7 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
 			return 0;
 		}
 		String id = regions.cellIdAt(player.level(), player.getBlockX(), player.getBlockZ());
@@ -1140,7 +1145,7 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
@@ -1181,7 +1186,7 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
@@ -1224,7 +1229,7 @@ public final class ClaimCommands {
 		ServerPlayer player = src.getPlayer();
 		if (player == null) return 0;
 		if (!RegionManager.isClaimableWorld(player.level())) {
-			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลักและโลกเนเธอร์เท่านั้น"));
+			player.sendSystemMessage(Component.literal("§cระบบเขตที่ดินเปิดใช้งานเฉพาะในโลกหลัก เนเธอร์ และ The End เท่านั้น"));
 			return 0;
 		}
 		int bx = player.getBlockX();
