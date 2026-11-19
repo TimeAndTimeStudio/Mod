@@ -25,6 +25,9 @@ public final class ServerSettings {
 
 	public boolean netherEnabled = true;
 	public boolean endEnabled = true;
+	public boolean backupEnabled = true;
+	public String backupPath = "backups";
+	public int maxBackups = 10;
 
 	public ServerSettings() {
 		Path configDir = FabricLoader.getInstance().getConfigDir().resolve("timesmp");
@@ -56,7 +59,20 @@ public final class ServerSettings {
 			} else if (obj.has("the_end")) {
 				this.endEnabled = obj.get("the_end").getAsBoolean();
 			}
-			LOGGER.info("[settings] Loaded setting.json: nether={}, end={}", netherEnabled, endEnabled);
+
+			if (obj.has("backup") && obj.get("backup").isJsonObject()) {
+				JsonObject b = obj.getAsJsonObject("backup");
+				if (b.has("enabled")) this.backupEnabled = b.get("enabled").getAsBoolean();
+				if (b.has("path")) this.backupPath = b.get("path").getAsString();
+				if (b.has("max_backups")) this.maxBackups = b.get("max_backups").getAsInt();
+			} else {
+				if (obj.has("backup_enabled")) this.backupEnabled = obj.get("backup_enabled").getAsBoolean();
+				if (obj.has("backup_path")) this.backupPath = obj.get("backup_path").getAsString();
+				if (obj.has("max_backups")) this.maxBackups = obj.get("max_backups").getAsInt();
+			}
+
+			LOGGER.info("[settings] Loaded setting.json: nether={}, end={}, backup=[enabled={}, path={}, max={}]",
+					netherEnabled, endEnabled, backupEnabled, backupPath, maxBackups);
 		} catch (Exception e) {
 			LOGGER.warn("[settings] Could not read setting.json: {}, using defaults", e.getMessage());
 		}
@@ -70,6 +86,13 @@ public final class ServerSettings {
 			JsonObject obj = new JsonObject();
 			obj.addProperty("nether", netherEnabled);
 			obj.addProperty("end", endEnabled);
+
+			JsonObject b = new JsonObject();
+			b.addProperty("enabled", backupEnabled);
+			b.addProperty("path", backupPath);
+			b.addProperty("max_backups", maxBackups);
+			obj.add("backup", b);
+
 			Files.writeString(file, GSON.toJson(obj), StandardCharsets.UTF_8);
 			LOGGER.info("[settings] Saved default setting.json to {}", file);
 		} catch (IOException e) {

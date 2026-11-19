@@ -233,6 +233,14 @@ public class ClaimMap implements ModInitializer {
 			prices.stop();
 			if (backupExecutor != null) backupExecutor.shutdownNow();
 			if (priceExecutor != null) priceExecutor.shutdownNow();
+
+			// Automated world backup before complete shutdown
+			try {
+				studio.timeandtime.claimmap.world.WorldBackupManager.performBackup(server, serverSettings);
+			} catch (Exception e) {
+				LOGGER.error("[timesmp] Error during world backup on shutdown", e);
+			}
+
 			this.server = null;
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
