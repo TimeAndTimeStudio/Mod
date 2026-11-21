@@ -6,21 +6,21 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import studio.timeandtime.claimmap.ClaimMap;
 
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * PregenManager: Manages controlled chunk generation across worlds.
- * Runs asynchronously with throttle based on server tick performance (MSPT).
+ * Runs strictly in Square (สี่เหลี่ยมตามรัศมีบล็อก) and Auto-Detects existing chunks on disk (Option B)
+ * so existing chunks from prior 1k runs or player exploration are automatically skipped.
  */
 public class PregenManager {
 	private static final Logger LOGGER = LoggerFactory.getLogger("timesmp-pregen");
@@ -42,8 +42,8 @@ public class PregenManager {
 		public final int centerX;
 		public final int centerZ;
 		public final int radiusChunks;
-		public final boolean circular;
 		public final int totalChunks;
+		public final int skippedExisting;
 
 		public int currentChunkIndex = 0;
 		public TaskStatus status = TaskStatus.RUNNING;
@@ -55,27 +55,35 @@ public class PregenManager {
 		public transient Set<ChunkPos> inFlight = ConcurrentHashMap.newKeySet();
 		public transient AtomicInteger completedCount = new AtomicInteger(0);
 
-		public PregenTask(String worldName, int centerX, int centerZ, int radiusChunks, boolean circular) {
+		public PregenTask(String worldName, int centerX, int centerZ, int radiusChunks, File dimensionDir) {
 			this.worldName = worldName;
 			this.centerX = centerX;
 			this.centerZ = centerZ;
 			this.radiusChunks = radiusChunks;
-			this.circular = circular;
 
-			// Build chunk coordinates
-			int radSq = radiusChunks * radiusChunks;
+			int skipped = 0;
+			// Build square coordinates only
 			for (int dx = -radiusChunks; dx <= radiusChunks; dx++) {
 				for (int dz = -radiusChunks; dz <= radiusChunks; dz++) {
-					if (!circular || (dx * dx + dz * dz <= radSq)) {
-						chunkList.add(new ChunkPos(centerX + dx, centerZ + dz));
+					int cx = centerX + dx;
+					int cz = centerZ + dz;
+
+					// Option B: Auto-detect if chunk already exists on disk (.mca)
+					if (dimensionDir != null && RegionChunkChecker.doesChunkExist(dimensionDir, cx, cz)) {
+						skipped++;
+						continue; // Skip chunk already generated!
 					}
+					chunkList.add(new ChunkPos(cx, cz));
 				}
 			}
+
+			this.skippedExisting = skipped;
+
 			// Sort spiral out from center
 			chunkList.sort(Comparator.comparingInt(c -> {
 				int dx = c.x() - centerX;
 				int dz = c.z() - centerZ;
-				return dx * dx + dz * dz;
+				return Math.max(Math.abs(dx), Math.abs(dz)); // Square rings
 			}));
 			this.totalChunks = chunkList.size();
 		}
@@ -85,7 +93,7 @@ public class PregenManager {
 	private final int maxInFlight = 16;
 	private final double maxMspt = 45.0; // Throttle if server is struggling
 
-	public synchronized boolean startTask(String worldName, int centerX, int centerZ, int radiusBlocks, boolean circular, CommandSourceStack source) {
+	public synchronized boolean startTask(String worldName, int centerX, int centerZ, int radiusBlocks, CommandSourceStack source) {
 		int radiusChunks = Math.max(1, radiusBlocks / 16);
 		if (activeTasks.containsKey(worldName) && activeTasks.get(worldName).status == TaskStatus.RUNNING) {
 			if (source != null) {
@@ -94,11 +102,21 @@ public class PregenManager {
 			return false;
 		}
 
-		PregenTask task = new PregenTask(worldName, centerX >> 4, centerZ >> 4, radiusChunks, circular);
+		MinecraftServer server = source != null ? source.getServer() : null;
+		File dimDir = null;
+		if (server != null) {
+			ServerLevel lvl = findLevel(server, worldName);
+			if (lvl != null) {
+				dimDir = getDimensionDirectory(server, lvl);
+			}
+		}
+
+		PregenTask task = new PregenTask(worldName, centerX >> 4, centerZ >> 4, radiusChunks, dimDir);
 		activeTasks.put(worldName, task);
 		saveTaskState(task);
 
-		String msg = String.format("§aเริ่ม Pregen โลก §e%s §a(รัศมี %d บล็อก, รวม %d ชังก์)", worldName, radiusBlocks, task.totalChunks);
+		String msg = String.format("§aเริ่ม Pregen โลก §e%s §a(สี่เหลี่ยม รัศมี %d บล็อก | ต้องทำใหม่: §e%d ชังก์ §a| ข้ามของเดิม: §b%d ชังก์§a)",
+				worldName, radiusBlocks, task.totalChunks, task.skippedExisting);
 		LOGGER.info(msg);
 		if (source != null) {
 			source.sendSuccess(() -> Component.literal(msg), true);
@@ -134,7 +152,7 @@ public class PregenManager {
 		if (task != null) {
 			task.status = TaskStatus.CANCELLED;
 			deleteTaskState(worldName);
-			if (source != null) source.sendSuccess(() -> Component.literal("§6ยกเลิก Pregen โลก " + worldName + " เรียบร้อย"), true);
+			if (source != null) source.sendSuccess(() -> Component.literal("§cยกเลิกงาน Pregen โลก " + worldName + " เรียบร้อย"), true);
 			return true;
 		}
 		if (source != null) source.sendFailure(Component.literal("§cไม่มีงาน Pregen ในโลก " + worldName));
@@ -142,7 +160,7 @@ public class PregenManager {
 	}
 
 	public void showStatus(String worldName, CommandSourceStack source) {
-		if (worldName != null && !worldName.isEmpty()) {
+		if (worldName != null) {
 			PregenTask task = activeTasks.get(worldName);
 			if (task == null) {
 				source.sendFailure(Component.literal("§cไม่มีงาน Pregen ในโลก " + worldName));
@@ -163,13 +181,13 @@ public class PregenManager {
 	private void printTaskStatus(PregenTask task, CommandSourceStack source) {
 		int done = task.completedCount.get();
 		int total = task.totalChunks;
-		double pct = total > 0 ? (done * 100.0 / total) : 0.0;
+		double pct = total > 0 ? (done * 100.0 / total) : 100.0;
 		long elapsedSec = (System.currentTimeMillis() - task.startTime) / 1000;
 		double cps = elapsedSec > 0 ? (double) done / elapsedSec : 0.0;
 		long leftSec = cps > 0 ? (long) ((total - done) / cps) : 0;
 
-		String text = String.format("§6[%s] §fสถานะ: §e%s §7| §fเสร็จ: §a%d/%d (%.1f%%) §7| §fความเร็ว: §b%.1f ch/s §7| §fเวลาที่เหลือ: §e%02d:%02d",
-				task.worldName, task.status, done, total, pct, cps, leftSec / 60, leftSec % 60);
+		String text = String.format("§6[%s] §fสถานะ: §e%s §7| §fเสร็จ: §a%d/%d (%.1f%%) §7| §fข้ามเดิม: §b%d §7| §fความเร็ว: §b%.1f ch/s §7| §fเหลือ: §e%02d:%02d",
+				task.worldName, task.status, done, total, pct, task.skippedExisting, cps, leftSec / 60, leftSec % 60);
 		source.sendSuccess(() -> Component.literal(text), false);
 	}
 
@@ -227,13 +245,14 @@ public class PregenManager {
 			if (task.currentChunkIndex >= task.chunkList.size() && task.inFlight.isEmpty()) {
 				task.status = TaskStatus.COMPLETED;
 				deleteTaskState(task.worldName);
-				LOGGER.info("§aPregen โลก {} เสร็จสมบูรณ์! รวม {} ชังก์", task.worldName, task.totalChunks);
+				LOGGER.info("§aPregen โลก {} เสร็จสมบูรณ์! รวมสร้างใหม่ {} ชังก์ (ข้ามชังก์เดิม {})",
+						task.worldName, task.totalChunks, task.skippedExisting);
 				it.remove();
 			}
 		}
 	}
 
-	private ServerLevel findLevel(MinecraftServer server, String worldName) {
+	public ServerLevel findLevel(MinecraftServer server, String worldName) {
 		if ("main".equalsIgnoreCase(worldName) || "overworld".equalsIgnoreCase(worldName)) {
 			return server.overworld();
 		}
@@ -244,6 +263,20 @@ public class PregenManager {
 			}
 		}
 		return null;
+	}
+
+	public File getDimensionDirectory(MinecraftServer server, ServerLevel level) {
+		File root = server.getWorldPath(LevelResource.ROOT).toFile();
+		String path = level.dimension().identifier().getPath();
+		if ("overworld".equals(path) || level == server.overworld()) {
+			return root;
+		} else if ("the_nether".equals(path)) {
+			return new File(root, "DIM-1");
+		} else if ("the_end".equals(path)) {
+			return new File(root, "DIM1");
+		} else {
+			return new File(new File(root, "dimensions"), level.dimension().identifier().getNamespace() + "/" + path);
+		}
 	}
 
 	private File getSaveFile(String worldName) {
@@ -259,7 +292,6 @@ public class PregenManager {
 			props.setProperty("centerX", String.valueOf(task.centerX));
 			props.setProperty("centerZ", String.valueOf(task.centerZ));
 			props.setProperty("radius", String.valueOf(task.radiusChunks));
-			props.setProperty("circular", String.valueOf(task.circular));
 			props.setProperty("currentIndex", String.valueOf(task.currentChunkIndex));
 			props.setProperty("completed", String.valueOf(task.completedCount.get()));
 			props.setProperty("status", task.status.name());

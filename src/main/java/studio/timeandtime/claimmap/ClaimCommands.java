@@ -266,7 +266,7 @@ public final class ClaimCommands {
 															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cz"),
 															StringArgumentType.getString(ctx, "player"))))))));
 
-			// --- TimeSMP Pregen System (/tsmp pregen) ---
+			// --- TimeSMP Pregen System (/pregen) [Square only + Auto-Skip Option B] ---
 			dispatcher.register(Commands.literal("pregen")
 					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
 					.executes(ctx -> {
@@ -281,24 +281,8 @@ public final class ClaimCommands {
 												int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
 												int cx = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockX() : 0;
 												int cz = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockZ() : 0;
-												return studio.timeandtime.claimmap.world.PregenManager.instance().startTask(w, cx, cz, r, true, ctx.getSource()) ? 1 : 0;
-											})
-											.then(Commands.literal("square")
-													.executes(ctx -> {
-														String w = StringArgumentType.getString(ctx, "world");
-														int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
-														int cx = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockX() : 0;
-														int cz = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockZ() : 0;
-														return studio.timeandtime.claimmap.world.PregenManager.instance().startTask(w, cx, cz, r, false, ctx.getSource()) ? 1 : 0;
-													}))
-											.then(Commands.literal("circle")
-													.executes(ctx -> {
-														String w = StringArgumentType.getString(ctx, "world");
-														int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
-														int cx = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockX() : 0;
-														int cz = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockZ() : 0;
-														return studio.timeandtime.claimmap.world.PregenManager.instance().startTask(w, cx, cz, r, true, ctx.getSource()) ? 1 : 0;
-													})))))
+												return studio.timeandtime.claimmap.world.PregenManager.instance().startTask(w, cx, cz, r, ctx.getSource()) ? 1 : 0;
+											}))))
 					.then(Commands.literal("status")
 							.executes(ctx -> {
 								studio.timeandtime.claimmap.world.PregenManager.instance().showStatus(null, ctx.getSource());
