@@ -19,12 +19,17 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import studio.timeandtime.claimmap.world.PregenManager;
 
+import java.io.File;
+import java.io.FileReader;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * LodService: Handles client handshake, requests, and streaming of pregenerated LOD tiles via tml:lod.
+ * Strictly respects server pregen limits (e.g. if server has 64 chunks pregenerated, only 64 chunks are served,
+ * even if the client requests 128 or 256 chunks). Tiles are streamed incrementally with rate limits.
  */
 public class LodService {
 	private static final Logger LOGGER = LoggerFactory.getLogger("timesmp-lod");
@@ -63,6 +68,7 @@ public class LodService {
 
 	private final Set<UUID> tmlClients = ConcurrentHashMap.newKeySet();
 	private final Map<UUID, Integer> clientDistances = new ConcurrentHashMap<>();
+	private int maxServerDistance = 64; // Default fallback distance
 
 	public void registerNetworking() {
 		PayloadTypeRegistry.serverboundPlay().register(PAYLOAD_TYPE, LodPayload.STREAM_CODEC);
@@ -82,9 +88,40 @@ public class LodService {
 		});
 	}
 
+	public void setMaxServerDistance(int distance) {
+		this.maxServerDistance = Math.max(16, Math.min(distance, LodProtocol.MAX_DISTANCE));
+	}
+
+	public int getMaxServerDistance() {
+		return this.maxServerDistance;
+	}
+
+	/**
+	 * Returns the maximum chunk distance available for this world based on pregeneration state.
+	 */
+	public int getAvailableWorldDistance(ServerLevel level) {
+		String worldName = level.dimension().identifier().getPath();
+		int maxRadius = this.maxServerDistance;
+
+		// Check saved pregen task for this world
+		File pregenFile = new File("config/timesmp/pregen", worldName + ".properties");
+		if (pregenFile.exists()) {
+			try (FileReader reader = new FileReader(pregenFile)) {
+				Properties props = new Properties();
+				props.load(reader);
+				String radiusStr = props.getProperty("radius");
+				if (radiusStr != null) {
+					maxRadius = Math.min(maxRadius, Integer.parseInt(radiusStr));
+				}
+			} catch (Exception ignored) {}
+		}
+		return maxRadius;
+	}
+
 	public void onPlayerJoin(ServerPlayer player) {
 		tmlClients.add(player.getUUID());
-		sendOffer(player, 64);
+		int allowedDistance = getAvailableWorldDistance(player.level());
+		sendOffer(player, allowedDistance);
 	}
 
 	public void onPlayerDisconnect(ServerPlayer player) {
@@ -93,12 +130,14 @@ public class LodService {
 	}
 
 	public void sendOffer(ServerPlayer player, int distance) {
-		clientDistances.put(player.getUUID(), distance);
+		int effectiveDistance = Math.min(distance, getAvailableWorldDistance(player.level()));
+		clientDistances.put(player.getUUID(), effectiveDistance);
+
 		FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
 		buf.writeVarInt(LodProtocol.VERSION);
-		buf.writeVarInt(Math.min(distance, LodProtocol.MAX_DISTANCE));
-		buf.writeVarInt(LodProtocol.IN_FLIGHT);
-		buf.writeVarInt(LodProtocol.PER_SECOND);
+		buf.writeVarInt(effectiveDistance);
+		buf.writeVarInt(LodProtocol.IN_FLIGHT);   // e.g. 8 in-flight
+		buf.writeVarInt(LodProtocol.PER_SECOND); // e.g. 64 tiles per sec (smooth stream)
 
 		byte[] out = new byte[buf.readableBytes()];
 		buf.readBytes(out);
@@ -113,6 +152,29 @@ public class LodService {
 		boolean approx = buf.readBoolean();
 
 		ServerLevel level = player.level();
+		int maxRadiusChunks = getAvailableWorldDistance(level);
+
+		// Distance check: verify tile center against player location
+		double playerX = player.getX();
+		double playerZ = player.getZ();
+		int tileSize = stride * LodProtocol.SIDE;
+		double tileCenterX = startX + tileSize / 2.0;
+		double tileCenterZ = startZ + tileSize / 2.0;
+
+		double dx = (tileCenterX - playerX) / 16.0;
+		double dz = (tileCenterZ - playerZ) / 16.0;
+		double distChunksSq = dx * dx + dz * dz;
+
+		// If client asked beyond what server has created (e.g. asking 256 when server only has 64)
+		if (distChunksSq > (maxRadiusChunks + 4) * (maxRadiusChunks + 4)) {
+			// Refuse tile beyond server pregen radius
+			FriendlyByteBuf out = new FriendlyByteBuf(Unpooled.buffer());
+			out.writeVarInt(id);
+			out.writeByte(1); // refusal
+			sendPacket(player, out);
+			return;
+		}
+
 		sendTileReply(player, level, id, startX, startZ, stride);
 	}
 
@@ -124,7 +186,7 @@ public class LodService {
 		ChunkAccess chunk = level.getChunkSource().getChunk(chunkPos.x(), chunkPos.z(), ChunkStatus.FULL, false);
 
 		if (chunk == null) {
-			out.writeByte(1); // refusal
+			out.writeByte(1); // refusal if chunk is not yet generated
 			sendPacket(player, out);
 			return;
 		}
