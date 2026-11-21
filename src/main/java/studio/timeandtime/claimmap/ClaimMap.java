@@ -166,6 +166,7 @@ public class ClaimMap implements ModInitializer {
 		landPrices = new LandPriceService(config.dataDir().resolve("land-price.json"), regions.ownerMap().size());
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
+			studio.timeandtime.claimmap.world.PregenManager.instance().tick(srv);
 			if (teleports != null) teleports.tick(srv);
 			if (zoneAnnouncer != null) zoneAnnouncer.tick(srv);
 			if (worldManager != null) worldManager.tick();

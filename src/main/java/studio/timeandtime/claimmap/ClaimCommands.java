@@ -266,6 +266,59 @@ public final class ClaimCommands {
 															com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "cz"),
 															StringArgumentType.getString(ctx, "player"))))))));
 
+			// --- TimeSMP Pregen System (/tsmp pregen) ---
+			dispatcher.register(Commands.literal("pregen")
+					.requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
+					.executes(ctx -> {
+						studio.timeandtime.claimmap.world.PregenManager.instance().showStatus(null, ctx.getSource());
+						return 1;
+					})
+					.then(Commands.literal("start")
+							.then(Commands.argument("world", StringArgumentType.word())
+									.then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(16, 50000))
+											.executes(ctx -> {
+												String w = StringArgumentType.getString(ctx, "world");
+												int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
+												int cx = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockX() : 0;
+												int cz = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockZ() : 0;
+												return studio.timeandtime.claimmap.world.PregenManager.instance().startTask(w, cx, cz, r, true, ctx.getSource()) ? 1 : 0;
+											})
+											.then(Commands.literal("square")
+													.executes(ctx -> {
+														String w = StringArgumentType.getString(ctx, "world");
+														int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
+														int cx = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockX() : 0;
+														int cz = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockZ() : 0;
+														return studio.timeandtime.claimmap.world.PregenManager.instance().startTask(w, cx, cz, r, false, ctx.getSource()) ? 1 : 0;
+													}))
+											.then(Commands.literal("circle")
+													.executes(ctx -> {
+														String w = StringArgumentType.getString(ctx, "world");
+														int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
+														int cx = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockX() : 0;
+														int cz = ctx.getSource().getPlayer() != null ? ctx.getSource().getPlayer().getBlockZ() : 0;
+														return studio.timeandtime.claimmap.world.PregenManager.instance().startTask(w, cx, cz, r, true, ctx.getSource()) ? 1 : 0;
+													})))))
+					.then(Commands.literal("status")
+							.executes(ctx -> {
+								studio.timeandtime.claimmap.world.PregenManager.instance().showStatus(null, ctx.getSource());
+								return 1;
+							})
+							.then(Commands.argument("world", StringArgumentType.word())
+									.executes(ctx -> {
+										studio.timeandtime.claimmap.world.PregenManager.instance().showStatus(StringArgumentType.getString(ctx, "world"), ctx.getSource());
+										return 1;
+									})))
+					.then(Commands.literal("pause")
+							.then(Commands.argument("world", StringArgumentType.word())
+									.executes(ctx -> studio.timeandtime.claimmap.world.PregenManager.instance().pauseTask(StringArgumentType.getString(ctx, "world"), ctx.getSource()) ? 1 : 0)))
+					.then(Commands.literal("resume")
+							.then(Commands.argument("world", StringArgumentType.word())
+									.executes(ctx -> studio.timeandtime.claimmap.world.PregenManager.instance().resumeTask(StringArgumentType.getString(ctx, "world"), ctx.getSource()) ? 1 : 0)))
+					.then(Commands.literal("cancel")
+							.then(Commands.argument("world", StringArgumentType.word())
+									.executes(ctx -> studio.timeandtime.claimmap.world.PregenManager.instance().cancelTask(StringArgumentType.getString(ctx, "world"), ctx.getSource()) ? 1 : 0))));
+
 			dispatcher.register(Commands.literal("map").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaimMapGui(ctx.getSource())));
 
