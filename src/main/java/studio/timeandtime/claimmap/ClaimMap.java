@@ -163,6 +163,13 @@ public class ClaimMap implements ModInitializer {
 		endArena.load();
 		protection = new Protection(regions, endArena);
 		zoneAnnouncer = new ZoneAnnouncer(config, regions);
+		studio.timeandtime.claimmap.lod.LodService.instance().registerNetworking();
+		net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register((handler, sender, srv) -> {
+			studio.timeandtime.claimmap.lod.LodService.instance().onPlayerJoin(handler.getPlayer());
+		});
+		net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, srv) -> {
+			studio.timeandtime.claimmap.lod.LodService.instance().onPlayerDisconnect(handler.getPlayer());
+		});
 		landPrices = new LandPriceService(config.dataDir().resolve("land-price.json"), regions.ownerMap().size());
 
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(srv -> {
