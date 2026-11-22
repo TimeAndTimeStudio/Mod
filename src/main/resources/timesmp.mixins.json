@@ -13,7 +13,8 @@
 		"ServerLevelsAccessor",
 		"ServerWorldSaveMixin",
 		"ServerExplosionMixin",
-		"DistanceManagerMixin"
+		"DistanceManagerMixin",
+		"PlayerListWhitelistMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

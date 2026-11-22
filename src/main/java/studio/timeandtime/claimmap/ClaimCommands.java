@@ -303,6 +303,9 @@ public final class ClaimCommands {
 							.then(Commands.argument("world", StringArgumentType.word())
 									.executes(ctx -> studio.timeandtime.claimmap.world.PregenManager.instance().cancelTask(StringArgumentType.getString(ctx, "world"), ctx.getSource()) ? 1 : 0))));
 
+			// --- TimeSMP TWhite System (/twhite add <username>) ---
+			studio.timeandtime.claimmap.TWhiteCommand.register(dispatcher);
+
 			dispatcher.register(Commands.literal("map").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaimMapGui(ctx.getSource())));
 
