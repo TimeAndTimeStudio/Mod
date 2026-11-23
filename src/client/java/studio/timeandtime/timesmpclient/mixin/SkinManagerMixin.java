@@ -7,11 +7,9 @@ import com.mojang.authlib.SignatureState;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.mojang.authlib.minecraft.MinecraftProfileTextures;
 import com.mojang.authlib.properties.Property;
-import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.world.entity.player.PlayerSkin;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -22,21 +20,27 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
 
+/**
+ * Lets TimeSMP's server-side skins reach the vanilla renderer.
+ *
+ * <p>The server sends local files as {@code data:image/png;base64,...} and
+ * Ely.by textures as plain URLs, both without a Mojang signature. Vanilla
+ * would otherwise drop them for other players in online mode
+ * ({@code requireSecure}). We only promote URLs the server controls, so an
+ * unsigned Mojang URL or an arbitrary third-party URL is still rejected by
+ * vanilla.</p>
+ */
 @Mixin(SkinManager.class)
 public abstract class SkinManagerMixin {
 	@Unique
 	private static final Gson timesmp$GSON = new Gson();
 
-	@Shadow
-	protected abstract CompletableFuture<PlayerSkin> registerTextures(UUID uuid, MinecraftProfileTextures textures);
-
 	@Inject(method = "get", at = @At("HEAD"), cancellable = true)
-	private void onGetProfileSkin(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
-		if (profile == null) return;
+	private void timesmp$getServerSkin(GameProfile profile,
+			CallbackInfoReturnable<CompletableFuture<Optional<PlayerSkin>>> cir) {
+		if (profile == null || profile.id() == null) return;
 
 		Property texturesProp = profile.properties().get("textures").stream().findFirst().orElse(null);
 		if (texturesProp == null || texturesProp.value() == null || texturesProp.value().isEmpty()) {
@@ -46,64 +50,55 @@ public abstract class SkinManagerMixin {
 		try {
 			String jsonStr = new String(Base64.getDecoder().decode(texturesProp.value()), StandardCharsets.UTF_8);
 			JsonObject json = timesmp$GSON.fromJson(jsonStr, JsonObject.class);
-			if (json != null && json.has("textures")) {
-				JsonObject textures = json.getAsJsonObject("textures");
-				MinecraftProfileTexture skin = null;
-				MinecraftProfileTexture cape = null;
-				MinecraftProfileTexture elytra = null;
+			if (json == null || !json.has("textures")) return;
+			JsonObject textures = json.getAsJsonObject("textures");
 
-				if (textures.has("SKIN")) {
-					JsonObject s = textures.getAsJsonObject("SKIN");
-					String url = s.has("url") ? s.get("url").getAsString() : null;
-					Map<String, String> meta = new HashMap<>();
-					if (s.has("metadata")) {
-						JsonObject m = s.getAsJsonObject("metadata");
-						for (String k : m.keySet()) {
-							meta.put(k, m.get(k).getAsString());
-						}
-					}
-					if (url != null) {
-						skin = new MinecraftProfileTexture(url, meta);
-					}
-				}
+			MinecraftProfileTexture skin = timesmp$texture(textures, "SKIN");
+			MinecraftProfileTexture cape = timesmp$texture(textures, "CAPE");
+			MinecraftProfileTexture elytra = timesmp$texture(textures, "ELYTRA");
 
-				if (textures.has("CAPE")) {
-					JsonObject c = textures.getAsJsonObject("CAPE");
-					String url = c.has("url") ? c.get("url").getAsString() : null;
-					if (url != null) {
-						cape = new MinecraftProfileTexture(url, null);
-					}
-				}
-
-				if (textures.has("ELYTRA")) {
-					JsonObject e = textures.getAsJsonObject("ELYTRA");
-					String url = e.has("url") ? e.get("url").getAsString() : null;
-					if (url != null) {
-						elytra = new MinecraftProfileTexture(url, null);
-					}
-				}
-
-				if (skin != null || cape != null || elytra != null) {
-					// Always use SIGNED so vanilla does not treat custom textures as insecure
-					MinecraftProfileTextures parsed = new MinecraftProfileTextures(skin, cape, elytra, SignatureState.SIGNED);
-					CompletableFuture<Optional<PlayerSkin>> future = registerTextures(profile.id(), parsed)
-							.thenApply(Optional::of);
-					cir.setReturnValue(future);
-				}
+			if (skin == null && cape == null && elytra == null) return;
+			if (!timesmp$isCustom(skin) && !timesmp$isCustom(cape) && !timesmp$isCustom(elytra)) {
+				// Not one of our skins: let vanilla verify its signature.
+				return;
 			}
+
+			MinecraftProfileTextures parsed =
+					new MinecraftProfileTextures(skin, cape, elytra, SignatureState.SIGNED);
+			CompletableFuture<PlayerSkin> future =
+					((SkinManagerInvoker) (Object) this).timesmp$registerTextures(profile.id(), parsed);
+			cir.setReturnValue(future.thenApply(Optional::of));
 		} catch (Exception ignored) {
+			// A damaged property falls through to vanilla's own handling.
 		}
 	}
 
-	@Inject(method = "createLookup", at = @At("HEAD"), cancellable = true)
-	private void onCreateLookup(GameProfile profile, boolean requireSecure, CallbackInfoReturnable<Supplier<PlayerSkin>> cir) {
-		if (profile == null) return;
-		// For offline / custom skin players, never reject textures due to requireSecure check
-		CompletableFuture<Optional<PlayerSkin>> future = ((SkinManager) (Object) this).get(profile);
-		PlayerSkin defaultSkin = DefaultPlayerSkin.get(profile);
-		cir.setReturnValue(() -> {
-			Optional<PlayerSkin> opt = future.getNow(Optional.empty());
-			return opt.orElse(defaultSkin);
-		});
+	@Unique
+	private static MinecraftProfileTexture timesmp$texture(JsonObject textures, String kind) {
+		if (!textures.has(kind)) return null;
+		JsonObject entry = textures.getAsJsonObject(kind);
+		if (!entry.has("url")) return null;
+		String url = entry.get("url").getAsString();
+		if (url == null || url.isEmpty()) return null;
+		Map<String, String> meta = new HashMap<>();
+		if (entry.has("metadata")) {
+			JsonObject m = entry.getAsJsonObject("metadata");
+			for (String key : m.keySet()) {
+				meta.put(key, m.get(key).getAsString());
+			}
+		}
+		return new MinecraftProfileTexture(url, meta);
+	}
+
+	@Unique
+	private static boolean timesmp$isCustom(MinecraftProfileTexture texture) {
+		if (texture == null) return false;
+		String url = texture.getUrl();
+		if (url == null) return false;
+		return url.startsWith("data:image/")
+				|| url.startsWith("http://skinsystem.ely.by/")
+				|| url.startsWith("https://skinsystem.ely.by/")
+				|| url.startsWith("http://ely.by/")
+				|| url.startsWith("https://ely.by/");
 	}
 }

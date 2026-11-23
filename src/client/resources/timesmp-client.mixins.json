@@ -3,8 +3,10 @@
 	"package": "studio.timeandtime.timesmpclient.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
+		"ContainerScreenMixin",
 		"SkinTextureDownloaderMixin",
-		"SkinManagerMixin"
+		"SkinManagerMixin",
+		"SkinManagerInvoker"
 	],
 	"injectors": {
 		"defaultRequire": 1
