@@ -1,0 +1,74 @@
+{
+  "menu_title": "&6&lTime SMP &8- &7เมนูหลัก",
+  "open_command": ["menu", "mainmenu"],
+  "size": 27,
+  "items": {
+    "border": {
+      "material": "gray_stained_glass_pane",
+      "slots": [0, 1, 2, 3, 5, 6, 7, 8, 9, 17, 18, 19, 20, 21, 23, 24, 25, 26],
+      "display_name": " "
+    },
+    "profile": {
+      "material": "player_head",
+      "slot": 4,
+      "display_name": "&e&lข้อมูลผู้เล่น",
+      "lore": [
+        "&7ผู้เล่น: &f%player_name%",
+        "&7ยอดเงิน: &a$%balance%"
+      ]
+    },
+    "shop": {
+      "material": "paper",
+      "slot": 11,
+      "model_type": "cart",
+      "display_name": "&a&lร้านค้าเซิร์ฟเวอร์ (/shop)",
+      "lore": [
+        "&7เปิดเมนูซื้อ-ขายไอเทมของเซิร์ฟเวอร์",
+        "",
+        "&eคลิกเพื่อเปิดร้านค้า"
+      ],
+      "click_commands": [
+        "[player] shop"
+      ]
+    },
+    "market": {
+      "material": "paper",
+      "slot": 13,
+      "model_type": "gavel",
+      "display_name": "&b&lตลาดผู้เล่น (/market)",
+      "lore": [
+        "&7ตลาดซื้อขายและประมูลของผู้เล่น",
+        "",
+        "&eคลิกเพื่อเปิดตลาด"
+      ],
+      "click_commands": [
+        "[player] ah"
+      ]
+    },
+    "warp": {
+      "material": "paper",
+      "slot": 15,
+      "model_type": "warp",
+      "display_name": "&d&lเมนูวาร์ป (/warp)",
+      "lore": [
+        "&7เดินทางไปยังสถานที่ต่างๆ",
+        "",
+        "&eคลิกเพื่อเปิดเมนูวาร์ป"
+      ],
+      "click_commands": [
+        "[openmenu] warp_menu"
+      ]
+    },
+    "close": {
+      "material": "barrier",
+      "slot": 22,
+      "display_name": "&c&lปิดเมนู",
+      "lore": [
+        "&7คลิกเพื่อปิดหน้าต่างนี้"
+      ],
+      "click_commands": [
+        "[close]"
+      ]
+    }
+  }
+}

@@ -83,9 +83,14 @@ public class ClaimMap implements ModInitializer {
 		return serverSettings;
 	}
 
+	public studio.timeandtime.claimmap.menu.CustomMenuManager customMenus() {
+		return customMenus;
+	}
+
 	private volatile MinecraftServer server;
 	private ClaimMapConfig config;
 	private ServerSettings serverSettings;
+	private studio.timeandtime.claimmap.menu.CustomMenuManager customMenus;
 	private RegionManager regions;
 	private Protection protection;
 	private WorldSpawnProtection spawnProtection;
@@ -131,6 +136,8 @@ public class ClaimMap implements ModInitializer {
 		economy = new EconomyManager(config.dataDir(), config, System::currentTimeMillis);
 		economy.load();
 		authGate = new AuthGate(config, accounts, links, economy);
+		customMenus = new studio.timeandtime.claimmap.menu.CustomMenuManager(config.dataDir());
+		customMenus.load();
 		seedDefaultPricesIfMissing(config.dataDir());
 		prices = new PriceService(config.dataDir(), config, System::currentTimeMillis);
 		prices.loadCache();
