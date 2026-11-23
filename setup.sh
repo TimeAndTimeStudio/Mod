@@ -32,7 +32,7 @@ set -euo pipefail
 
 MC_VERSION="${MC_VERSION:-26.3}"
 REPO="${REPO:-TimeAndTimeStudio/Mod}"
-MOD_TAG="${MOD_TAG:-latest}"
+MOD_TAG="${MOD_TAG:-mod_26.3}"
 # The CI publishes to releases: 26.3 is the historical timesmp.jar,
 # other Minecraft versions use timesmp-mc<version>.jar.
 if [ "$MC_VERSION" = "26.3" ]; then
