@@ -210,8 +210,8 @@ public final class TpaGui {
 						Component.literal("§7ผู้เล่นต้องการวาร์ปมายังตำแหน่งของคุณ"),
 						Component.literal("§7เวลาคงเหลือ: §e" + timeStr),
 						Component.literal("§7--------------------------------"),
-						Component.literal("§a[คลิกซ้าย หรือคลิกขวา] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
-						Component.literal("§7(หากต้องการปฏิเสธ ให้รอหมดเวลา หรือกดยกเลิก)")
+						Component.literal("§a[คลิกซ้าย] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
+						Component.literal("§c[คลิกขวา] §7ปฏิเสธ/ยกเลิกคำขอนี้")
 				)));
 				container.setItem(slot, reqStack);
 
@@ -219,8 +219,12 @@ public final class TpaGui {
 					player.closeContainer();
 					teleports.accept(player, req.senderName());
 				};
+				Runnable denyAction = () -> {
+					teleports.deny(player, req.senderName());
+					openRequests(player, teleports);
+				};
 				leftClicks.put(slot, acceptAction);
-				rightClicks.put(slot, acceptAction);
+				rightClicks.put(slot, denyAction);
 			}
 		}
 
@@ -232,11 +236,6 @@ public final class TpaGui {
 				container,
 				(slotIndex, button, input, sp) -> {
 					Runnable action = button == 1 ? rightClicks.get(slotIndex) : leftClicks.get(slotIndex);
-					if (action == null && button == 1) {
-						action = leftClicks.get(slotIndex);
-					} else if (action == null && button == 0) {
-						action = rightClicks.get(slotIndex);
-					}
 					if (action != null) action.run();
 				},
 				null
