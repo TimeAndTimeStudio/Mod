@@ -4,8 +4,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"SkinTextureDownloaderMixin",
-		"SkinManagerMixin",
-		"ContainerScreenMixin"
+		"SkinManagerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
