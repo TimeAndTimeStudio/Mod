@@ -1,6 +1,7 @@
 package studio.timeandtime.claimmap;
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -275,6 +276,21 @@ public final class AuthGate {
 		state.phase = Phase.AUTHED;
 		states.put(uuid, state);
 		economy.ensureAccount(uuid);
+		// A skin saved during the configuration dialog exists on disk but the
+		// GameProfile was created before it. Apply it on the first tick after
+		// join, so the player does not have to reconnect to see it.
+		MinecraftServer server = ClaimMap.getServer();
+		if (server != null) {
+			server.execute(() -> {
+				if (player.isRemoved()) return;
+				Property localSkin = studio.timeandtime.claimmap.skin.SkinRestorerService
+						.fetchSkinProperty(name);
+				if (localSkin != null) {
+					studio.timeandtime.claimmap.skin.SkinRestorerService
+							.updatePlayerSkinLive(player, localSkin);
+				}
+			});
+		}
 		player.sendSystemMessage(Component.literal("เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ!"));
 		player.sendSystemMessage(Component.literal("ยอดเงิน: " + economy.balance(uuid) + " " + config.currencyName));
 	}
