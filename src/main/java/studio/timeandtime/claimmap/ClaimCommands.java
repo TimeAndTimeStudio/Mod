@@ -306,6 +306,18 @@ public final class ClaimCommands {
 			// --- TimeSMP TWhite System (/twhite add <username>) ---
 			studio.timeandtime.claimmap.TWhiteCommand.register(dispatcher);
 
+			// --- TimeSMP Skin Command (/skin <targetUsername>) ---
+			dispatcher.register(Commands.literal("skin").requires(src -> src.getPlayer() != null)
+					.then(Commands.argument("target", StringArgumentType.word())
+							.executes(ctx -> {
+								ServerPlayer sp = ctx.getSource().getPlayer();
+								if (sp == null) return 0;
+								String target = StringArgumentType.getString(ctx, "target");
+								studio.timeandtime.claimmap.skin.SkinRestorerService.setSkin(sp.getGameProfile().name(), target);
+								ctx.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("§a[Skin] ตั้งค่าสกินเป็น " + target + " เรียบร้อยแล้ว (จะแสดงผลเต็มรูปแบบเมื่อเชื่อมต่อใหม่)"), false);
+								return 1;
+							})));
+
 			dispatcher.register(Commands.literal("map").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaimMapGui(ctx.getSource())));
 

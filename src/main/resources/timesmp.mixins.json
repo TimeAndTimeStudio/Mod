@@ -14,7 +14,8 @@
 		"ServerWorldSaveMixin",
 		"ServerExplosionMixin",
 		"DistanceManagerMixin",
-		"PlayerListWhitelistMixin"
+		"PlayerListWhitelistMixin",
+		"ServerLoginPacketListenerImplMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
