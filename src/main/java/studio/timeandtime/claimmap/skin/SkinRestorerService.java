@@ -67,7 +67,7 @@ public final class SkinRestorerService {
 	}
 
 	/**
-	 * Fetches signed textures property from cache or Mojang API.
+	 * Fetches signed textures property from cache or Mojang API, falling back to Ely.by (TML Client skin system).
 	 */
 	public static Property fetchSkinProperty(String username) {
 		if (username == null || username.isBlank()) return null;
@@ -78,6 +78,24 @@ public final class SkinRestorerService {
 			return cached;
 		}
 
+		// 1. Try Mojang API first
+		Property mojangProp = fetchMojangSkin(username);
+		if (mojangProp != null) {
+			SKIN_CACHE.put(key, mojangProp);
+			return mojangProp;
+		}
+
+		// 2. Fallback to Ely.by skinsystem (used by TML Client for offline skins)
+		Property elyByProp = fetchElyBySkin(username);
+		if (elyByProp != null) {
+			SKIN_CACHE.put(key, elyByProp);
+			return elyByProp;
+		}
+
+		return null;
+	}
+
+	private static Property fetchMojangSkin(String username) {
 		try {
 			// Step 1: Resolve UUID from username
 			URL uuidUrl = URI.create("https://api.mojang.com/users/profiles/minecraft/" + username).toURL();
@@ -123,17 +141,88 @@ public final class SkinRestorerService {
 					if ("textures".equals(obj.get("name").getAsString())) {
 						String val = obj.get("value").getAsString();
 						String sig = obj.has("signature") ? obj.get("signature").getAsString() : null;
-						Property prop = new Property("textures", val, sig);
-						SKIN_CACHE.put(key, prop);
-						LOGGER.info("[timesmp] Loaded and cached skin for {}", username);
-						return prop;
+						LOGGER.info("[timesmp] Loaded Mojang skin for {}", username);
+						return new Property("textures", val, sig);
 					}
 				}
 			}
 		} catch (Exception e) {
-			LOGGER.warn("[timesmp] Could not fetch skin for {}: {}", username, e.getMessage());
+			LOGGER.warn("[timesmp] Could not fetch Mojang skin for {}: {}", username, e.getMessage());
 		}
+		return null;
+	}
 
+	/**
+	 * Fetches offline skin from Ely.by skinsystem (TML Client offline skin provider).
+	 * Builds a base64 Minecraft textures property compatible with TML Client and vanilla clients.
+	 */
+	public static Property fetchElyBySkin(String username) {
+		try {
+			URL url = URI.create("https://skinsystem.ely.by/textures/" + username).toURL();
+			HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+			conn.setRequestMethod("GET");
+			conn.setRequestProperty("User-Agent", "TimeSMP-Server/1.0");
+			conn.setConnectTimeout(3000);
+			conn.setReadTimeout(3000);
+
+			if (conn.getResponseCode() != 200) {
+				return null;
+			}
+
+			JsonObject root;
+			try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
+				root = JsonParser.parseReader(reader).getAsJsonObject();
+			}
+
+			if (!root.has("SKIN")) {
+				return null;
+			}
+
+			JsonObject skinObj = root.getAsJsonObject("SKIN");
+			String skinUrl = skinObj.get("url").getAsString();
+			boolean isSlim = false;
+			if (skinObj.has("metadata")) {
+				JsonObject meta = skinObj.getAsJsonObject("metadata");
+				if (meta.has("model") && "slim".equalsIgnoreCase(meta.get("model").getAsString())) {
+					isSlim = true;
+				}
+			}
+
+			// Format into standard Minecraft textures JSON
+			// { "textures": { "SKIN": { "url": "..." (, "metadata": {"model": "slim"}) } } }
+			JsonObject skinEntry = new JsonObject();
+			skinEntry.addProperty("url", skinUrl);
+			if (isSlim) {
+				JsonObject meta = new JsonObject();
+				meta.addProperty("model", "slim");
+				skinEntry.add("metadata", meta);
+			}
+
+			JsonObject texturesObj = new JsonObject();
+			texturesObj.add("SKIN", skinEntry);
+
+			if (root.has("CAPE")) {
+				JsonObject capeObj = root.getAsJsonObject("CAPE");
+				if (capeObj.has("url")) {
+					JsonObject capeEntry = new JsonObject();
+					capeEntry.addProperty("url", capeObj.get("url").getAsString());
+					texturesObj.add("CAPE", capeEntry);
+				}
+			}
+
+			JsonObject payload = new JsonObject();
+			payload.addProperty("timestamp", System.currentTimeMillis());
+			payload.addProperty("profileName", username);
+			payload.add("textures", texturesObj);
+
+			String jsonString = payload.toString();
+			String base64Value = java.util.Base64.getEncoder().encodeToString(jsonString.getBytes(StandardCharsets.UTF_8));
+
+			LOGGER.info("[timesmp] Loaded Ely.by / TML offline skin for {}", username);
+			return new Property("textures", base64Value, null);
+		} catch (Exception e) {
+			LOGGER.warn("[timesmp] Could not fetch Ely.by skin for {}: {}", username, e.getMessage());
+		}
 		return null;
 	}
 }
