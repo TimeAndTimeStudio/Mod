@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "timesmp-client",
+	"version": "${version}",
+	"name": "TimeSMP Client",
+	"description": "Client-side mod for Time SMP that enables custom skins, data URIs and offline skin rendering.",
+	"authors": [
+		"TimeAndTimeStudio"
+	],
+	"contact": {
+		"sources": "https://github.com/TimeAndTimeStudio/Mod"
+	},
+	"license": "MIT",
+	"icon": "icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"studio.timeandtime.timesmpclient.TimeSmpClient"
+		]
+	},
+	"mixins": [
+		"timesmp-client.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": ">=26.2 <26.4",
+		"java": ">=25",
+		"fabric-api": ">=0.161.0"
+	}
+}

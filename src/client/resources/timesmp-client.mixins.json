@@ -1,0 +1,12 @@
+{
+	"required": true,
+	"package": "studio.timeandtime.timesmpclient.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"SkinTextureDownloaderMixin",
+		"SkinManagerMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

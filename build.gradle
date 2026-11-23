@@ -1,0 +1,61 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+def mcVersion = (project.findProperty('minecraft_version') ?: '26.3').toString()
+def loaderVersion = (project.findProperty('loader_version') ?: '0.20.1').toString()
+
+def fabricApiFor = [
+	'26.2': (String) project.findProperty('fabric_api_26_2'),
+	'26.3': (String) project.findProperty('fabric_api_26_3'),
+]
+def fabApiVersion = project.hasProperty('fabric_api_version')
+	? (String) project.findProperty('fabric_api_version')
+	: (String) fabricApiFor.getOrDefault(mcVersion, '0.165.2+26.3')
+
+base {
+	archivesName = "timesmp-client"
+}
+
+tasks.withType(Jar).configureEach {
+	if (name == 'jar' || name == 'remapJar') {
+		archiveFileName.set("timesmp-client.jar")
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"timesmp-client" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${mcVersion}"
+	implementation "net.fabricmc:fabric-loader:${loaderVersion}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${fabApiVersion}"
+}
+
+processClientResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
