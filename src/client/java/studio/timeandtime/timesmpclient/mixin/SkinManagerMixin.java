@@ -7,6 +7,7 @@ import com.mojang.authlib.SignatureState;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.mojang.authlib.minecraft.MinecraftProfileTextures;
 import com.mojang.authlib.properties.Property;
+import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.world.entity.player.PlayerSkin;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 @Mixin(SkinManager.class)
 public abstract class SkinManagerMixin {
@@ -82,6 +84,7 @@ public abstract class SkinManagerMixin {
 				}
 
 				if (skin != null || cape != null || elytra != null) {
+					// Always use SIGNED so vanilla does not treat custom textures as insecure
 					MinecraftProfileTextures parsed = new MinecraftProfileTextures(skin, cape, elytra, SignatureState.SIGNED);
 					CompletableFuture<Optional<PlayerSkin>> future = registerTextures(profile.id(), parsed)
 							.thenApply(Optional::of);
@@ -90,5 +93,17 @@ public abstract class SkinManagerMixin {
 			}
 		} catch (Exception ignored) {
 		}
+	}
+
+	@Inject(method = "createLookup", at = @At("HEAD"), cancellable = true)
+	private void onCreateLookup(GameProfile profile, boolean requireSecure, CallbackInfoReturnable<Supplier<PlayerSkin>> cir) {
+		if (profile == null) return;
+		// For offline / custom skin players, never reject textures due to requireSecure check
+		CompletableFuture<Optional<PlayerSkin>> future = ((SkinManager) (Object) this).get(profile);
+		PlayerSkin defaultSkin = DefaultPlayerSkin.get(profile);
+		cir.setReturnValue(() -> {
+			Optional<PlayerSkin> opt = future.getNow(Optional.empty());
+			return opt.orElse(defaultSkin);
+		});
 	}
 }
