@@ -96,8 +96,8 @@ public final class ClaimMapConfig {
 	/** Send resource pack push packet to connecting players automatically. */
 	public boolean resourcePackAutoPush = true;
 	public String resourcePackUrl = "https://github.com/TimeAndTimeStudio/Mod/releases/download/latest/resourcepack.zip";
-	public String resourcePackHash = "cac88def8d761e2752a75c3fd830c4c888b0a25c";
-	public String resourcePackPrompt = "Time SMP Thai Font Fix & Custom UI";
+	public String resourcePackHash = "";
+	public String resourcePackPrompt = "Time SMP Resource Pack";
 
 	public ClaimMapConfig() {
 		this(resolveConfigPath());
@@ -198,6 +198,9 @@ public final class ClaimMapConfig {
 		resourcePackUrl = props.getProperty("resourcePackUrl", resourcePackUrl).trim();
 		resourcePackHash = props.getProperty("resourcePackHash", resourcePackHash).trim();
 		resourcePackPrompt = props.getProperty("resourcePackPrompt", resourcePackPrompt).trim();
+		if (resourcePackPrompt.equals("Time SMP Thai Font Fix & Custom UI")) {
+			resourcePackPrompt = "Time SMP Resource Pack";
+		}
 
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);

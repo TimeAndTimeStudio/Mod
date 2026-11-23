@@ -9,6 +9,8 @@
 		"PlayerEntityAccessor",
 		"ConfigurationFinishMixin",
 		"ConfigurationClickMixin",
+		"ConfigurationResourcePackResponseMixin",
+		"ResourcePackResponseMixin",
 		"FinishSendMixin",
 		"LevelStoragePathMixin",
 		"ServerLevelsAccessor",

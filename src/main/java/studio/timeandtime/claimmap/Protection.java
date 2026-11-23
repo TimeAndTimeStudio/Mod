@@ -21,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
@@ -110,9 +111,28 @@ public final class Protection {
 			}
 			return InteractionResult.PASS;
 		}
+		// The lobby is adventure-like for building, but doors, fence gates and
+		// switches are furniture: players must be able to use them.
+		if (level != null && studio.timeandtime.claimmap.world.WorldManager.isLobby(level)
+				&& isLobbyInteraction(level.getBlockState(targetPos))) {
+			return InteractionResult.PASS;
+		}
 		if (allowed(level, player, targetPos)) return InteractionResult.PASS;
 		deny(player);
 		return InteractionResult.FAIL;
+	}
+
+	private static boolean isLobbyInteraction(BlockState state) {
+		return state.is(BlockTags.DOORS)
+				|| state.is(BlockTags.FENCE_GATES)
+				|| state.is(BlockTags.TRAPDOORS)
+				|| state.is(BlockTags.BUTTONS)
+				|| state.is(BlockTags.PRESSURE_PLATES)
+				|| state.is(Blocks.LEVER)
+				|| state.is(Blocks.CHEST)
+				|| state.is(Blocks.TRAPPED_CHEST)
+				|| state.is(Blocks.BARREL)
+				|| state.is(Blocks.ENDER_CHEST);
 	}
 
 	private InteractionResult onUseItem(Player player, Level level, InteractionHand hand) {

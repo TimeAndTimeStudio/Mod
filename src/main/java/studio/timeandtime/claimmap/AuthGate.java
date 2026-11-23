@@ -99,6 +99,8 @@ public final class AuthGate {
 		final long startedAtMs;
 		boolean dialogShown;
 		boolean pending;
+		boolean resourcePackLoaded;
+		boolean resourcePackSent;
 
 		ConfigState(ServerConfigurationPacketListenerImpl listener, String name, UUID uuid, Phase phase, long startedAtMs) {
 			this.listener = listener;
@@ -375,8 +377,75 @@ public final class AuthGate {
 		ConfigState state = configStates.get(profile.id());
 		if (state == null || state.listener != listener) return false;
 		if (state.phase == Phase.AUTHED) return true;
+		// The mod, not server.properties, owns the pack: push it once and keep
+		// the client in configuration until it reports SUCCESSFULLY_LOADED.
+		if (resourcePackEnabled() && !state.resourcePackLoaded) {
+			if (!state.resourcePackSent) {
+				state.resourcePackSent = true;
+				sendResourcePack(state);
+			}
+			return false;
+		}
 		if (!state.dialogShown) sendDialog(state, null);
 		return false;
+	}
+
+	private boolean resourcePackEnabled() {
+		return config.resourcePackAutoPush
+				&& config.resourcePackUrl != null
+				&& !config.resourcePackUrl.isBlank();
+	}
+
+	private void sendResourcePack(ConfigState state) {
+		try {
+			Component prompt = config.resourcePackPrompt == null || config.resourcePackPrompt.isBlank()
+					? null
+					: Component.literal(config.resourcePackPrompt);
+			state.listener.send(new net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket(
+					UUID.fromString("6d7ddf93-6004-4224-9d7a-2cbc7efd86a1"),
+					config.resourcePackUrl,
+					// The URL is the mutable `latest` release; a baked hash would
+					// reject every new build. The client still verifies the download.
+					"",
+					false,
+					Optional.ofNullable(prompt)
+			));
+			ClaimMap.LOGGER.info("[timesmp] Pushed resource pack to {}", state.name);
+		} catch (Throwable t) {
+			ClaimMap.LOGGER.warn("[timesmp] Could not push resource pack: {}", t.getMessage());
+		}
+	}
+
+	public static void onResourcePackResponse(ServerConfigurationPacketListenerImpl listener,
+			net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action action) {
+		ClaimMap mod = ClaimMap.instance();
+		AuthGate gate = mod == null ? null : mod.authGate();
+		if (gate != null) gate.handleResourcePackResponse(listener, action);
+	}
+
+	private void handleResourcePackResponse(ServerConfigurationPacketListenerImpl listener,
+			net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action action) {
+		GameProfile profile = profileOf(listener);
+		if (profile == null || profile.id() == null) return;
+		ConfigState state = configStates.get(profile.id());
+		if (state == null || state.listener != listener) return;
+
+		if (action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.SUCCESSFULLY_LOADED) {
+			state.resourcePackLoaded = true;
+			MinecraftServer server = ClaimMap.getServer();
+			if (server != null) {
+				server.execute(() -> {
+					if (state.listener == listener && !state.dialogShown && state.phase != Phase.AUTHED) {
+						sendDialog(state, null);
+					}
+				});
+			}
+		} else if (action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.DECLINED
+				|| action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.FAILED_DOWNLOAD
+				|| action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.FAILED_RELOAD
+				|| action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.INVALID_URL) {
+			disconnect(state, "คุณต้องดาวน์โหลด Resource Pack ของ Time SMP ก่อนเข้าเล่น");
+		}
 	}
 
 	/** Called by the ServerConfigurationPacketListenerImpl mixin. False = cancel. */

@@ -249,6 +249,8 @@ public final class SkinRestorerService {
 				return null;
 			}
 
+			LOGGER.info("[timesmp] Loaded local skin {} ({} bytes)", file.getFileName(), bytes.length);
+
 			// Embed image data as Base64 data URI in standard textures JSON structure
 			String dataUri = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(bytes);
 			return buildTexturePropertyFromUrl(dataUri, username, false);
