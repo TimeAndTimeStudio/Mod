@@ -167,14 +167,6 @@ log "downloading Time SMP mod ($MOD_ASSET from tag $MOD_TAG)"
 curl -fL -o mods/timesmp.jar "$MOD_URL"
 
 # ---------------------------------------------------------------------------
-# 3b) Resource pack (published with every release; served over HTTPS)
-# ---------------------------------------------------------------------------
-RESOURCE_PACK_URL="${RESOURCE_PACK_URL:-https://github.com/${REPO}/releases/download/${MOD_TAG}/resourcepack.zip}"
-log "downloading resource pack"
-curl -fL -o resourcepack.zip "$RESOURCE_PACK_URL"
-RESOURCE_PACK_SHA1=$(sha1sum resourcepack.zip | awk '{print $1}')
-
-# ---------------------------------------------------------------------------
 # 3c) World generation mods (main world only; published for 26.3)
 # ---------------------------------------------------------------------------
 WORLDGEN_RELEASE="${WORLDGEN_RELEASE:-mod_26.3}"
@@ -278,11 +270,6 @@ simulation-distance=6
 enable-status=true
 spawn-protection=0
 max-tick-time=180000
-require-resource-pack=true
-resource-pack=${RESOURCE_PACK_URL}
-resource-pack-id=6d7ddf93-6004-4224-9d7a-2cbc7efd86a1
-resource-pack-prompt={"text":"Time SMP Thai Font Fix & Custom UI"}
-resource-pack-sha1=${RESOURCE_PACK_SHA1}
 EOF
 
 # ---------------------------------------------------------------------------
