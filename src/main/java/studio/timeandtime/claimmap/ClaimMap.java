@@ -216,6 +216,11 @@ public class ClaimMap implements ModInitializer {
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			this.server = server;
 			seedDefaultServerIconIfMissing();
+			try {
+				server.getGameRules().set(net.minecraft.world.level.gamerules.GameRules.LOCATOR_BAR, false, server);
+			} catch (Throwable t) {
+				LOGGER.debug("[timesmp] Could not disable LOCATOR_BAR: {}", t.getMessage());
+			}
 			worldManager.start(server);
 			ItemRegistryAdapter.init(server);
 			auctions.closeExpired(System.currentTimeMillis());

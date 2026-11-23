@@ -629,6 +629,7 @@ public final class WorldManager {
 					.withSuppressedOutput();
 			s.getCommands().performPrefixedCommand(source, "gamerule spawn_mobs false");
 			s.getCommands().performPrefixedCommand(source, "gamerule advance_weather false");
+			s.getCommands().performPrefixedCommand(source, "gamerule locator_bar false");
 			// Neutral starting state; the real weather is applied as soon as the
 			// first external reading is available.
 			s.getCommands().performPrefixedCommand(source, "weather clear");

@@ -90,15 +90,17 @@ public final class TpaGui {
 				targetStack.set(DataComponents.LORE, new ItemLore(List.of(
 						Component.literal("§7โลกปัจจุบัน: §e" + worldName),
 						Component.literal("§7--------------------------------"),
-						Component.literal("§b[คลิกซ้าย] §7ส่งคำขอวาร์ปไปหาผู้เล่นนี้"),
+						Component.literal("§b[คลิกซ้าย หรือคลิกขวา] §7ส่งคำขอวาร์ปไปหาผู้เล่นนี้"),
 						Component.literal("§7(คำสั่ง: /tpa " + target.getScoreboardName() + ")")
 				)));
 				container.setItem(slot, targetStack);
 
-				leftClicks.put(slot, () -> {
+				Runnable reqAction = () -> {
 					player.closeContainer();
 					teleports.request(player, target);
-				});
+				};
+				leftClicks.put(slot, reqAction);
+				rightClicks.put(slot, reqAction);
 			}
 		}
 
@@ -129,13 +131,13 @@ public final class TpaGui {
 				true,
 				container,
 				(slotIndex, button, input, sp) -> {
-					if (button == 0) { // Left-click
-						Runnable action = leftClicks.get(slotIndex);
-						if (action != null) action.run();
-					} else if (button == 1) { // Right-click
-						Runnable action = rightClicks.get(slotIndex);
-						if (action != null) action.run();
+					Runnable action = button == 1 ? rightClicks.get(slotIndex) : leftClicks.get(slotIndex);
+					if (action == null && button == 1) {
+						action = leftClicks.get(slotIndex);
+					} else if (action == null && button == 0) {
+						action = rightClicks.get(slotIndex);
 					}
+					if (action != null) action.run();
 				},
 				null
 		);
@@ -208,19 +210,17 @@ public final class TpaGui {
 						Component.literal("§7ผู้เล่นต้องการวาร์ปมายังตำแหน่งของคุณ"),
 						Component.literal("§7เวลาคงเหลือ: §e" + timeStr),
 						Component.literal("§7--------------------------------"),
-						Component.literal("§a[คลิกซ้าย] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
-						Component.literal("§c[คลิกขวา] §7ยกเลิก / ปฏิเสธคำขอนี้")
+						Component.literal("§a[คลิกซ้าย หรือคลิกขวา] §7ยอมรับคำขอ (ผู้เล่นจะวาร์ปมาใน 5 วิ)"),
+						Component.literal("§7(หากต้องการปฏิเสธ ให้รอหมดเวลา หรือกดยกเลิก)")
 				)));
 				container.setItem(slot, reqStack);
 
-				leftClicks.put(slot, () -> {
+				Runnable acceptAction = () -> {
 					player.closeContainer();
 					teleports.accept(player, req.senderName());
-				});
-				rightClicks.put(slot, () -> {
-					teleports.deny(player, req.senderName());
-					openRequests(player, teleports);
-				});
+				};
+				leftClicks.put(slot, acceptAction);
+				rightClicks.put(slot, acceptAction);
 			}
 		}
 
@@ -231,13 +231,13 @@ public final class TpaGui {
 				true,
 				container,
 				(slotIndex, button, input, sp) -> {
-					if (button == 0) { // Left-click
-						Runnable action = leftClicks.get(slotIndex);
-						if (action != null) action.run();
-					} else if (button == 1) { // Right-click
-						Runnable action = rightClicks.get(slotIndex);
-						if (action != null) action.run();
+					Runnable action = button == 1 ? rightClicks.get(slotIndex) : leftClicks.get(slotIndex);
+					if (action == null && button == 1) {
+						action = leftClicks.get(slotIndex);
+					} else if (action == null && button == 0) {
+						action = rightClicks.get(slotIndex);
 					}
+					if (action != null) action.run();
 				},
 				null
 		);

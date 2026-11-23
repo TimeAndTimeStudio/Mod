@@ -273,6 +273,26 @@ public final class AuthGate {
 		economy.ensureAccount(uuid);
 		player.sendSystemMessage(Component.literal("เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ!"));
 		player.sendSystemMessage(Component.literal("ยอดเงิน: " + economy.balance(uuid) + " " + config.currencyName));
+
+		if (config.resourcePackAutoPush && config.resourcePackUrl != null && !config.resourcePackUrl.isBlank()) {
+			try {
+				UUID packId = UUID.fromString("6d7ddf93-6004-4224-9d7a-2cbc7efd86a1");
+				Component prompt = (config.resourcePackPrompt != null && !config.resourcePackPrompt.isBlank())
+						? Component.literal(config.resourcePackPrompt)
+						: null;
+				net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket rpPacket =
+						new net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket(
+								packId,
+								config.resourcePackUrl,
+								config.resourcePackHash != null ? config.resourcePackHash : "",
+								false,
+								Optional.ofNullable(prompt)
+						);
+				player.connection.send(rpPacket);
+			} catch (Throwable t) {
+				ClaimMap.LOGGER.debug("[timesmp] Could not send resource pack push packet: {}", t.getMessage());
+			}
+		}
 	}
 
 	// ---- dialog -------------------------------------------------------------

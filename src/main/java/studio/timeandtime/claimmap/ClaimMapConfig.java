@@ -93,6 +93,11 @@ public final class ClaimMapConfig {
 	public int lobbyWeatherSyncSeconds = 600;
 	/** Announce zone (claim cell) enter/exit on the player's action bar. */
 	public boolean zoneAnnouncements = true;
+	/** Send resource pack push packet to connecting players automatically. */
+	public boolean resourcePackAutoPush = true;
+	public String resourcePackUrl = "https://github.com/TimeAndTimeStudio/Mod/releases/download/latest/resourcepack.zip";
+	public String resourcePackHash = "cac88def8d761e2752a75c3fd830c4c888b0a25c";
+	public String resourcePackPrompt = "Time SMP Thai Font Fix & Custom UI";
 
 	public ClaimMapConfig() {
 		this(resolveConfigPath());
@@ -189,6 +194,10 @@ public final class ClaimMapConfig {
 		if (lobbyWeatherUrl.isEmpty()) lobbyWeatherUrl = "https://api.open-meteo.com/v1/forecast";
 		lobbyWeatherSyncSeconds = getInt("lobbyWeatherSyncSeconds", lobbyWeatherSyncSeconds, 60, 86_400);
 		zoneAnnouncements = getBool("zoneAnnouncements", zoneAnnouncements);
+		resourcePackAutoPush = getBool("resourcePackAutoPush", resourcePackAutoPush);
+		resourcePackUrl = props.getProperty("resourcePackUrl", resourcePackUrl).trim();
+		resourcePackHash = props.getProperty("resourcePackHash", resourcePackHash).trim();
+		resourcePackPrompt = props.getProperty("resourcePackPrompt", resourcePackPrompt).trim();
 
 		int sell = getInt("sellPercent", sellPercent, 1, 100);
 		int buy = getInt("buyPercent", buyPercent, 100, 100_000);
@@ -211,7 +220,8 @@ public final class ClaimMapConfig {
 				"marketMaxActivePerPlayer", "worldDirectory", "worldScanSeconds", "worldIdleUnloadSeconds",
 				"worldPlayerCommands", "lobbyRealTime", "lobbyTimeZone", "lobbyTimeUrl", "lobbyTimeFallbackUrl",
 				"lobbyTimeSyncSeconds", "lobbyWeather", "lobbyWeatherLatitude", "lobbyWeatherLongitude",
-				"lobbyWeatherUrl", "lobbyWeatherSyncSeconds", "zoneAnnouncements"}) {
+				"lobbyWeatherUrl", "lobbyWeatherSyncSeconds", "zoneAnnouncements", "resourcePackAutoPush",
+				"resourcePackUrl", "resourcePackHash", "resourcePackPrompt"}) {
 			if (!props.containsKey(key)) {
 				props.setProperty(key, switch (key) {
 					case "players" -> players;
@@ -251,6 +261,10 @@ public final class ClaimMapConfig {
 					case "lobbyWeatherUrl" -> lobbyWeatherUrl;
 					case "lobbyWeatherSyncSeconds" -> Integer.toString(lobbyWeatherSyncSeconds);
 					case "zoneAnnouncements" -> Boolean.toString(zoneAnnouncements);
+					case "resourcePackAutoPush" -> Boolean.toString(resourcePackAutoPush);
+					case "resourcePackUrl" -> resourcePackUrl;
+					case "resourcePackHash" -> resourcePackHash;
+					case "resourcePackPrompt" -> resourcePackPrompt;
 					default -> throw new IllegalStateException("unhandled config key " + key);
 				});
 				changed = true;
