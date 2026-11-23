@@ -15,12 +15,14 @@ import org.slf4j.LoggerFactory;
 import studio.timeandtime.claimmap.mixin.PlayerEntityAccessor;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -36,6 +38,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class SkinRestorerService {
 	private static final Logger LOGGER = LoggerFactory.getLogger("timesmp-skin");
 	private static final Path SKINS_DIR = Path.of("config/timesmp/skins");
+	/**
+	 * A player-info property value is written with a 32,767-character limit.
+	 * Base64 grows by 4/3, and the textures JSON adds a little, so a raw PNG
+	 * above this size can make the packet unencodable.
+	 */
+	private static final int MAX_SKIN_BYTES = 23 * 1024;
 	private static final Map<String, Property> SKIN_CACHE = new ConcurrentHashMap<>();
 	private static final Map<String, String> CUSTOM_SKIN_MAP = new ConcurrentHashMap<>();
 
@@ -64,6 +72,34 @@ public final class SkinRestorerService {
 		return CUSTOM_SKIN_MAP.getOrDefault(playerName.toLowerCase(), playerName);
 	}
 
+	/** A PNG the client can decode and the packet can carry. */
+	private static boolean isValidSkin(byte[] bytes) {
+		if (bytes == null || bytes.length < 8 || bytes.length > MAX_SKIN_BYTES) {
+			return false;
+		}
+		return (bytes[0] & 0xFF) == 0x89
+				&& bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G';
+	}
+
+	/** Write next to the target and rename, so a dropped download never leaves a half file. */
+	private static void writeAtomically(Path target, byte[] bytes) throws IOException {
+		Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+		Files.write(temp, bytes);
+		try {
+			Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING,
+					StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+		}
+	}
+
+	/** Reads a skin response, rejecting anything the texture packet cannot carry. */
+	private static byte[] readSkin(HttpURLConnection conn) throws IOException {
+		try (InputStream in = conn.getInputStream()) {
+			return in.readAllBytes();
+		}
+	}
+
 	/**
 	 * Downloads a skin from a URL and saves it directly to config/timesmp/skins/{username}.png
 	 * without requiring an online ServerPlayer entity (e.g. during Configuration phase).
@@ -85,13 +121,15 @@ public final class SkinRestorerService {
 				return false;
 			}
 
+			byte[] bytes = readSkin(conn);
+			if (!isValidSkin(bytes)) {
+				LOGGER.warn("[timesmp] Rejected skin for {}: not a PNG in 1..{} bytes", username, MAX_SKIN_BYTES);
+				return false;
+			}
+
 			Files.createDirectories(SKINS_DIR);
 			Path targetFile = SKINS_DIR.resolve(lowerName + ".png");
-
-			// Write / overwrite existing file
-			try (InputStream in = conn.getInputStream()) {
-				Files.copy(in, targetFile, StandardCopyOption.REPLACE_EXISTING);
-			}
+			writeAtomically(targetFile, bytes);
 
 			// Clear cache so new skin is fetched fresh
 			SKIN_CACHE.remove(lowerName);
@@ -130,13 +168,15 @@ public final class SkinRestorerService {
 				return false;
 			}
 
+			byte[] bytes = readSkin(conn);
+			if (!isValidSkin(bytes)) {
+				LOGGER.warn("[timesmp] Rejected skin for {}: not a PNG in 1..{} bytes", username, MAX_SKIN_BYTES);
+				return false;
+			}
+
 			Files.createDirectories(SKINS_DIR);
 			Path targetFile = SKINS_DIR.resolve(lowerName + ".png");
-
-			// Write / overwrite existing file
-			try (InputStream in = conn.getInputStream()) {
-				Files.copy(in, targetFile, StandardCopyOption.REPLACE_EXISTING);
-			}
+			writeAtomically(targetFile, bytes);
 
 			// Clear cache so new skin is fetched fresh
 			SKIN_CACHE.remove(lowerName);
@@ -228,9 +268,8 @@ public final class SkinRestorerService {
 	private static Property loadSkinFromFile(Path file, String username) {
 		try {
 			byte[] bytes = Files.readAllBytes(file);
-			if (bytes.length < 8) return null;
-			// Basic PNG magic check
-			if ((bytes[0] & 0xFF) != 0x89 || bytes[1] != 'P' || bytes[2] != 'N' || bytes[3] != 'G') {
+			if (!isValidSkin(bytes)) {
+				LOGGER.warn("[timesmp] Ignoring local skin {}: not a PNG in 1..{} bytes", file, MAX_SKIN_BYTES);
 				return null;
 			}
 
