@@ -5,6 +5,7 @@
 	"mixins": [
 		"CommandsMixin",
 		"ServerPlayerDropMixin",
+		"ItemEntityPickupMixin",
 		"PlayerProfileAccessor",
 		"PlayerEntityAccessor",
 		"ConfigurationFinishMixin",

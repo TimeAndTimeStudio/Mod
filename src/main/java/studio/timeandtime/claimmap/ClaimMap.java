@@ -207,6 +207,7 @@ public class ClaimMap implements ModInitializer {
 				admin, teleports, homeManager, worldManager, playerMarket).register();
 		new AuctionTicker(auctions, playerMarket).register();
 		protection.register();
+		GroundItemClearer.register();
 		new PortalGate(serverSettings).register();
 		spawnProtection = new WorldSpawnProtection(config.dataDir());
 		spawnProtection.register();
@@ -251,6 +252,10 @@ public class ClaimMap implements ModInitializer {
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			if (worldManager != null) worldManager.closeStorage();
 		});
+	}
+
+	public Protection protection() {
+		return protection;
 	}
 
 	private static void seedDefaultPricesIfMissing(java.nio.file.Path dir) {
