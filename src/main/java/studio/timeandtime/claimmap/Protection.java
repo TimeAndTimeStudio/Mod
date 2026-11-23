@@ -130,9 +130,8 @@ public final class Protection {
 
 	/**
 	 * Player-vs-player damage inside a claim follows that claim's own PvP flag.
-	 * If either the victim OR the attacker is inside a claim where PvP is disabled,
-	 * damage is blocked (neither can deal nor take damage).
-	 * Wilderness keeps the server-wide {@code pvp} setting.
+	 * Wilderness keeps the server-wide {@code pvp} setting. The owner toggles
+	 * the flag from the claim GUI; it applies to every claimed cell.
 	 */
 	private boolean allowPvpDamage(LivingEntity entity, DamageSource source, float amount) {
 		if (!(entity instanceof ServerPlayer victim)) return true;
@@ -142,36 +141,11 @@ public final class Protection {
 		if (level == null || level.getServer() == null || !RegionManager.isClaimableWorld(level)) return true;
 		// Inside End dragon arena, allow PvP according to server standard
 		if (EndArenaManager.isMainIsland(level, victim.blockPosition())) return true;
-
-		// 1. Check victim location
-		RegionManager.CellData victimCell = regions.get(regions.cellIdAt(level, victim.getBlockX(), victim.getBlockZ()));
-		if (victimCell != null && !victimCell.pvp) {
-			attacker.sendSystemMessage(Component.literal(
-					"§cเขต " + victimCell.id + " ปิด PvP อยู่ (ไม่สามารถโจมตีผู้เล่นในเขตคุ้มครองได้)"));
-			return false;
-		}
-
-		// 2. Check attacker location (attacker in protected claim cannot attack players outside or inside)
-		RegionManager.CellData attackerCell = regions.get(regions.cellIdAt(attacker.level(), attacker.getBlockX(), attacker.getBlockZ()));
-		if (attackerCell != null && !attackerCell.pvp) {
-			attacker.sendSystemMessage(Component.literal(
-					"§cคุณอยู่ในเขตคุ้มครอง " + attackerCell.id + " (ไม่สามารถโจมตีผู้อื่นขณะอยู่ในเขตปิด PvP ได้)"));
-			return false;
-		}
-
-		return true;
-	}
-
-	/**
-	 * Checks if a player can pick up an item at a given location.
-	 * In claimed areas, only members/owners (who have access) can pick up items.
-	 * Non-members cannot pick up items in protected claims.
-	 */
-	public boolean canPickupItem(Player player, BlockPos pos) {
-		if (player == null || pos == null) return true;
-		if (isAdmin(player)) return true;
-		Level level = player.level();
-		return allowed(level, player, pos);
+		RegionManager.CellData cell = regions.get(regions.cellIdAt(level, victim.getBlockX(), victim.getBlockZ()));
+		if (cell == null || cell.pvp) return true;
+		attacker.sendSystemMessage(Component.literal(
+				"§cเขต " + cell.id + " ปิด PvP อยู่ (เจ้าของเขตสามารถเปิดได้จากเมนูจัดการเขต)"));
+		return false;
 	}
 
 	// ---- helpers ------------------------------------------------------------
