@@ -1,6 +1,8 @@
 package studio.timeandtime.claimmap;
 
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
@@ -13,7 +15,10 @@ import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BucketItem;
 import net.minecraft.world.item.Item;
@@ -25,6 +30,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import studio.timeandtime.claimmap.world.EndArenaManager;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,7 +59,9 @@ public final class Protection {
 		PlayerBlockBreakEvents.BEFORE.register(this::onBreak);
 		PlayerBlockBreakEvents.AFTER.register(this::onAfterBreak);
 		AttackBlockCallback.EVENT.register(this::onAttack);
+		AttackEntityCallback.EVENT.register(this::onAttackEntity);
 		UseBlockCallback.EVENT.register(this::onUseBlock);
+		UseEntityCallback.EVENT.register(this::onUseEntity);
 		UseItemCallback.EVENT.register(this::onUseItem);
 		ServerLivingEntityEvents.ALLOW_DAMAGE.register(this::allowPvpDamage);
 	}
@@ -128,11 +136,7 @@ public final class Protection {
 				|| state.is(BlockTags.TRAPDOORS)
 				|| state.is(BlockTags.BUTTONS)
 				|| state.is(BlockTags.PRESSURE_PLATES)
-				|| state.is(Blocks.LEVER)
-				|| state.is(Blocks.CHEST)
-				|| state.is(Blocks.TRAPPED_CHEST)
-				|| state.is(Blocks.BARREL)
-				|| state.is(Blocks.ENDER_CHEST);
+				|| state.is(Blocks.LEVER);
 	}
 
 	private InteractionResult onUseItem(Player player, Level level, InteractionHand hand) {
@@ -146,6 +150,33 @@ public final class Protection {
 		}
 		if (!allowed(level, player, player.blockPosition())) return InteractionResult.FAIL; // silently, spraying messages
 		return InteractionResult.PASS;
+	}
+
+
+	private InteractionResult onAttackEntity(Player player, Level level, InteractionHand hand,
+			Entity entity, EntityHitResult hit) {
+		return entityInteraction(player, level, entity);
+	}
+
+	private InteractionResult onUseEntity(Player player, Level level, InteractionHand hand,
+			Entity entity, EntityHitResult hit) {
+		return entityInteraction(player, level, entity);
+	}
+
+	private InteractionResult entityInteraction(Player player, Level level, Entity entity) {
+		if (isAdmin(player) || level == null || entity instanceof Player) return InteractionResult.PASS;
+		if (studio.timeandtime.claimmap.world.WorldManager.isLobby(level)) {
+			// Lobby decorations (item frames, paintings, armor stands) are fixed.
+			return isDecoration(entity) ? InteractionResult.FAIL : InteractionResult.PASS;
+		}
+		if (level.getServer() == null || !RegionManager.isClaimableWorld(level)) return InteractionResult.PASS;
+		if (allowed(level, player, entity.blockPosition())) return InteractionResult.PASS;
+		deny(player);
+		return InteractionResult.FAIL;
+	}
+
+	private static boolean isDecoration(Entity entity) {
+		return entity instanceof HangingEntity || entity instanceof ArmorStand;
 	}
 
 	/**
