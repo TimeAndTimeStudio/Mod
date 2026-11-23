@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Base64;
+import studio.timeandtime.timesmpclient.TimeSmpClient;
 
 @Mixin(SkinTextureDownloader.class)
 public class SkinTextureDownloaderMixin {
@@ -31,6 +32,7 @@ public class SkinTextureDownloaderMixin {
 				if (commaIndex != -1) {
 					String base64Data = url.substring(commaIndex + 1).trim();
 					byte[] imageBytes = Base64.getDecoder().decode(base64Data);
+					TimeSmpClient.LOGGER.info("[timesmp-client] Decoded data-URI skin ({} bytes)", imageBytes.length);
 					try (InputStream in = new ByteArrayInputStream(imageBytes)) {
 						NativeImage image = NativeImage.read(in);
 						if (cachePath != null) {

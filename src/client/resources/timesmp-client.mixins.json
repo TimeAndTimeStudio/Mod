@@ -3,9 +3,10 @@
 	"package": "studio.timeandtime.timesmpclient.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-		"SkinTextureDownloaderMixin",
-		"SkinManagerMixin",
-		"SkinManagerInvoker"
+		"MinecraftProfileTextureMixin",
+		"SessionServiceMixin262",
+		"SessionServiceMixin263",
+		"SkinTextureDownloaderMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
