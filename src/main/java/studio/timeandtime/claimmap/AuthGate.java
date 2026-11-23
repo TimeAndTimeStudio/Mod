@@ -407,7 +407,7 @@ public final class AuthGate {
 					// The URL is the mutable `latest` release; a baked hash would
 					// reject every new build. The client still verifies the download.
 					"",
-					false,
+					true,
 					Optional.ofNullable(prompt)
 			));
 			ClaimMap.LOGGER.info("[timesmp] Pushed resource pack to {}", state.name);
