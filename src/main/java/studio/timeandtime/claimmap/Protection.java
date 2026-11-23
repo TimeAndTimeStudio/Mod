@@ -133,7 +133,6 @@ public final class Protection {
 	private static boolean isLobbyInteraction(BlockState state) {
 		return state.is(BlockTags.DOORS)
 				|| state.is(BlockTags.FENCE_GATES)
-				|| state.is(BlockTags.TRAPDOORS)
 				|| state.is(BlockTags.BUTTONS)
 				|| state.is(BlockTags.PRESSURE_PLATES)
 				|| state.is(Blocks.LEVER);
