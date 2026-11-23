@@ -71,7 +71,7 @@ import java.util.concurrent.Executors;
  * worker thread and the result is applied back on the server thread.
  */
 public final class AuthGate {
-	public enum Phase { NEED_LOGIN, NEED_REGISTER, AUTHED }
+	public enum Phase { NEED_LOGIN, NEED_REGISTER, NEED_SKIN, AUTHED }
 
 	static final int MAX_FAILS = 3;
 	static final long TIMEOUT_MS = 60_000L;
@@ -79,6 +79,8 @@ public final class AuthGate {
 	private static final Identifier LOGIN_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/login");
 	private static final Identifier REGISTER_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/register");
 	private static final Identifier QUIT_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/quit");
+	private static final Identifier SKIN_SAVE_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/skin_save");
+	private static final Identifier SKIN_SKIP_ACTION = Identifier.fromNamespaceAndPath(ClaimMap.MOD_ID, "auth/skin_skip");
 
 	/** Play-phase state, used by command/item hooks. */
 	static final class State {
@@ -299,7 +301,14 @@ public final class AuthGate {
 
 	private void sendDialog(ConfigState state, String error) {
 		if (state.phase == Phase.AUTHED) return;
-		Dialog dialog = state.phase == Phase.NEED_LOGIN ? loginDialog(error) : registerDialog(error);
+		Dialog dialog;
+		if (state.phase == Phase.NEED_LOGIN) {
+			dialog = loginDialog(error);
+		} else if (state.phase == Phase.NEED_REGISTER) {
+			dialog = registerDialog(error);
+		} else {
+			dialog = skinDialog(error);
+		}
 		state.dialogShown = true;
 		state.listener.send(new ClientboundShowDialogPacket(Holder.direct(dialog)));
 	}
@@ -318,6 +327,26 @@ public final class AuthGate {
 				Component.literal("ยืนยันรหัสผ่าน"), true, "", 64, Optional.empty()));
 		ActionButton enter = button("ตั้งรหัสและเข้าเกม", REGISTER_ACTION);
 		return dialog("ตั้งรหัสผ่านครั้งแรก", error, List.of(password, confirm), enter);
+	}
+
+	static Dialog skinDialog(String error) {
+		Input skinUrl = new Input("skin_url", new TextInput(260,
+				Component.literal("ใส่ URL สกิน เช่น https://... หรือเว้นว่าง"), false, "", 256, Optional.empty()));
+		List<DialogBody> body = error == null
+				? List.<DialogBody>of(new PlainMessage(Component.literal(
+						"ตั้งค่าสกินตัวละครของคุณ (รองรับ URL ภาพ PNG ตรงๆ หรือกดข้ามได้)"), 260))
+				: List.<DialogBody>of(new PlainMessage(Component.literal(error), 260));
+		CommonDialogData common = new CommonDialogData(
+				Component.literal("ตั้งค่าสกินตัวละคร (Skin Setup)"),
+				Optional.empty(),
+				false,
+				true,
+				DialogAction.CLOSE,
+				body,
+				List.of(skinUrl));
+		ActionButton save = button("ใช้สกินนี้", SKIN_SAVE_ACTION);
+		ActionButton skip = button("ข้าม", SKIN_SKIP_ACTION);
+		return new MultiActionDialog(common, List.of(save), Optional.of(skip), 1);
 	}
 
 	private static Dialog dialog(String title, String error, List<Input> inputs, ActionButton enter) {
@@ -409,6 +438,38 @@ public final class AuthGate {
 			return;
 		}
 		if (state.phase == Phase.AUTHED || state.pending) return;
+		if (state.phase == Phase.NEED_SKIN) {
+			if (SKIN_SKIP_ACTION.equals(id)) {
+				authenticated(state);
+				return;
+			}
+			if (SKIN_SAVE_ACTION.equals(id)) {
+				Optional<CompoundTag> tag = payload.filter(t -> t instanceof CompoundTag).map(t -> (CompoundTag) t);
+				String skinUrl = tag.map(t -> string(t, "skin_url")).orElse("");
+				if (skinUrl == null || skinUrl.isBlank()) {
+					authenticated(state);
+					return;
+				}
+				state.pending = true;
+				worker.submit(() -> {
+					boolean ok = studio.timeandtime.claimmap.skin.SkinRestorerService.downloadAndSaveSkinForUser(state.name, skinUrl.trim());
+					MinecraftServer server = ClaimMap.getServer();
+					if (server != null) {
+						server.execute(() -> {
+							state.pending = false;
+							if (ok) {
+								authenticated(state);
+							} else {
+								sendDialog(state, "ไม่สามารถดาวน์โหลดสกินจาก URL ได้ กรุณาตรวจสอบลิงก์");
+							}
+						});
+					}
+				});
+				return;
+			}
+			sendDialog(state, null);
+			return;
+		}
 		if (state.phase == Phase.NEED_LOGIN && !LOGIN_ACTION.equals(id)) {
 			sendDialog(state, "บัญชีนี้มีรหัสแล้ว กรุณาใส่รหัสผ่าน");
 			return;
@@ -472,7 +533,10 @@ public final class AuthGate {
 			failed(state, null);
 			return;
 		}
-		authenticated(state);
+		// Prompt for skin configuration dialog on every join
+		state.phase = Phase.NEED_SKIN;
+		state.fails = 0;
+		sendDialog(state, null);
 	}
 
 	private void completeRegister(ConfigState state, String hash, String password, String confirm) {
@@ -484,7 +548,10 @@ public final class AuthGate {
 			failed(state, "บันทึกรหัสผ่านไม่สำเร็จ กรุณาลองใหม่");
 			return;
 		}
-		authenticated(state);
+		// Prompt for skin configuration dialog after register
+		state.phase = Phase.NEED_SKIN;
+		state.fails = 0;
+		sendDialog(state, null);
 	}
 
 	private void authenticated(ConfigState state) {

@@ -88,7 +88,8 @@ class AuthGateTest {
 		SharedConstants.tryDetectVersion();
 		Bootstrap.bootStrap();
 		for (Dialog dialog : new Dialog[]{AuthGate.loginDialog(null), AuthGate.registerDialog(null),
-				AuthGate.loginDialog("รหัสผ่านไม่ถูกต้อง")}) {
+				AuthGate.loginDialog("รหัสผ่านไม่ถูกต้อง"), AuthGate.skinDialog(null),
+				AuthGate.skinDialog("URL ไม่ถูกต้อง")}) {
 			FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
 			Dialog.CONTEXT_FREE_STREAM_CODEC.encode(buffer, dialog);
 			assertTrue(buffer.readableBytes() > 0, "dialog must serialize for the configuration phase");

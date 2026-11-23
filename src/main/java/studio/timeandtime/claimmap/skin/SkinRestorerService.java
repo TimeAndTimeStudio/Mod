@@ -65,6 +65,45 @@ public final class SkinRestorerService {
 	}
 
 	/**
+	 * Downloads a skin from a URL and saves it directly to config/timesmp/skins/{username}.png
+	 * without requiring an online ServerPlayer entity (e.g. during Configuration phase).
+	 */
+	public static boolean downloadAndSaveSkinForUser(String username, String urlString) {
+		if (username == null || urlString == null || urlString.isBlank()) return false;
+		String lowerName = username.toLowerCase();
+		try {
+			URL url = URI.create(urlString.trim()).toURL();
+			HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+			conn.setRequestMethod("GET");
+			conn.setRequestProperty("User-Agent", "TimeSMP-Server/1.0 (Mozilla/5.0)");
+			conn.setConnectTimeout(5000);
+			conn.setReadTimeout(10000);
+
+			int status = conn.getResponseCode();
+			if (status != 200) {
+				LOGGER.warn("[timesmp] Failed to download skin from URL for {}: HTTP {}", username, status);
+				return false;
+			}
+
+			Files.createDirectories(SKINS_DIR);
+			Path targetFile = SKINS_DIR.resolve(lowerName + ".png");
+
+			// Write / overwrite existing file
+			try (InputStream in = conn.getInputStream()) {
+				Files.copy(in, targetFile, StandardCopyOption.REPLACE_EXISTING);
+			}
+
+			// Clear cache so new skin is fetched fresh
+			SKIN_CACHE.remove(lowerName);
+			LOGGER.info("[timesmp] Successfully downloaded and saved skin for {} from {}", username, urlString);
+			return true;
+		} catch (Exception e) {
+			LOGGER.error("[timesmp] Error downloading skin for {} from {}: {}", username, urlString, e.getMessage());
+		}
+		return false;
+	}
+
+	/**
 	 * Downloads a skin from a URL and saves it directly to config/timesmp/skins/{username}.png,
 	 * replacing any existing skin file, clears skin cache, and re-applies skin to online player.
 	 *
@@ -123,14 +162,11 @@ public final class SkinRestorerService {
 
 	/**
 	 * Looks up and applies skin textures to the given GameProfile.
-	 * If the profile already has textures (e.g., from an authenticating online session),
-	 * it is returned untouched.
+	 * Even for online / premium accounts, custom/server offline skins take precedence,
+	 * ensuring all players get server-configured skins like in TML Client.
 	 */
 	public static GameProfile applySkin(GameProfile profile) {
 		if (profile == null) return null;
-		if (profile.properties().containsKey("textures") && !profile.properties().get("textures").isEmpty()) {
-			return profile;
-		}
 
 		String targetSkinName = getSkinTarget(profile.name());
 		Property textures = fetchSkinProperty(targetSkinName);
@@ -140,6 +176,7 @@ public final class SkinRestorerService {
 
 		com.google.common.collect.Multimap<String, Property> map = com.google.common.collect.ArrayListMultimap.create();
 		map.putAll(profile.properties());
+		map.removeAll("textures");
 		map.put("textures", textures);
 		PropertyMap newProps = new PropertyMap(map);
 
