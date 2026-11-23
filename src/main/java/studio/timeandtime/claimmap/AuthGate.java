@@ -99,6 +99,7 @@ public final class AuthGate {
 		final long startedAtMs;
 		boolean dialogShown;
 		boolean pending;
+		boolean resourcePackLoaded;
 
 		ConfigState(ServerConfigurationPacketListenerImpl listener, String name, UUID uuid, Phase phase, long startedAtMs) {
 			this.listener = listener;
@@ -373,6 +374,34 @@ public final class AuthGate {
 
 	// ---- packets from the configuration phase ------------------------------
 
+	public static void onResourcePackResponse(ServerConfigurationPacketListenerImpl listener,
+			net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action action) {
+		ClaimMap mod = ClaimMap.instance();
+		AuthGate gate = mod == null ? null : mod.authGate();
+		if (gate != null) gate.handleResourcePackResponse(listener, action);
+	}
+
+	private void handleResourcePackResponse(ServerConfigurationPacketListenerImpl listener,
+			net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action action) {
+		GameProfile profile = profileOf(listener);
+		if (profile == null || profile.id() == null) return;
+		ConfigState state = configStates.get(profile.id());
+		if (state == null || state.listener != listener) return;
+
+		if (action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.SUCCESSFULLY_LOADED) {
+			state.resourcePackLoaded = true;
+			// If finish config was already attempted and held waiting for resource pack, show dialog now
+			if (!state.dialogShown && state.phase != Phase.AUTHED) {
+				sendDialog(state, null);
+			}
+		} else if (action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.DECLINED
+				|| action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.FAILED_DOWNLOAD
+				|| action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.FAILED_RELOAD
+				|| action == net.minecraft.network.protocol.common.ServerboundResourcePackPacket.Action.INVALID_URL) {
+			disconnect(state, "คุณต้องดาวน์โหลดและติดตั้ง Resource Pack ของ Time SMP ก่อนเข้าเล่น");
+		}
+	}
+
 	/**
 	 * Called by the ServerCommonPacketListenerImpl mixin before the server sends
 	 * {@link ClientboundFinishConfigurationPacket}. That packet is terminal: the
@@ -395,6 +424,15 @@ public final class AuthGate {
 		ConfigState state = configStates.get(profile.id());
 		if (state == null || state.listener != listener) return false;
 		if (state.phase == Phase.AUTHED) return true;
+
+		// Enforce resource pack must be loaded before showing login/register dialog
+		MinecraftServer server = ClaimMap.getServer();
+		boolean serverHasPack = server != null && server.getServerResourcePack().isPresent();
+		if (serverHasPack && !state.resourcePackLoaded) {
+			// Wait for resource pack to finish loading before presenting dialog
+			return false;
+		}
+
 		if (!state.dialogShown) sendDialog(state, null);
 		return false;
 	}

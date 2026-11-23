@@ -247,29 +247,6 @@ public final class ClaimCommands {
 							.executes(ctx -> runHomeTeleport(ctx.getSource(),
 									StringArgumentType.getString(ctx, "name")))));
 
-			// --- Custom GUI Menu command (/menu [name]) & reload ---
-			dispatcher.register(Commands.literal("menu").requires(src -> src.getPlayer() != null)
-					.executes(ctx -> runOpenMenu(ctx.getSource(), "main_menu"))
-					.then(Commands.argument("name", StringArgumentType.word())
-							.executes(ctx -> runOpenMenu(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));
-
-			dispatcher.register(Commands.literal("menureload").requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_ADMIN))
-					.executes(ctx -> runMenuReload(ctx.getSource())));
-
-			// Dynamic aliases for menus registered with open_command
-			studio.timeandtime.claimmap.menu.CustomMenuManager customMenus = ClaimMap.instance() != null ? ClaimMap.instance().customMenus() : null;
-			if (customMenus != null) {
-				for (String alias : customMenus.getCommandToMenuId().keySet()) {
-					if ("menu".equalsIgnoreCase(alias) || "home".equalsIgnoreCase(alias) || "shop".equalsIgnoreCase(alias)
-							|| "claim".equalsIgnoreCase(alias) || "map".equalsIgnoreCase(alias) || "spawn".equalsIgnoreCase(alias)) {
-						continue; // Keep native commands untouched
-					}
-					final String menuAlias = alias;
-					dispatcher.register(Commands.literal(alias).requires(src -> src.getPlayer() != null)
-							.executes(ctx -> runOpenMenu(ctx.getSource(), menuAlias)));
-				}
-			}
-
 			dispatcher.register(Commands.literal("timesmp")
 					.executes(ctx -> {
 						ctx.getSource().sendSuccess(() -> Component.literal(
@@ -549,28 +526,6 @@ public final class ClaimCommands {
 			default -> player.sendSystemMessage(Component.literal("โอนเงินไม่สำเร็จ กรุณาลองใหม่"));
 		}
 		return 1;
-	}
-
-	private int runOpenMenu(CommandSourceStack src, String menuName) {
-		ServerPlayer player = src.getPlayer();
-		if (player == null) return 0;
-		studio.timeandtime.claimmap.menu.CustomMenuManager customMenus = ClaimMap.instance() != null ? ClaimMap.instance().customMenus() : null;
-		if (customMenus == null || !customMenus.openMenu(player, menuName)) {
-			player.sendSystemMessage(Component.literal("§cไม่พบเมนู '" + menuName + "'"));
-			return 0;
-		}
-		return 1;
-	}
-
-	private int runMenuReload(CommandSourceStack src) {
-		studio.timeandtime.claimmap.menu.CustomMenuManager customMenus = ClaimMap.instance() != null ? ClaimMap.instance().customMenus() : null;
-		if (customMenus != null) {
-			customMenus.load();
-			src.sendSuccess(() -> Component.literal("§a[TimeSMP] โหลดเมนู Custom GUI ทั้งหมดสำเร็จแล้ว (" + customMenus.getMenus().size() + " เมนู)"), true);
-			return 1;
-		}
-		src.sendFailure(Component.literal("§c[TimeSMP] CustomMenuManager ไม่พร้อมใช้งาน"));
-		return 0;
 	}
 
 	private int runSellHand(CommandSourceStack src) {

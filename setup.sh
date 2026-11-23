@@ -278,6 +278,7 @@ simulation-distance=6
 enable-status=true
 spawn-protection=0
 max-tick-time=180000
+require-resource-pack=true
 resource-pack=${RESOURCE_PACK_URL}
 resource-pack-id=6d7ddf93-6004-4224-9d7a-2cbc7efd86a1
 resource-pack-prompt={"text":"Time SMP Thai Font Fix & Custom UI"}
