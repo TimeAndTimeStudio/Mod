@@ -1,9 +1,6 @@
 package studio.timeandtime.claimmap.skin;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
@@ -17,7 +14,6 @@ import studio.timeandtime.claimmap.mixin.PlayerEntityAccessor;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -184,13 +180,9 @@ public final class SkinRestorerService {
 			// Clear cache so new skin is fetched fresh
 			SKIN_CACHE.remove(lowerName);
 
-			// Load the newly downloaded file as texture Property
+			// Load the newly downloaded file as texture Property. The client
+			// only ever receives the local PNG (data URI), never a remote URL.
 			Property newProperty = loadSkinFromFile(targetFile, username);
-			if (newProperty == null) {
-				// Fallback: build textures property pointing directly to URL
-				newProperty = buildCustomUrlProperty(urlString, username);
-			}
-
 			if (newProperty != null) {
 				SKIN_CACHE.put(lowerName, newProperty);
 				updatePlayerSkinLive(player, newProperty);
@@ -227,13 +219,14 @@ public final class SkinRestorerService {
 	}
 
 	/**
-	 * Fetches textures property from local file, cache, Mojang API, or Ely.by.
+	 * Fetches the textures property from the server's local skin file only:
+	 * {@code config/timesmp/skins/<username>.png}. No Mojang or Ely.by lookup:
+	 * TimeSMP serves local skins exclusively.
 	 */
 	public static Property fetchSkinProperty(String username) {
 		if (username == null || username.isBlank()) return null;
 		String key = username.toLowerCase();
 
-		// Check local server file first (config/timesmp/skins/<username>.png)
 		Path localFile = SKINS_DIR.resolve(key + ".png");
 		if (Files.isRegularFile(localFile)) {
 			Property localProp = loadSkinFromFile(localFile, username);
@@ -242,26 +235,6 @@ public final class SkinRestorerService {
 				return localProp;
 			}
 		}
-
-		Property cached = SKIN_CACHE.get(key);
-		if (cached != null) {
-			return cached;
-		}
-
-		// 1. Try Mojang API
-		Property mojangProp = fetchMojangSkin(username);
-		if (mojangProp != null) {
-			SKIN_CACHE.put(key, mojangProp);
-			return mojangProp;
-		}
-
-		// 2. Fallback to Ely.by skinsystem (TML Client offline skins)
-		Property elyByProp = fetchElyBySkin(username);
-		if (elyByProp != null) {
-			SKIN_CACHE.put(key, elyByProp);
-			return elyByProp;
-		}
-
 		return null;
 	}
 
@@ -309,102 +282,6 @@ public final class SkinRestorerService {
 		String jsonString = payload.toString();
 		String base64Value = java.util.Base64.getEncoder().encodeToString(jsonString.getBytes(StandardCharsets.UTF_8));
 		return new Property("textures", base64Value, null);
-	}
-
-	private static Property fetchMojangSkin(String username) {
-		try {
-			// Step 1: Resolve UUID from username
-			URL uuidUrl = URI.create("https://api.mojang.com/users/profiles/minecraft/" + username).toURL();
-			HttpURLConnection conn1 = (HttpURLConnection) uuidUrl.openConnection();
-			conn1.setRequestMethod("GET");
-			conn1.setRequestProperty("User-Agent", "TimeSMP-Server/1.0");
-			conn1.setConnectTimeout(3000);
-			conn1.setReadTimeout(3000);
-
-			if (conn1.getResponseCode() != 200) {
-				return null;
-			}
-
-			JsonObject uuidJson;
-			try (InputStreamReader reader = new InputStreamReader(conn1.getInputStream(), StandardCharsets.UTF_8)) {
-				uuidJson = JsonParser.parseReader(reader).getAsJsonObject();
-			}
-
-			if (!uuidJson.has("id")) return null;
-			String uuid = uuidJson.get("id").getAsString();
-
-			// Step 2: Fetch profile properties with signed texture
-			URL profileUrl = URI.create("https://sessionserver.mojang.com/session/minecraft/profile/" + uuid + "?unsigned=false").toURL();
-			HttpURLConnection conn2 = (HttpURLConnection) profileUrl.openConnection();
-			conn2.setRequestMethod("GET");
-			conn2.setRequestProperty("User-Agent", "TimeSMP-Server/1.0");
-			conn2.setConnectTimeout(3000);
-			conn2.setReadTimeout(3000);
-
-			if (conn2.getResponseCode() != 200) {
-				return null;
-			}
-
-			JsonObject profileJson;
-			try (InputStreamReader reader = new InputStreamReader(conn2.getInputStream(), StandardCharsets.UTF_8)) {
-				profileJson = JsonParser.parseReader(reader).getAsJsonObject();
-			}
-
-			if (profileJson.has("properties")) {
-				JsonArray props = profileJson.getAsJsonArray("properties");
-				for (JsonElement elem : props) {
-					JsonObject obj = elem.getAsJsonObject();
-					if ("textures".equals(obj.get("name").getAsString())) {
-						String val = obj.get("value").getAsString();
-						String sig = obj.has("signature") ? obj.get("signature").getAsString() : null;
-						LOGGER.info("[timesmp] Loaded Mojang skin for {}", username);
-						return new Property("textures", val, sig);
-					}
-				}
-			}
-		} catch (Exception e) {
-			LOGGER.warn("[timesmp] Could not fetch Mojang skin for {}: {}", username, e.getMessage());
-		}
-		return null;
-	}
-
-	public static Property fetchElyBySkin(String username) {
-		try {
-			URL url = URI.create("https://skinsystem.ely.by/textures/" + username).toURL();
-			HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-			conn.setRequestMethod("GET");
-			conn.setRequestProperty("User-Agent", "TimeSMP-Server/1.0");
-			conn.setConnectTimeout(3000);
-			conn.setReadTimeout(3000);
-
-			if (conn.getResponseCode() != 200) {
-				return null;
-			}
-
-			JsonObject root;
-			try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
-				root = JsonParser.parseReader(reader).getAsJsonObject();
-			}
-
-			if (!root.has("SKIN")) {
-				return null;
-			}
-
-			JsonObject skinObj = root.getAsJsonObject("SKIN");
-			String skinUrl = skinObj.get("url").getAsString();
-			boolean isSlim = false;
-			if (skinObj.has("metadata")) {
-				JsonObject meta = skinObj.getAsJsonObject("metadata");
-				if (meta.has("model") && "slim".equalsIgnoreCase(meta.get("model").getAsString())) {
-					isSlim = true;
-				}
-			}
-
-			return buildTexturePropertyFromUrl(skinUrl, username, isSlim);
-		} catch (Exception e) {
-			LOGGER.warn("[timesmp] Could not fetch Ely.by skin for {}: {}", username, e.getMessage());
-		}
-		return null;
 	}
 
 	/**
