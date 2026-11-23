@@ -96,7 +96,10 @@ public final class SkinRestorerService {
 	/** Reads a skin response, rejecting anything the texture packet cannot carry. */
 	private static byte[] readSkin(HttpURLConnection conn) throws IOException {
 		try (InputStream in = conn.getInputStream()) {
-			return in.readAllBytes();
+			// One byte past the limit is enough to reject without buffering a
+			// hostile or mistakenly large response in full.
+			byte[] bytes = in.readNBytes(MAX_SKIN_BYTES + 1);
+			return bytes.length > MAX_SKIN_BYTES ? null : bytes;
 		}
 	}
 
