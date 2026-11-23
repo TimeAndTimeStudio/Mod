@@ -6,6 +6,7 @@
 		"CommandsMixin",
 		"ServerPlayerDropMixin",
 		"PlayerProfileAccessor",
+		"PlayerEntityAccessor",
 		"ConfigurationFinishMixin",
 		"ConfigurationClickMixin",
 		"FinishSendMixin",

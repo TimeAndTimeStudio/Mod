@@ -306,15 +306,24 @@ public final class ClaimCommands {
 			// --- TimeSMP TWhite System (/twhite add <username>) ---
 			studio.timeandtime.claimmap.TWhiteCommand.register(dispatcher);
 
-			// --- TimeSMP Skin Command (/skin <targetUsername>) ---
+			// --- TimeSMP Skin Command (/skin <URL>) ---
 			dispatcher.register(Commands.literal("skin").requires(src -> src.getPlayer() != null)
-					.then(Commands.argument("target", StringArgumentType.word())
+					.then(Commands.argument("url", StringArgumentType.greedyString())
 							.executes(ctx -> {
 								ServerPlayer sp = ctx.getSource().getPlayer();
 								if (sp == null) return 0;
-								String target = StringArgumentType.getString(ctx, "target");
-								studio.timeandtime.claimmap.skin.SkinRestorerService.setSkin(sp.getGameProfile().name(), target);
-								ctx.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("§a[Skin] ตั้งค่าสกินเป็น " + target + " เรียบร้อยแล้ว (จะแสดงผลเต็มรูปแบบเมื่อเชื่อมต่อใหม่)"), false);
+								String url = StringArgumentType.getString(ctx, "url");
+								ctx.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("§e[Skin] กำลังดาวน์โหลดสกินจาก URL..."), false);
+
+								// Asynchronously download and apply skin to prevent blocking server tick
+								java.util.concurrent.CompletableFuture.runAsync(() -> {
+									boolean success = studio.timeandtime.claimmap.skin.SkinRestorerService.downloadAndSetSkinFromUrl(sp, url);
+									if (success) {
+										ctx.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("§a[Skin] ดาวน์โหลดและเปลี่ยนสกินสำเร็จแล้ว (บันทึกทับไฟล์เดิมเรียบร้อย)"), false);
+									} else {
+										ctx.getSource().sendFailure(net.minecraft.network.chat.Component.literal("§c[Skin] ไม่สามารถดาวน์โหลดหรือนำสกินจาก URL มาใช้ได้ กรุณาตรวจสอบ URL อีกครั้ง"));
+									}
+								});
 								return 1;
 							})));
 
