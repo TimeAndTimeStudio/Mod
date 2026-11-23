@@ -32,14 +32,15 @@ set -euo pipefail
 
 MC_VERSION="${MC_VERSION:-26.3}"
 REPO="${REPO:-TimeAndTimeStudio/Mod}"
-# The CI publishes to the release marked "latest": 26.3 is the historical
-# timesmp.jar, other Minecraft versions use timesmp-mc<version>.jar.
+MOD_TAG="${MOD_TAG:-latest}"
+# The CI publishes to releases: 26.3 is the historical timesmp.jar,
+# other Minecraft versions use timesmp-mc<version>.jar.
 if [ "$MC_VERSION" = "26.3" ]; then
   MOD_ASSET="timesmp.jar"
 else
   MOD_ASSET="timesmp-mc${MC_VERSION}.jar"
 fi
-MOD_URL="${MOD_URL:-https://github.com/${REPO}/releases/latest/download/${MOD_ASSET}}"
+MOD_URL="${MOD_URL:-https://github.com/${REPO}/releases/download/${MOD_TAG}/${MOD_ASSET}}"
 SERVER_DIR="${1:-$HOME/mcserver}"
 
 die() { echo "[setup] ERROR: $*" >&2; exit 1; }
@@ -162,13 +163,13 @@ curl -fL -o mods/fabric-api.jar "$FABRIC_API_URL"
 # ---------------------------------------------------------------------------
 # 3) Time SMP mod
 # ---------------------------------------------------------------------------
-log "downloading Time SMP mod ($MOD_ASSET from latest release)"
+log "downloading Time SMP mod ($MOD_ASSET from tag $MOD_TAG)"
 curl -fL -o mods/timesmp.jar "$MOD_URL"
 
 # ---------------------------------------------------------------------------
 # 3b) Resource pack (published with every release; served over HTTPS)
 # ---------------------------------------------------------------------------
-RESOURCE_PACK_URL="${RESOURCE_PACK_URL:-https://github.com/${REPO}/releases/latest/download/resourcepack.zip}"
+RESOURCE_PACK_URL="${RESOURCE_PACK_URL:-https://github.com/${REPO}/releases/download/${MOD_TAG}/resourcepack.zip}"
 log "downloading resource pack"
 curl -fL -o resourcepack.zip "$RESOURCE_PACK_URL"
 RESOURCE_PACK_SHA1=$(sha1sum resourcepack.zip | awk '{print $1}')
