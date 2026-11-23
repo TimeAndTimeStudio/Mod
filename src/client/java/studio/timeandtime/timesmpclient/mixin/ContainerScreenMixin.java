@@ -40,9 +40,10 @@ public abstract class ContainerScreenMixin {
 		int top = (screen.height - (114 + containerRows * 18)) / 2;
 		int topHeight = containerRows * 18 + 17;
 
-		// The Identifier overload takes normalized UVs (the pipeline overload
-		// takes texture pixels, but RenderPipeline moved between 26.2 and 26.3).
-		graphics.blit(texture, left, top, 176, topHeight,
+		// This overload's ints are x0, y0, x1, y1 (not width/height), and its
+		// four floats are normalized UVs. The pipeline overload takes texture
+		// pixels but RenderPipeline moved between 26.2 and 26.3.
+		graphics.blit(texture, left, top, left + 176, top + topHeight,
 				0.0F, 0.0F, 176.0F / 256.0F, (float) topHeight / 256.0F);
 	}
 }
