@@ -1,9 +1,9 @@
 package studio.timeandtime.timesmpclient.mixin;
 
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Final;
@@ -32,6 +32,13 @@ public abstract class ContainerScreenMixin {
 	@Unique
 	private static final Identifier GUI_CUSTOM = Identifier.fromNamespaceAndPath("timesmp", "textures/gui/gui_custom.png");
 
+	@Unique
+	private static Object cachedPipeline = null;
+	@Unique
+	private static Method cachedBlitMethod = null;
+	@Unique
+	private static boolean reflectionInitialized = false;
+
 	@Inject(method = "extractBackground", at = @At("HEAD"), cancellable = true)
 	private void onExtractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
 		ContainerScreen screen = (ContainerScreen) (Object) this;
@@ -59,9 +66,43 @@ public abstract class ContainerScreenMixin {
 			int left = (screen.width - 176) / 2;
 			int top = (screen.height - (114 + this.containerRows * 18)) / 2;
 
-			// Draw our custom UI layout texture
-			graphics.blit(RenderPipelines.GUI_TEXTURED, customTexture, left, top, 0.0f, 0.0f, 176, 222, 256, 256);
+			// Draw our custom UI layout texture via reflection to stay compatible with both 26.2 and 26.3
+			drawTexture(graphics, customTexture, left, top, 0.0f, 0.0f, 176, 222, 256, 256);
 			ci.cancel();
+		}
+	}
+
+	@Unique
+	private static void drawTexture(GuiGraphicsExtractor graphics, Identifier texture, int x, int y, float u, float v, int width, int height, int textureWidth, int textureHeight) {
+		try {
+			if (!reflectionInitialized) {
+				reflectionInitialized = true;
+				try {
+					Class<?> renderPipelinesClass = Class.forName("net.minecraft.client.renderer.RenderPipelines");
+					Field field = renderPipelinesClass.getField("GUI_TEXTURED");
+					cachedPipeline = field.get(null);
+
+					for (Method m : GuiGraphicsExtractor.class.getMethods()) {
+						if (m.getName().equals("blit") && m.getParameterCount() == 10) {
+							cachedBlitMethod = m;
+							break;
+						}
+					}
+				} catch (Throwable ignored) {
+				}
+			}
+
+			if (cachedBlitMethod != null && cachedPipeline != null) {
+				cachedBlitMethod.invoke(graphics, cachedPipeline, texture, x, y, u, v, width, height, textureWidth, textureHeight);
+				return;
+			}
+		} catch (Throwable ignored) {
+		}
+
+		// Fallback to simple blit if reflection fails
+		try {
+			graphics.blit(texture, x, y, width, height, u, v, (float) width, (float) height);
+		} catch (Throwable ignored) {
 		}
 	}
 }
