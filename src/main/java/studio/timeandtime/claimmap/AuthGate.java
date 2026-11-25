@@ -34,6 +34,7 @@ import net.minecraft.server.dialog.MultiActionDialog;
 import net.minecraft.server.dialog.action.CustomAll;
 import net.minecraft.server.dialog.body.DialogBody;
 import net.minecraft.server.dialog.body.PlainMessage;
+import net.minecraft.server.dialog.input.SingleOptionInput;
 import net.minecraft.server.dialog.input.TextInput;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
@@ -330,9 +331,15 @@ public final class AuthGate {
 	static Dialog skinDialog(String error) {
 		Input skinUrl = new Input("skin_url", new TextInput(260,
 				Component.literal("ใส่ URL สกิน เช่น https://... หรือเว้นว่าง"), false, "", 256, Optional.empty()));
+		Input skinModel = new Input("skin_model", new SingleOptionInput(260,
+				List.of(new SingleOptionInput.Entry("steve",
+								Optional.of(Component.literal("สตีฟ (Steve) - แขนกว้าง")), true),
+						new SingleOptionInput.Entry("alex",
+								Optional.of(Component.literal("อเล็ก (Alex) - แขนเรียว")), false)),
+				Component.literal("รูปแบบสกิน"), true));
 		List<DialogBody> body = error == null
 				? List.<DialogBody>of(new PlainMessage(Component.literal(
-						"ตั้งค่าสกินตัวละครของคุณ (รองรับ URL ภาพ PNG ตรงๆ หรือกดข้ามได้)"), 260))
+						"ตั้งค่าสกินตัวละครของคุณ (ใส่ URL ภาพ PNG ตรงๆ แล้วเลือกสตีฟหรืออเล็ก หรือกดข้ามได้)"), 260))
 				: List.<DialogBody>of(new PlainMessage(Component.literal(error), 260));
 		CommonDialogData common = new CommonDialogData(
 				Component.literal("ตั้งค่าสกินตัวละคร (Skin Setup)"),
@@ -341,7 +348,7 @@ public final class AuthGate {
 				true,
 				DialogAction.CLOSE,
 				body,
-				List.of(skinUrl));
+				List.of(skinUrl, skinModel));
 		ActionButton save = button("ใช้สกินนี้", SKIN_SAVE_ACTION);
 		ActionButton skip = button("ข้าม", SKIN_SKIP_ACTION);
 		return new MultiActionDialog(common, List.of(save), Optional.of(skip), 1);
@@ -515,9 +522,11 @@ public final class AuthGate {
 					authenticated(state);
 					return;
 				}
+				// "alex" = slim arms; anything else (or no value) = Steve.
+				final boolean slim = "alex".equals(tag.map(t -> string(t, "skin_model")).orElse("steve"));
 				state.pending = true;
 				worker.submit(() -> {
-					boolean ok = studio.timeandtime.claimmap.skin.SkinRestorerService.downloadAndSaveSkinForUser(state.name, skinUrl.trim());
+					boolean ok = studio.timeandtime.claimmap.skin.SkinRestorerService.downloadAndSaveSkinForUser(state.name, skinUrl.trim(), slim);
 					MinecraftServer server = ClaimMap.getServer();
 					if (server != null) {
 						server.execute(() -> {
