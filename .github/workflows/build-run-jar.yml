@@ -1,0 +1,53 @@
+name: Build run jar
+
+# Packages the server launcher (the jar version of run.sh):
+#   java -jar timesmp-run.jar [server-dir]
+# It starts server.jar inside the server folder created by setup.sh.
+on:
+  push:
+    branches: [ run-jar ]
+    paths:
+      - launcher/**
+      - .github/workflows/build-run-jar.yml
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build timesmp-run.jar
+        run: |
+          set -euo pipefail
+          mkdir -p build/classes dist
+          javac --release 17 -d build/classes launcher/src/main/java/studio/timeandtime/run/RunMain.java
+          printf 'Main-Class: studio.timeandtime.run.RunMain\n' > build/manifest.txt
+          jar --create --file dist/timesmp-run.jar --manifest build/manifest.txt -C build/classes .
+          unzip -l dist/timesmp-run.jar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timesmp-run
+          path: dist/timesmp-run.jar
+
+      - name: Publish to GitHub Releases (tag run-jar)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="run.sh packaged as jar, build ${GITHUB_SHA::7} on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if gh release view run-jar >/dev/null 2>&1; then
+            gh release edit run-jar --title "Run jar" --notes "$NOTES" --latest=false
+          else
+            gh release create run-jar --title "Run jar" --notes "$NOTES" --latest=false --target "$GITHUB_SHA"
+          fi
+          gh release upload run-jar dist/timesmp-run.jar --clobber
