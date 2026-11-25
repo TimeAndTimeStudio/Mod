@@ -29,8 +29,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/classes dist
-          javac --release 17 -d build/classes launcher/src/main/java/studio/timeandtime/run/RunMain.java
-          printf 'Main-Class: studio.timeandtime.run.RunMain\n' > build/manifest.txt
+          javac --release 17 -d build/classes launcher/src/main/java/studio/timeandtime/launcher/RunMain.java
+          printf 'Main-Class: studio.timeandtime.launcher.RunMain\n' > build/manifest.txt
           jar --create --file dist/timesmp-run.jar --manifest build/manifest.txt -C build/classes .
           unzip -l dist/timesmp-run.jar
 
