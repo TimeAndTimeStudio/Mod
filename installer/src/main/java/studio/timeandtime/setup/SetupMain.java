@@ -34,7 +34,7 @@ import java.util.zip.ZipInputStream;
  *
  * Environment variables (same as setup.sh):
  *   RAM=4G  FORCE=1  MC_VERSION  REPO  MOD_TAG  MOD_URL  WORLDGEN_RELEASE  LOBBY_URL  FIND_URL
- *   SERVER_DIR (install dir; defaults to the current dir on Pterodactyl)
+ *   SERVER_DIR (install dir; defaults to ./msserver on Pterodactyl)
  */
 public final class SetupMain {
 
@@ -82,12 +82,12 @@ public final class SetupMain {
         String findUrl = env("FIND_URL", "https://github.com/" + repo + "/releases/download/findmap/find.zip");
         String base = "https://github.com/" + repo + "/releases/download/" + worldgenRelease + "/";
 
-        // Server dir: argument > SERVER_DIR env > current dir on Pterodactyl > ~/mcserver
+        // Server dir: argument > SERVER_DIR env > ./msserver on Pterodactyl > ~/mcserver
         boolean pterodactyl = System.getenv("P_SERVER_UUID") != null;
         Path serverDir;
         if (dirArg != null) serverDir = Paths.get(dirArg);
         else if (System.getenv("SERVER_DIR") != null && !System.getenv("SERVER_DIR").isEmpty()) serverDir = Paths.get(System.getenv("SERVER_DIR"));
-        else if (pterodactyl) serverDir = Paths.get(".");
+        else if (pterodactyl) serverDir = Paths.get("msserver");
         else serverDir = Paths.get(System.getProperty("user.home"), "mcserver");
         serverDir = serverDir.toAbsolutePath().normalize();
 
