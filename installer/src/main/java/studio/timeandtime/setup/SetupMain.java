@@ -33,7 +33,7 @@ import java.util.zip.ZipInputStream;
  * Usage: java -jar timesmp-setup.jar [server-dir]
  *
  * Environment variables (same as setup.sh):
- *   RAM=4G  FORCE=1  MC_VERSION  REPO  MOD_TAG  MOD_URL  WORLDGEN_RELEASE  LOBBY_URL  FIND_URL
+ *   RAM=4G  FORCE=1  WHITELIST=0 (open server; whitelist is ON by default)  MC_VERSION  REPO  MOD_TAG  MOD_URL  WORLDGEN_RELEASE  LOBBY_URL  FIND_URL
  *   SERVER_DIR (install dir; defaults to ./msserver on Pterodactyl)
  */
 public final class SetupMain {
@@ -198,6 +198,8 @@ public final class SetupMain {
 
         // 5) server.properties
         log("writing server.properties");
+        String wlRaw = env("WHITELIST", "1").trim().toLowerCase();
+        boolean whitelistOn = !(wlRaw.equals("0") || wlRaw.equals("false") || wlRaw.equals("off") || wlRaw.equals("no"));
         Files.writeString(serverDir.resolve("server.properties"),
                 "#Minecraft server properties - Time SMP\n"
                         + "server-port=25565\n"
@@ -206,8 +208,8 @@ public final class SetupMain {
                         + "max-players=5\n"
                         + "online-mode=false\n"
                         + "enforce-secure-profile=false\n"
-                        + "white-list=false\n"
-                        + "enforce-whitelist=false\n"
+                        + "white-list=" + whitelistOn + "\n"
+                        + "enforce-whitelist=" + whitelistOn + "\n"
                         + "gamemode=survival\n"
                         + "force-gamemode=true\n"
                         + "hardcore=false\n"
@@ -270,7 +272,15 @@ public final class SetupMain {
         System.out.println();
         System.out.println("RAM is set in run.sh / run.bat (currently " + ram + ").");
         System.out.println();
-        System.out.println("The server is OPEN (no whitelist) with no common/spawn area:");
+        if (whitelistOn) {
+            System.out.println("Whitelist is ON: only listed players can join. Add players (console or as op):");
+            System.out.println("  /twhite add <player>        (also /twhite remove, /twhite list)");
+            System.out.println("  or edit config/timesmp/twhite.txt. To install an open server: WHITELIST=0");
+        } else {
+            System.out.println("Whitelist is OFF: the server is OPEN to everyone.");
+        }
+        System.out.println();
+        System.out.println("The server has no common/spawn area:");
         System.out.println("  players can claim land at every point (spawn-protection=0, spawnProtectedCells=0).");
         System.out.println();
         System.out.println("No admins are added automatically. Grant one in-game with:");
