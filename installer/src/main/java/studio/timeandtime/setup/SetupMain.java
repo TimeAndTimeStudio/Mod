@@ -115,8 +115,12 @@ public final class SetupMain {
         ram = parseRam(ram);
         log("server RAM: " + ram + " (change it in run.sh / run.bat after setup)");
 
-        if (Files.exists(serverDir.resolve("server.jar")) && !env("FORCE", "0").equals("1")) {
-            throw new SetupException(serverDir + " already contains server.jar (use FORCE=1 to overwrite)");
+        Path marker = serverDir.resolve(".timesmp-setup-complete");
+        if (Files.exists(marker) && !env("FORCE", "0").equals("1")) {
+            throw new SetupException(serverDir + " is already installed (use FORCE=1 to reinstall)");
+        }
+        if (Files.exists(serverDir.resolve("server.jar")) && !Files.exists(marker)) {
+            log("found a server.jar from an unfinished install, it will be replaced at the end");
         }
 
         log("server directory: " + serverDir);
@@ -189,10 +193,6 @@ public final class SetupMain {
         installWorld(http, "lobby", "world", lobbyUrl, serverDir);
         installWorld(http, "find", "find", findUrl, serverDir);
 
-        // server.jar only appears once every step above succeeded, so a failed run can be re-run.
-        Files.move(serverDir.resolve("server.jar.new"), serverDir.resolve("server.jar"),
-                StandardCopyOption.REPLACE_EXISTING);
-
         // 4) EULA
         Files.writeString(serverDir.resolve("eula.txt"), "eula=true\n", StandardCharsets.UTF_8);
 
@@ -243,6 +243,11 @@ public final class SetupMain {
                         + "cd /d \"%~dp0\"\r\n"
                         + "java -Xms%RAM% -Xmx%RAM% -jar server.jar nogui\r\n",
                 StandardCharsets.UTF_8);
+
+        // FINAL STEP: server.jar and the completion marker appear only after everything succeeded.
+        Files.move(serverDir.resolve("server.jar.new"), serverDir.resolve("server.jar"),
+                StandardCopyOption.REPLACE_EXISTING);
+        Files.writeString(marker, "ok\n", StandardCharsets.UTF_8);
 
         // Done
         log("done");
