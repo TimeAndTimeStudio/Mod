@@ -102,11 +102,14 @@ public final class SetupMain {
 
         // 0) RAM
         String ram = env("RAM", null);
+        if (ram == null && pterodactyl) {
+            // No interactive console on Pterodactyl: use the panel's memory limit (MB) when known.
+            String mem = env("SERVER_MEMORY", null);
+            ram = (mem != null && mem.matches("[0-9]+") && Long.parseLong(mem) >= 1) ? mem + "M" : "2";
+        }
         if (ram == null) {
-            String input = null;
-            if (System.console() != null) {
-                input = System.console().readLine("[setup] RAM for the server in GB (e.g. 2, 4) [2]: ");
-            }
+            // Prompt, but never hang: give up after 15 seconds and use the default.
+            String input = readLineWithTimeout("[setup] RAM for the server in GB (e.g. 2, 4) [2]: ", 15);
             ram = (input == null || input.trim().isEmpty()) ? "2" : input.trim();
         }
         ram = parseRam(ram);
@@ -263,6 +266,34 @@ public final class SetupMain {
         System.out.println();
         System.out.println("No admins are added automatically. Grant one in-game with:");
         System.out.println("  /op <player>");
+    }
+
+    static String readLineWithTimeout(String prompt, int seconds) {
+        System.out.print(prompt);
+        System.out.flush();
+        final String[] result = new String[1];
+        Thread t = new Thread(() -> {
+            try {
+                java.io.BufferedReader r = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(System.in, StandardCharsets.UTF_8));
+                result[0] = r.readLine();
+            } catch (IOException ignored) {
+                // fall through to default
+            }
+        }, "ram-prompt");
+        t.setDaemon(true);
+        t.start();
+        try {
+            t.join(seconds * 1000L);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (t.isAlive()) {
+            System.out.println();
+            log("no answer after " + seconds + "s, using the default RAM");
+            return null;
+        }
+        return result[0];
     }
 
     static void usage() {
