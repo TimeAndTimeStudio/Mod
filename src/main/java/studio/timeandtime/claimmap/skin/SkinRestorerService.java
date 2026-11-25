@@ -42,6 +42,8 @@ public final class SkinRestorerService {
 	private static final int MAX_SKIN_BYTES = 23 * 1024;
 	private static final Map<String, Property> SKIN_CACHE = new ConcurrentHashMap<>();
 	private static final Map<String, String> CUSTOM_SKIN_MAP = new ConcurrentHashMap<>();
+	/** Per-player arm model: true = Alex (slim), false = Steve (classic). Persisted as {name}.model. */
+	private static final Map<String, Boolean> MODEL_CACHE = new ConcurrentHashMap<>();
 
 	private SkinRestorerService() {}
 
@@ -66,6 +68,57 @@ public final class SkinRestorerService {
 
 	public static String getSkinTarget(String playerName) {
 		return CUSTOM_SKIN_MAP.getOrDefault(playerName.toLowerCase(), playerName);
+	}
+
+	/** True when the player chose the Alex (slim arms) model; Steve (classic) is the default. */
+	public static boolean isSlim(String username) {
+		if (username == null || username.isBlank()) return false;
+		String key = username.toLowerCase();
+		Boolean cached = MODEL_CACHE.get(key);
+		if (cached != null) return cached;
+		boolean slim = false;
+		Path file = SKINS_DIR.resolve(key + ".model");
+		try {
+			if (Files.isRegularFile(file)) {
+				slim = "slim".equalsIgnoreCase(Files.readString(file, StandardCharsets.UTF_8).trim());
+			}
+		} catch (IOException e) {
+			LOGGER.warn("[timesmp] Could not read skin model file {}: {}", file, e.getMessage());
+		}
+		MODEL_CACHE.put(key, slim);
+		return slim;
+	}
+
+	/** Remembers the arm model (Alex = slim, Steve = classic) for a player and saves it next to the skin. */
+	public static void setSlim(String username, boolean slim) {
+		if (username == null || username.isBlank()) return;
+		String key = username.toLowerCase();
+		MODEL_CACHE.put(key, slim);
+		try {
+			Files.createDirectories(SKINS_DIR);
+			writeAtomically(SKINS_DIR.resolve(key + ".model"),
+					(slim ? "slim" : "classic").getBytes(StandardCharsets.UTF_8));
+		} catch (IOException e) {
+			LOGGER.warn("[timesmp] Could not save skin model for {}: {}", username, e.getMessage());
+		}
+	}
+
+	/**
+	 * Switches the model of the player's already saved skin and re-applies it live.
+	 *
+	 * @return false when the player has no saved skin yet.
+	 */
+	public static boolean setModelAndReapply(ServerPlayer player, boolean slim) {
+		if (player == null) return false;
+		String username = player.getGameProfile().name();
+		Path file = SKINS_DIR.resolve(username.toLowerCase() + ".png");
+		if (!Files.isRegularFile(file)) return false;
+		setSlim(username, slim);
+		Property property = loadSkinFromFile(file, username);
+		if (property == null) return false;
+		SKIN_CACHE.put(username.toLowerCase(), property);
+		updatePlayerSkinLive(player, property);
+		return true;
 	}
 
 	/** A PNG the client can decode and the packet can carry. */
@@ -104,6 +157,11 @@ public final class SkinRestorerService {
 	 * without requiring an online ServerPlayer entity (e.g. during Configuration phase).
 	 */
 	public static boolean downloadAndSaveSkinForUser(String username, String urlString) {
+		return downloadAndSaveSkinForUser(username, urlString, isSlim(username));
+	}
+
+	/** Same as above, also saving the chosen arm model (Alex = slim, Steve = classic). */
+	public static boolean downloadAndSaveSkinForUser(String username, String urlString, boolean slim) {
 		if (username == null || urlString == null || urlString.isBlank()) return false;
 		String lowerName = username.toLowerCase();
 		try {
@@ -129,6 +187,7 @@ public final class SkinRestorerService {
 			Files.createDirectories(SKINS_DIR);
 			Path targetFile = SKINS_DIR.resolve(lowerName + ".png");
 			writeAtomically(targetFile, bytes);
+			setSlim(username, slim);
 
 			// Clear cache so new skin is fetched fresh
 			SKIN_CACHE.remove(lowerName);
@@ -149,6 +208,12 @@ public final class SkinRestorerService {
 	 * @return true if successfully downloaded and applied; false otherwise.
 	 */
 	public static boolean downloadAndSetSkinFromUrl(ServerPlayer player, String urlString) {
+		return downloadAndSetSkinFromUrl(player, urlString,
+				player != null && isSlim(player.getGameProfile().name()));
+	}
+
+	/** Same as above, also saving the chosen arm model (Alex = slim, Steve = classic). */
+	public static boolean downloadAndSetSkinFromUrl(ServerPlayer player, String urlString, boolean slim) {
 		if (player == null || urlString == null || urlString.isBlank()) return false;
 		String username = player.getGameProfile().name();
 		String lowerName = username.toLowerCase();
@@ -176,6 +241,7 @@ public final class SkinRestorerService {
 			Files.createDirectories(SKINS_DIR);
 			Path targetFile = SKINS_DIR.resolve(lowerName + ".png");
 			writeAtomically(targetFile, bytes);
+			setSlim(username, slim);
 
 			// Clear cache so new skin is fetched fresh
 			SKIN_CACHE.remove(lowerName);
@@ -253,7 +319,7 @@ public final class SkinRestorerService {
 
 			// Embed image data as Base64 data URI in standard textures JSON structure
 			String dataUri = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(bytes);
-			return buildTexturePropertyFromUrl(dataUri, username, false);
+			return buildTexturePropertyFromUrl(dataUri, username, isSlim(username));
 		} catch (Exception e) {
 			LOGGER.warn("[timesmp] Could not load local skin file {}: {}", file, e.getMessage());
 		}

@@ -306,26 +306,23 @@ public final class ClaimCommands {
 			// --- TimeSMP TWhite System (/twhite add <username>) ---
 			studio.timeandtime.claimmap.TWhiteCommand.register(dispatcher);
 
-			// --- TimeSMP Skin Command (/skin <URL>) ---
+			// --- TimeSMP Skin Command ---
+			//   /skin <URL>            keep the current model (default Steve)
+			//   /skin steve <URL>      Steve (classic arms)
+			//   /skin alex <URL>       Alex (slim arms)
+			//   /skin model steve|alex change only the model of the saved skin
 			dispatcher.register(Commands.literal("skin").requires(src -> src.getPlayer() != null)
+					.then(Commands.literal("steve")
+							.then(Commands.argument("url", StringArgumentType.greedyString())
+									.executes(ctx -> runSkinUrl(ctx.getSource(), StringArgumentType.getString(ctx, "url"), Boolean.FALSE))))
+					.then(Commands.literal("alex")
+							.then(Commands.argument("url", StringArgumentType.greedyString())
+									.executes(ctx -> runSkinUrl(ctx.getSource(), StringArgumentType.getString(ctx, "url"), Boolean.TRUE))))
+					.then(Commands.literal("model")
+							.then(Commands.literal("steve").executes(ctx -> runSkinModel(ctx.getSource(), false)))
+							.then(Commands.literal("alex").executes(ctx -> runSkinModel(ctx.getSource(), true))))
 					.then(Commands.argument("url", StringArgumentType.greedyString())
-							.executes(ctx -> {
-								ServerPlayer sp = ctx.getSource().getPlayer();
-								if (sp == null) return 0;
-								String url = StringArgumentType.getString(ctx, "url");
-								ctx.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("§e[Skin] กำลังดาวน์โหลดสกินจาก URL..."), false);
-
-								// Asynchronously download and apply skin to prevent blocking server tick
-								java.util.concurrent.CompletableFuture.runAsync(() -> {
-									boolean success = studio.timeandtime.claimmap.skin.SkinRestorerService.downloadAndSetSkinFromUrl(sp, url);
-									if (success) {
-										ctx.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("§a[Skin] ดาวน์โหลดและเปลี่ยนสกินสำเร็จแล้ว (บันทึกทับไฟล์เดิมเรียบร้อย)"), false);
-									} else {
-										ctx.getSource().sendFailure(net.minecraft.network.chat.Component.literal("§c[Skin] ไม่สามารถดาวน์โหลดหรือนำสกินจาก URL มาใช้ได้ กรุณาตรวจสอบ URL อีกครั้ง"));
-									}
-								});
-								return 1;
-							})));
+							.executes(ctx -> runSkinUrl(ctx.getSource(), StringArgumentType.getString(ctx, "url"), null))));
 
 			dispatcher.register(Commands.literal("map").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runClaimMapGui(ctx.getSource())));
@@ -366,6 +363,41 @@ public final class ClaimCommands {
 			dispatcher.register(Commands.literal("tpacancel").requires(src -> src.getPlayer() != null)
 					.executes(ctx -> runTpaCancel(ctx.getSource())));
 		});
+	}
+
+	private int runSkinUrl(CommandSourceStack source, String url, Boolean slimChoice) {
+		ServerPlayer sp = source.getPlayer();
+		if (sp == null) return 0;
+		source.sendSuccess(() -> net.minecraft.network.chat.Component.literal("§e[Skin] กำลังดาวน์โหลดสกินจาก URL..."), false);
+
+		// Asynchronously download and apply skin to prevent blocking server tick
+		java.util.concurrent.CompletableFuture.runAsync(() -> {
+			boolean slim = slimChoice != null
+					? slimChoice
+					: studio.timeandtime.claimmap.skin.SkinRestorerService.isSlim(sp.getGameProfile().name());
+			boolean success = studio.timeandtime.claimmap.skin.SkinRestorerService.downloadAndSetSkinFromUrl(sp, url, slim);
+			if (success) {
+				source.sendSuccess(() -> net.minecraft.network.chat.Component.literal(
+						"§a[Skin] เปลี่ยนสกินสำเร็จแล้ว รูปแบบ: " + (slim ? "อเล็ก (Alex)" : "สตีฟ (Steve)")), false);
+			} else {
+				source.sendFailure(net.minecraft.network.chat.Component.literal("§c[Skin] ไม่สามารถดาวน์โหลดหรือนำสกินจาก URL มาใช้ได้ กรุณาตรวจสอบ URL อีกครั้ง"));
+			}
+		});
+		return 1;
+	}
+
+	private int runSkinModel(CommandSourceStack source, boolean slim) {
+		ServerPlayer sp = source.getPlayer();
+		if (sp == null) return 0;
+		boolean ok = studio.timeandtime.claimmap.skin.SkinRestorerService.setModelAndReapply(sp, slim);
+		if (ok) {
+			source.sendSuccess(() -> net.minecraft.network.chat.Component.literal(
+					"§a[Skin] เปลี่ยนรูปแบบเป็น " + (slim ? "อเล็ก (Alex)" : "สตีฟ (Steve)") + " แล้ว"), false);
+		} else {
+			source.sendFailure(net.minecraft.network.chat.Component.literal(
+					"§c[Skin] ยังไม่มีสกินที่บันทึกไว้ ใช้ /skin <URL> ก่อน"));
+		}
+		return ok ? 1 : 0;
 	}
 
 	private int runAdminResetPass(CommandSourceStack source, String targetName) {
