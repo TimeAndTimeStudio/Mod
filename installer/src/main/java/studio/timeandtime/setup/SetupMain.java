@@ -172,7 +172,7 @@ public final class SetupMain {
         // 3f) Performance/utility mods bundle
         if (is263) {
             log("downloading performance mods bundle (modo.zip)");
-            Path tmp = Files.createTempDirectory("timesmp-modo");
+            Path tmp = Files.createTempDirectory(serverDir, ".tmp-modo-");
             try {
                 Path zip = tmp.resolve("modo.zip");
                 download(http, base + "modo.zip", zip);
@@ -326,7 +326,7 @@ public final class SetupMain {
 
     static void installWorld(HttpClient http, String name, String folderInZip, String url, Path serverDir) throws Exception {
         log("downloading " + name + " world");
-        Path tmp = Files.createTempDirectory("timesmp-" + name);
+        Path tmp = Files.createTempDirectory(serverDir, ".tmp-" + name + "-");
         try {
             Path zip = tmp.resolve(name + ".zip");
             download(http, url, zip);
@@ -341,7 +341,7 @@ public final class SetupMain {
             Files.createDirectories(worlds);
             Path dest = worlds.resolve(name);
             rmrf(dest);
-            Files.move(src, dest);
+            moveDir(src, dest);
             // Wipe player data so the world starts clean
             for (String d : new String[] {"players", "playerdata", "advancements", "stats"}) {
                 rmrf(dest.resolve(d));
@@ -538,6 +538,27 @@ public final class SetupMain {
                     Files.copy(zin, out, StandardCopyOption.REPLACE_EXISTING);
                 }
             }
+        }
+    }
+
+    /** Move a directory; falls back to copy + delete when a plain move is not possible (other filesystem). */
+    static void moveDir(Path src, Path dest) throws IOException {
+        try {
+            Files.move(src, dest);
+        } catch (IOException e) {
+            Path from = src.toAbsolutePath().normalize();
+            try (Stream<Path> s = Files.walk(from)) {
+                for (Path p : (Iterable<Path>) s::iterator) {
+                    Path target = dest.resolve(from.relativize(p).toString());
+                    if (Files.isDirectory(p)) {
+                        Files.createDirectories(target);
+                    } else {
+                        Files.createDirectories(target.getParent());
+                        Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                }
+            }
+            rmrf(src);
         }
     }
 
