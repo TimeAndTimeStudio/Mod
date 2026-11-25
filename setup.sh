@@ -276,6 +276,7 @@ simulation-distance=6
 enable-status=true
 spawn-protection=0
 max-tick-time=180000
+pause-when-empty-seconds=0
 EOF
 
 # ---------------------------------------------------------------------------
