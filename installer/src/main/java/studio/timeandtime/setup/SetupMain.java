@@ -220,7 +220,8 @@ public final class SetupMain {
                         + "simulation-distance=6\n"
                         + "enable-status=true\n"
                         + "spawn-protection=0\n"
-                        + "max-tick-time=180000\n",
+                        + "max-tick-time=180000\n"
+                        + "pause-when-empty-seconds=0\n",
                 StandardCharsets.UTF_8);
 
         // 6) Launchers
