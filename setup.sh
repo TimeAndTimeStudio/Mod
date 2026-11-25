@@ -14,7 +14,7 @@
 #     worlds/lobby with all player data wiped
 #   - server.properties tuned for Time SMP:
 #       motd=Time SMP, max-players=5, survival locked,
-#       online-mode=off, secure profile off, whitelist off (open server),
+#       online-mode=off, secure profile off, whitelist ON (WHITELIST=0 to disable),
 #       spawn-protection=0 (no common/spawn area - claimable everywhere),
 #       difficulty=hard, view-distance=10, simulation-distance=6
 #   - run.sh launcher where you choose how much RAM the server uses
@@ -26,6 +26,7 @@
 #   ./setup.sh [server-dir]        # default: $HOME/mcserver
 #   RAM=4G ./setup.sh [dir]        # skip the RAM prompt
 #   FORCE=1 ./setup.sh [dir]       # overwrite an existing install
+#   WHITELIST=0 ./setup.sh [dir]   # open server: do not enable the whitelist
 #   MOD_URL=... ./setup.sh [dir]   # use a specific mod jar instead of the latest release
 #
 set -euo pipefail
@@ -42,6 +43,11 @@ else
 fi
 MOD_URL="${MOD_URL:-https://github.com/${REPO}/releases/download/${MOD_TAG}/${MOD_ASSET}}"
 SERVER_DIR="${1:-$HOME/mcserver}"
+# Whitelist is ON by default; WHITELIST=0 (or false/off/no) turns it off.
+case "${WHITELIST:-1}" in
+  0|false|FALSE|off|OFF|no|NO) WHITELIST_ON=false ;;
+  *) WHITELIST_ON=true ;;
+esac
 
 die() { echo "[setup] ERROR: $*" >&2; exit 1; }
 log() { echo "[setup] $*"; }
@@ -257,8 +263,8 @@ motd=Time SMP
 max-players=5
 online-mode=false
 enforce-secure-profile=false
-white-list=false
-enforce-whitelist=false
+white-list=$WHITELIST_ON
+enforce-whitelist=$WHITELIST_ON
 gamemode=survival
 force-gamemode=true
 hardcore=false
@@ -306,7 +312,15 @@ echo
 echo "RAM is set in run.sh (currently $RAM). Edit it there or run:"
 echo "  RAM=4G ./run.sh"
 echo
-echo "The server is OPEN (no whitelist) with no common/spawn area:"
+if [ "$WHITELIST_ON" = true ]; then
+  echo "Whitelist is ON: only listed players can join. Add players (from the console or as op):"
+  echo "  /twhite add <player>        (also /twhite remove, /twhite list)"
+  echo "  or edit config/timesmp/twhite.txt. To start open instead: WHITELIST=0 ./setup.sh"
+else
+  echo "Whitelist is OFF: the server is OPEN to everyone."
+fi
+echo
+echo "The server has no common/spawn area:"
 echo "  players can claim land at every point (spawn-protection=0, spawnProtectedCells=0)."
 echo
 echo "No admins are added automatically. Grant one in-game with:"
