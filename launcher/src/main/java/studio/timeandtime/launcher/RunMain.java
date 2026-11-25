@@ -22,8 +22,9 @@ import java.util.regex.Pattern;
  * -Dterminal.jline=false); RAM=... overrides the heap size.
  *
  * Server directory, first match wins: the first argument, the SERVER_DIR
- * environment variable, the folder of this jar or the current folder when
- * they contain server.jar, then $HOME/mcserver (the setup.sh default).
+ * environment variable, then the first folder holding server.jar among: the
+ * jar's folder, the current folder, and their msserver / mcserver / server
+ * subfolders (also under $HOME).
  */
 public final class RunMain {
 	private static final Pattern RAM_PATTERN = Pattern.compile("^([0-9]+)([GgMm]?)$");
@@ -86,14 +87,46 @@ public final class RunMain {
 		}
 		Path jarDir = Paths.get(RunMain.class.getProtectionDomain().getCodeSource().getLocation().toURI())
 				.toAbsolutePath().getParent();
-		if (jarDir != null && jarDir.resolve("server.jar").toFile().isFile()) {
-			return jarDir;
-		}
 		Path cwd = Paths.get("").toAbsolutePath();
-		if (cwd.resolve("server.jar").toFile().isFile()) {
-			return cwd;
+		Path home = Paths.get(System.getProperty("user.home"));
+
+		// Look for server.jar in the jar's folder, the current folder, then in
+		// well-known subfolders (msserver, mcserver, server) of those and of $HOME.
+		List<Path> candidates = new ArrayList<>();
+		for (Path base : new Path[] { jarDir, cwd, home }) {
+			if (base == null) {
+				continue;
+			}
+			if (base != home) {
+				candidates.add(base);
+			}
+			for (String name : new String[] { "msserver", "mcserver", "server" }) {
+				candidates.add(base.resolve(name));
+			}
 		}
-		return Paths.get(System.getProperty("user.home"), "mcserver");
+		for (Path c : candidates) {
+			if (c.resolve("server.jar").toFile().isFile()) {
+				return c;
+			}
+		}
+		// Last resort: the only immediate subfolder of the jar/current folder that has server.jar.
+		for (Path base : new Path[] { jarDir, cwd }) {
+			File[] subs = base == null ? null : base.toFile().listFiles(File::isDirectory);
+			if (subs == null) {
+				continue;
+			}
+			List<Path> found = new ArrayList<>();
+			for (File sub : subs) {
+				if (new File(sub, "server.jar").isFile()) {
+					found.add(sub.toPath());
+				}
+			}
+			if (found.size() == 1) {
+				return found.get(0);
+			}
+		}
+		System.err.println("[run] server.jar not found. Looked in: " + candidates);
+		return cwd;
 	}
 
 	/** "4" -> "4G", "4g" -> "4G", "4096m" -> "4096M", unset -> "2G"; null when invalid. */
