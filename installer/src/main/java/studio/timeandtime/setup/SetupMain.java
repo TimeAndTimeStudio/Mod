@@ -34,7 +34,7 @@ import java.util.zip.ZipInputStream;
  *
  * Environment variables (same as setup.sh):
  *   RAM=4G  FORCE=1  MC_VERSION  REPO  MOD_TAG  MOD_URL  WORLDGEN_RELEASE  LOBBY_URL  FIND_URL
- *   SKIP_JAVA_CHECK=1 (do not require Java 26+)
+ *   SERVER_DIR (install dir; defaults to the current dir on Pterodactyl)
  */
 public final class SetupMain {
 
@@ -82,16 +82,23 @@ public final class SetupMain {
         String findUrl = env("FIND_URL", "https://github.com/" + repo + "/releases/download/findmap/find.zip");
         String base = "https://github.com/" + repo + "/releases/download/" + worldgenRelease + "/";
 
-        Path serverDir = (dirArg != null ? Paths.get(dirArg) : Paths.get(System.getProperty("user.home"), "mcserver"))
-                .toAbsolutePath().normalize();
+        // Server dir: argument > SERVER_DIR env > current dir on Pterodactyl > ~/mcserver
+        boolean pterodactyl = System.getenv("P_SERVER_UUID") != null;
+        Path serverDir;
+        if (dirArg != null) serverDir = Paths.get(dirArg);
+        else if (System.getenv("SERVER_DIR") != null && !System.getenv("SERVER_DIR").isEmpty()) serverDir = Paths.get(System.getenv("SERVER_DIR"));
+        else if (pterodactyl) serverDir = Paths.get(".");
+        else serverDir = Paths.get(System.getProperty("user.home"), "mcserver");
+        serverDir = serverDir.toAbsolutePath().normalize();
 
-        // 0) Java check (Minecraft 26.3 needs Java 26+)
+        // 0) Java check: only a warning (the installer itself just downloads files;
+        //    the mod is built for Java 25+, so the host decides the runtime).
         int javaMajor = Runtime.version().feature();
-        if (javaMajor < 26 && !env("SKIP_JAVA_CHECK", "0").equals("1")) {
-            throw new SetupException("Java " + javaMajor + " found but Java 26+ is required "
-                    + "(run this jar with Java 26+, or set SKIP_JAVA_CHECK=1 to ignore)");
+        if (javaMajor < 25) {
+            log("WARNING: Java " + javaMajor + " found, the server needs Java 25+ to run");
+        } else {
+            log("Java " + javaMajor + ": OK");
         }
-        log("system dependencies: OK (Java " + javaMajor + ")");
 
         // 0) RAM
         String ram = env("RAM", null);
@@ -261,7 +268,7 @@ public final class SetupMain {
     static void usage() {
         System.out.println("Time SMP server setup (pure Java)\n"
                 + "Usage: java -jar timesmp-setup.jar [server-dir]   (default: ~/mcserver)\n"
-                + "Env  : RAM=4G FORCE=1 MC_VERSION=26.3 REPO MOD_TAG MOD_URL WORLDGEN_RELEASE LOBBY_URL FIND_URL SKIP_JAVA_CHECK=1");
+                + "Env  : RAM=4G FORCE=1 MC_VERSION=26.3 REPO MOD_TAG MOD_URL WORLDGEN_RELEASE LOBBY_URL FIND_URL SERVER_DIR");
     }
 
     static String parseRam(String ram) {
