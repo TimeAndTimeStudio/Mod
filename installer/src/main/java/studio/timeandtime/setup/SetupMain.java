@@ -73,7 +73,7 @@ public final class SetupMain {
 
         String mcVersion = env("MC_VERSION", "26.3");
         String repo = env("REPO", "TimeAndTimeStudio/Mod");
-        String modTag = env("MOD_TAG", "mod_26.3");
+        String modTag = env("MOD_TAG", "latest");
         boolean is263 = mcVersion.equals("26.3");
         String modAsset = is263 ? "timesmp.jar" : "timesmp-mc" + mcVersion + ".jar";
         String modUrl = env("MOD_URL", "https://github.com/" + repo + "/releases/download/" + modTag + "/" + modAsset);
