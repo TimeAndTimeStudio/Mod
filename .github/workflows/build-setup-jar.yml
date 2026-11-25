@@ -1,11 +1,11 @@
 name: Build setup jar
 
-# Packages setup.sh into a runnable jar: java -jar timesmp-setup.jar [server-dir]
+# Builds the pure-Java port of setup.sh: java -jar timesmp-setup.jar [server-dir]
+# (no bash/curl/jq/unzip needed; works on Linux, macOS and Windows)
 on:
   push:
     branches: [ setup-jar ]
     paths:
-      - setup.sh
       - installer/**
       - .github/workflows/build-setup-jar.yml
   workflow_dispatch:
@@ -29,10 +29,10 @@ jobs:
           set -euo pipefail
           mkdir -p build/classes dist
           javac --release 17 -d build/classes installer/src/main/java/studio/timeandtime/setup/SetupMain.java
-          cp setup.sh build/classes/setup.sh
           printf 'Main-Class: studio.timeandtime.setup.SetupMain\n' > build/manifest.txt
           jar --create --file dist/timesmp-setup.jar --manifest build/manifest.txt -C build/classes .
           unzip -l dist/timesmp-setup.jar
+          java -jar dist/timesmp-setup.jar --help
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES="setup.sh packaged as jar, build ${GITHUB_SHA::7} on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          NOTES="Pure-Java setup (port of setup.sh), build ${GITHUB_SHA::7} on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           if gh release view setup-jar >/dev/null 2>&1; then
             gh release edit setup-jar --title "Setup jar" --notes "$NOTES" --latest=false
           else
