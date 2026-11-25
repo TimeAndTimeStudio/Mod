@@ -136,7 +136,7 @@ public final class SetupMain {
         if (installer == null) throw new SetupException("could not resolve Fabric installer");
         log("downloading Fabric server (loader " + loader + " / installer " + installer + ")");
         download(http, "https://meta.fabricmc.net/v2/versions/loader/" + mcVersion + "/" + loader + "/" + installer + "/server/jar",
-                serverDir.resolve("server.jar"));
+                serverDir.resolve("server.jar.new"));
 
         // 2) Fabric API (Modrinth)
         log("resolving Fabric API for Minecraft " + mcVersion);
@@ -188,6 +188,10 @@ public final class SetupMain {
         // 3e) Lobby world, 3g) Find world
         installWorld(http, "lobby", lobbyUrl, serverDir);
         installWorld(http, "find", findUrl, serverDir);
+
+        // server.jar only appears once every step above succeeded, so a failed run can be re-run.
+        Files.move(serverDir.resolve("server.jar.new"), serverDir.resolve("server.jar"),
+                StandardCopyOption.REPLACE_EXISTING);
 
         // 4) EULA
         Files.writeString(serverDir.resolve("eula.txt"), "eula=true\n", StandardCharsets.UTF_8);
