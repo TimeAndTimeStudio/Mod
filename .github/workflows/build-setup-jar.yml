@@ -1,0 +1,53 @@
+name: Build setup jar
+
+# Packages setup.sh into a runnable jar: java -jar timesmp-setup.jar [server-dir]
+on:
+  push:
+    branches: [ setup-jar ]
+    paths:
+      - setup.sh
+      - installer/**
+      - .github/workflows/build-setup-jar.yml
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build timesmp-setup.jar
+        run: |
+          set -euo pipefail
+          mkdir -p build/classes dist
+          javac --release 17 -d build/classes installer/src/main/java/studio/timeandtime/setup/SetupMain.java
+          cp setup.sh build/classes/setup.sh
+          printf 'Main-Class: studio.timeandtime.setup.SetupMain\n' > build/manifest.txt
+          jar --create --file dist/timesmp-setup.jar --manifest build/manifest.txt -C build/classes .
+          unzip -l dist/timesmp-setup.jar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timesmp-setup
+          path: dist/timesmp-setup.jar
+
+      - name: Publish to GitHub Releases (tag setup-jar)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="setup.sh packaged as jar, build ${GITHUB_SHA::7} on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if gh release view setup-jar >/dev/null 2>&1; then
+            gh release edit setup-jar --title "Setup jar" --notes "$NOTES" --latest=false
+          else
+            gh release create setup-jar --title "Setup jar" --notes "$NOTES" --latest=false --target "$GITHUB_SHA"
+          fi
+          gh release upload setup-jar dist/timesmp-setup.jar --clobber
