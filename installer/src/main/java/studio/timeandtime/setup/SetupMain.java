@@ -186,8 +186,8 @@ public final class SetupMain {
         }
 
         // 3e) Lobby world, 3g) Find world
-        installWorld(http, "lobby", lobbyUrl, serverDir);
-        installWorld(http, "find", findUrl, serverDir);
+        installWorld(http, "lobby", "world", lobbyUrl, serverDir);
+        installWorld(http, "find", "find", findUrl, serverDir);
 
         // server.jar only appears once every step above succeeded, so a failed run can be re-run.
         Files.move(serverDir.resolve("server.jar.new"), serverDir.resolve("server.jar"),
@@ -324,7 +324,7 @@ public final class SetupMain {
 
     // ---- worlds ------------------------------------------------------------
 
-    static void installWorld(HttpClient http, String name, String url, Path serverDir) throws Exception {
+    static void installWorld(HttpClient http, String name, String folderInZip, String url, Path serverDir) throws Exception {
         log("downloading " + name + " world");
         Path tmp = Files.createTempDirectory("timesmp-" + name);
         try {
@@ -333,9 +333,9 @@ public final class SetupMain {
             Path extract = tmp.resolve("extract");
             Files.createDirectories(extract);
             unzip(zip, extract);
-            Path src = extract.resolve(name);
+            Path src = extract.resolve(folderInZip);
             if (!Files.isDirectory(src)) {
-                throw new SetupException("zip for the " + name + " world has no '" + name + "' folder");
+                throw new SetupException("zip for the " + name + " world has no '" + folderInZip + "' folder");
             }
             Path worlds = serverDir.resolve("worlds");
             Files.createDirectories(worlds);
